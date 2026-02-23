@@ -48,6 +48,7 @@ const Dashboard: React.FC = () => {
   const { kpis, tasks, events, toggleTask, activities } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
@@ -77,8 +78,20 @@ const Dashboard: React.FC = () => {
   const displayTasks = useMemo(() => [...tasks].sort((a,b) => (a.isCompleted === b.isCompleted ? 0 : a.isCompleted ? 1 : -1)).slice(0, 5), [tasks]);
   const hours = Array.from({ length: 16 }, (_, i) => `${String(i + 8).padStart(2, '0')}:00`);
   const clickersTypes = useMemo(() => {
-    const clickers = selectedDayEvents.filter(e => e.eventType === EventType.ClickersProgram || e.eventType === EventType.ClickForYouClickers).reduce((s, e) => s + (e.clickersNeeded || 0), 0);
-    const clickaorim = selectedDayEvents.filter(e => e.eventType === EventType.ClickAurimProgram || e.eventType === EventType.ClickForYouAurim).reduce((s, e) => s + (e.clickersNeeded || 0), 0);
+    let clickers = 0;
+    let clickaorim = 0;
+    
+    selectedDayEvents.forEach(e => {
+      const isClickers = e.eventType === EventType.ClickersProgram || e.eventType === EventType.ClickForYouClickers;
+      const isClickaorim = e.eventType === EventType.ClickAurimProgram || e.eventType === EventType.ClickForYouAurim;
+      
+      if (isClickers) {
+        clickers += (e.clickersNeeded || 0);
+      } else if (isClickaorim) {
+        clickaorim += (e.clickersNeeded || 0);
+      }
+    });
+    
     return { clickers, clickaorim };
   }, [selectedDayEvents]);
   const goAdjacentDay = (dir: number) => {
@@ -93,8 +106,14 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in pb-12 dir-rtl">
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-bold text-slate-800">דשבורד</h2>
+        <button onClick={() => setRefreshKey(k => k + 1)} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg hover:bg-purple-700 transition-all">
+          <RefreshCw size={18} /> רענן נתונים
+        </button>
+      </div>
       {/* KPI Cards - compact, responsive */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 max-w-4xl">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 max-w-4xl" key={refreshKey}>
           <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center group hover:shadow-md transition-all">
              <div className="min-w-0"><p className="text-xs font-medium text-slate-500 truncate">גבייה פתוחה</p><h3 className="text-lg font-bold text-red-600 mt-0.5 truncate">₪{kpis.openDebt.toLocaleString()}</h3></div>
              <div className="p-2 bg-red-50 rounded-lg text-red-500 shrink-0"><AlertCircle size={20} /></div>
@@ -191,9 +210,9 @@ const Dashboard: React.FC = () => {
                         <button onClick={() => goAdjacentDay(1)} className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200 transition-all" title="יום הבא"><ArrowLeft size={20}/></button>
                     </div>
                     {selectedDate && (clickersTypes.clickers > 0 || clickersTypes.clickaorim > 0) && (
-                        <div className="flex gap-4 text-sm font-bold">
-                            <span className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-100">קליקרים תפוסים: {clickersTypes.clickers}</span>
-                            <span className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg border border-amber-100">קליקאורים תפוסים: {clickersTypes.clickaorim}</span>
+                        <div className="flex gap-4 text-sm font-bold" title={`${selectedDayEvents.length} אירועים ביום זה`}>
+                            <span className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-100">קליקרים: {clickersTypes.clickers} ({selectedDayEvents.filter(e => e.eventType === EventType.ClickersProgram || e.eventType === EventType.ClickForYouClickers).length} אירועים)</span>
+                            <span className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg border border-amber-100">קליקאורים: {clickersTypes.clickaorim} ({selectedDayEvents.filter(e => e.eventType === EventType.ClickAurimProgram || e.eventType === EventType.ClickForYouAurim).length} אירועים)</span>
                         </div>
                     )}
                 </div>

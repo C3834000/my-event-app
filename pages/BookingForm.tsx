@@ -65,13 +65,16 @@ const BookingForm: React.FC = () => {
   const handleInputChange = (fieldId: string, mapping: string | undefined, value: any) => {
     setFormData(prev => {
         const next = { ...prev, [fieldId]: value };
-        // Auto-calculate end time (1.5h later)
         if (mapping === 'startTime' && value) {
             const [h, m] = value.split(':').map(Number);
-            let endH = h + 1;
-            let endM = m + 30;
-            if (endM >= 60) { endH++; endM -= 60; }
-            const endTimeStr = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+            let totalMinutes = (h * 60) + m + 90;
+            if (totalMinutes >= 24 * 60) totalMinutes = (23 * 60) + 59;
+            const endH = Math.floor(totalMinutes / 60);
+            const endM = totalMinutes % 60;
+            const roundedM = Math.round(endM / 15) * 15;
+            const finalM = roundedM === 60 ? 0 : roundedM;
+            const finalH = roundedM === 60 ? endH + 1 : endH;
+            const endTimeStr = `${String(Math.min(finalH, 23)).padStart(2, '0')}:${String(finalM).padStart(2, '0')}`;
             const endField = formConfig.fields.find(f => f.mapping === 'endTime');
             if (endField) next[endField.id] = endTimeStr;
         }
@@ -91,7 +94,7 @@ const BookingForm: React.FC = () => {
       formConfig.fields.forEach(f => {
           if (f.mapping) payload[f.mapping] = formData[f.id];
       });
-      await handlePublicBookingSubmit(payload);
+      await handlePublicBookingSubmit(payload, leadId || undefined);
       setIsSubmitted(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
@@ -102,6 +105,14 @@ const BookingForm: React.FC = () => {
   };
 
   if (isSubmitted) {
+    React.useEffect(() => {
+      const timer = setTimeout(() => {
+        const portalUrl = `/portal/${leadId}`;
+        window.location.href = `${portalUrl}?step=1`;
+      }, 3000);
+      return () => clearTimeout(timer);
+    }, []);
+
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 dir-rtl font-sans">
         <div className="max-w-xl w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 relative">
@@ -118,9 +129,11 @@ const BookingForm: React.FC = () => {
                  <Calendar className="text-blue-600 mt-1 shrink-0" size={24} />
                  <p className="text-sm font-bold text-blue-800">היומן של קליכיף עודכן אוטומטית בתאריך האירוע שלך. שים לב - ההזמנה מחייבת.</p>
               </div>
-              <p className="text-slate-500 text-center font-bold">עכשיו אתם מוזמנים להמשיך לשלבי ההכנה והאיסוף בפורטל!</p>
+              <div className="p-4 bg-purple-50 border border-purple-100 rounded-2xl">
+                 <p className="text-sm font-bold text-purple-800">מעביר אותך עכשיו לשלב הבא - הכנת החידון...</p>
+                 <div className="w-8 h-8 border-4 border-purple-300 border-t-purple-600 rounded-full animate-spin mx-auto mt-4"></div>
+              </div>
            </div>
-           <button onClick={() => window.history.back()} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-xl hover:bg-slate-800 transition-all shadow-xl">חזרה לפורטל האישי</button>
         </div>
       </div>
     );

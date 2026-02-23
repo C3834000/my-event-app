@@ -47,7 +47,7 @@ interface AppContextType {
   updateLeadStatus: (id: string, status: LeadStatus) => void;
   updateLead: (id: string, updates: Partial<Lead>) => void;
   convertLeadToCustomer: (leadId: string) => void;
-  handlePublicBookingSubmit: (data: any) => Promise<void>;
+  handlePublicBookingSubmit: (data: any, leadId?: string) => Promise<void>;
   sendBookingEmail: (leadId: string) => Promise<{ success: boolean; email: string; url: string }>;
   sendPortalEmail: (leadId: string) => Promise<{ success: boolean; email: string; url: string }>;
   sendEventUpdateEmail: (event: AppEvent) => Promise<void>;
@@ -169,8 +169,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSettings(prev => ({ ...prev, ...newSettings }));
   };
 
-  const handlePublicBookingSubmit = async (data: any) => {
-    console.log('🎯 handlePublicBookingSubmit נקרא עם הנתונים:', data);
+  const handlePublicBookingSubmit = async (data: any, leadId?: string) => {
+    console.log('🎯 handlePublicBookingSubmit נקרא עם הנתונים:', data, 'leadId:', leadId);
     
     const event: AppEvent = {
         id: `e_${Date.now()}`,
@@ -217,7 +217,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const hebcalUrl = `https://www.hebcal.com/converter?gd=${event.date.split('-')[2]}&gm=${event.date.split('-')[1]}&gy=${event.date.split('-')[0]}&g2h=1`;
       const { success, error } = await sendEmail({
         to: toEmail,
-        subject: `✅ אישור הזמנה - ${settings.companyName}`,
+        subject: `✅ אישור הזמנה #${event.id.substring(2, 15)} - ${data.name} - ${new Date(event.date).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}`,
         html: `
           <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; border-radius: 20px;">
             <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
@@ -225,19 +225,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; font-size: 40px;">✅</div>
                 <h1 style="color: #1a202c; font-size: 28px; margin: 0; font-weight: 800;">ההזמנה נקלטה בהצלחה!</h1>
                 <p style="color: #718096; font-size: 16px; margin: 8px 0 0;">שלום ${data.name || 'לקוח/ה'} 👋</p>
+                <div style="background: #f1f5f9; border-radius: 8px; padding: 8px 16px; margin: 12px auto 0; display: inline-block;">
+                  <span style="color: #64748b; font-size: 12px; font-weight: 600;">מספר הזמנה:</span>
+                  <span style="color: #334155; font-size: 14px; font-weight: 800; margin-right: 8px;">#${event.id.substring(2, 15)}</span>
+                </div>
               </div>
               
-              <div style="background: #f7fafc; border-radius: 12px; padding: 20px; margin: 24px 0;">
-                <h2 style="color: #2d3748; font-size: 18px; margin: 0 0 16px; font-weight: 700;">📋 פרטי ההזמנה שלך</h2>
-                <table style="width: 100%; border-collapse: collapse;">
-                  <tr><td style="padding: 8px 0; color: #4a5568; font-weight: 600;">📅 תאריך:</td><td style="padding: 8px 0; color: #1a202c; font-weight: 700;">${new Date(event.date).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
-                  ${event.hebrewDate ? `<tr><td style="padding: 8px 0; color: #4a5568; font-weight: 600;">🗓️ תאריך עברי:</td><td style="padding: 8px 0; color: #1a202c; font-weight: 700;">${event.hebrewDate}</td></tr>` : ''}
-                  <tr><td style="padding: 8px 0; color: #4a5568; font-weight: 600;">⏰ שעות:</td><td style="padding: 8px 0; color: #1a202c; font-weight: 700;">${event.startTime} - ${event.endTime}</td></tr>
-                  <tr><td style="padding: 8px 0; color: #4a5568; font-weight: 600;">📍 מיקום:</td><td style="padding: 8px 0; color: #1a202c; font-weight: 700;">${event.location || 'לא צוין'}</td></tr>
-                  <tr><td style="padding: 8px 0; color: #4a5568; font-weight: 600;">🎯 סוג אירוע:</td><td style="padding: 8px 0; color: #1a202c; font-weight: 700;">${event.eventType}</td></tr>
-                  ${event.clickersNeeded > 0 ? `<tr><td style="padding: 8px 0; color: #4a5568; font-weight: 600;">🖱️ קליקרים:</td><td style="padding: 8px 0; color: #1a202c; font-weight: 700;">${event.clickersNeeded}</td></tr>` : ''}
-                  <tr><td style="padding: 8px 0; color: #4a5568; font-weight: 600;">💰 סכום:</td><td style="padding: 8px 0; color: #16a34a; font-weight: 800; font-size: 18px;">₪${event.amount.toLocaleString()}</td></tr>
-                  ${event.notes ? `<tr><td style="padding: 8px 0; color: #4a5568; font-weight: 600; vertical-align: top;">📝 הערות:</td><td style="padding: 8px 0; color: #1a202c;">${event.notes}</td></tr>` : ''}
+              <div style="background: linear-gradient(to bottom, #f0f9ff, #e0f2fe); border: 2px solid #0284c7; border-radius: 16px; padding: 24px; margin: 24px 0; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);">
+                <h2 style="color: #0c4a6e; font-size: 20px; margin: 0 0 20px; font-weight: 800; text-align: center;">📋 פרטי האירוע שלך</h2>
+                <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                  <tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0; width: 40%;">👤 שם המזמין:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${data.name || 'לא צוין'}</td></tr>
+                  <tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">📞 טלפון:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${data.phone || 'לא צוין'}</td></tr>
+                  <tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">📧 אימייל:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${data.email || 'לא צוין'}</td></tr>
+                  <tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">📅 תאריך:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; font-size: 16px; border-bottom: 1px solid #e2e8f0;">${new Date(event.date).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
+                  ${event.hebrewDate ? `<tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">🗓️ תאריך עברי:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${event.hebrewDate}</td></tr>` : ''}
+                  <tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">⏰ שעת התחלה:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${event.startTime}</td></tr>
+                  <tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">⏰ שעת סיום:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${event.endTime}</td></tr>
+                  <tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">📍 מיקום האירוע:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${event.location || 'לא צוין'}</td></tr>
+                  <tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">🎯 סוג האירוע:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${event.eventType}</td></tr>
+                  ${event.clickersNeeded > 0 ? `<tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">🖱️ מספר קליקרים:</td><td style="padding: 12px 16px; color: #7c3aed; font-weight: 800; font-size: 18px; border-bottom: 1px solid #e2e8f0;">${event.clickersNeeded} קליקרים</td></tr>` : ''}
+                  <tr style="background: #dcfce7;"><td style="padding: 14px 16px; color: #166534; font-weight: 700;">💰 סכום לתשלום:</td><td style="padding: 14px 16px; color: #166534; font-weight: 900; font-size: 22px;">₪${event.amount.toLocaleString()}</td></tr>
+                  ${event.notes ? `<tr style="background: #fef3c7;"><td colspan="2" style="padding: 14px 16px; color: #92400e; font-weight: 700; vertical-align: top;">📝 הערות: <br/><span style="font-weight: 600;">${event.notes}</span></td></tr>` : ''}
                 </table>
               </div>
 
@@ -255,6 +263,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 <p style="color: #4a5568; margin: 4px 0;"><strong>טלפון:</strong> ${data.phone || 'לא צוין'}</p>
                 <p style="color: #4a5568; margin: 4px 0;"><strong>אימייל:</strong> ${data.email || 'לא צוין'}</p>
               </div>
+
+              ${leadId ? `<div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+                <p style="color: white; margin: 0 0 16px; font-size: 16px; font-weight: 700;">🚀 המשך לשלב הבא - הכנת החידון!</p>
+                <a href="${window.location.origin}/#/portal/${leadId}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 900; font-size: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">היכנס לפורטל האישי שלך</a>
+              </div>` : ''}
 
               <div style="background: #fef3c7; border-right: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 24px 0;">
                 <p style="color: #92400e; margin: 0; font-size: 14px; font-weight: 600;">💡 <strong>שימו לב:</strong> ההזמנה שלכם שמורה במערכת שלנו. נציג יצור איתכם קשר בהקדם לאישור סופי ותיאום פרטים נוספים.</p>
@@ -303,7 +316,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addEvent = (event: AppEvent) => setEvents(prev => [event, ...prev]);
   const updateEventStatus = (id: string, status: EventStatus) => setEvents(prev => prev.map(e => e.id === id ? { ...e, status } : e));
-  const updateEvent = (id: string, updates: Partial<AppEvent>) => setEvents(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+  const updateEvent = (id: string, updates: Partial<AppEvent>) => setEvents(prev => prev.map(e => {
+    if (e.id !== id) return e;
+    const updated = { ...e, ...updates };
+    const isPaidStatus = [PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck, PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider].includes(updated.paymentStatus);
+    if (isPaidStatus && updates.paymentStatus && updated.paidAmount < updated.amount) {
+      updated.paidAmount = updated.amount;
+    }
+    return updated;
+  }));
   const deleteEvent = (id: string) => setEvents(prev => prev.filter(e => e.id !== id));
   const addCustomer = (customer: Customer) => setCustomers(prev => [...prev, customer]);
   const updateCustomer = (id: string, updates: Partial<Customer>) => setCustomers(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
@@ -398,11 +419,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const pick = (row: any, ...keys: string[]) => { for (const k of keys) { const v = row[k]; if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim(); } return ''; };
     const parseDate = (s: string) => { if (!s) return new Date().toISOString().split('T')[0]; const d = String(s).trim(); const m = d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; if (d.match(/^\d{4}-\d{2}-\d{2}/)) return d.slice(0,10); return new Date().toISOString().split('T')[0]; };
     const importEvents = (data: any[]) => {
+    const fixPhone = (val: any): string => {
+      if (!val) return '';
+      let str = String(val).trim();
+      if (/^\d+\.?\d*E\+\d+$/i.test(str)) {
+        const num = parseFloat(str);
+        str = num.toFixed(0);
+      }
+      return str;
+    };
+
     const newCusts: Customer[] = [];
     const toAdd: AppEvent[] = [];
     data.forEach((row: any, i: number) => {
       const name = pick(row, 'Name', 'name', 'שם', 'title', 'Title');
-      const phoneRaw = pick(row, 'מס\' טלפון: (המס\' שיהיה זמין בעת האירוע)', 'מס\' טלפון', 'phone', 'Phone', 'טלפון', 'tel');
+      const phoneRaw = fixPhone(pick(row, 'מס\' טלפון: (המס\' שיהיה זמין בעת האירוע)', 'מס\' טלפון', 'phone', 'Phone', 'טלפון', 'tel'));
       const phoneNorm = phoneRaw.replace(/\D/g, '');
       const email = (row['כתובת דוא"ל'] != null ? String(row['כתובת דוא"ל']).trim() : '') || pick(row, 'email', 'Email', 'אימייל', 'mail');
       let c = customers.find(x => (phoneNorm && norm(x.phone).replace(/\D/g, '') === phoneNorm) || (email && norm(x.email) === norm(email)) || (name && norm(x.name) === norm(name)))
@@ -480,15 +511,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     });
     if (newCusts.length) setCustomers(prev => [...newCusts, ...prev]);
-    setEvents(prev => [...toAdd, ...prev]);
+    
+    setEvents(prev => {
+      const existingIds = new Set(prev.map(e => e.externalId).filter(Boolean));
+      const uniqueNew = toAdd.filter(e => !e.externalId || !existingIds.has(e.externalId));
+      return [...uniqueNew, ...prev];
+    });
+    
     addActivity('system', `יובאו ${toAdd.length} אירועים${newCusts.length ? ` ו-${newCusts.length} לקוחות חדשים` : ''} וסונכרנו עם לקוחות`);
   };
 
   const importCustomers = (data: any[]) => {
+    const fixPhone = (val: any): string => {
+      if (!val) return '';
+      let str = String(val).trim();
+      if (/^\d+\.?\d*E\+\d+$/i.test(str)) {
+        const num = parseFloat(str);
+        str = num.toFixed(0);
+      }
+      return str;
+    };
+
     const toAdd: Customer[] = data.map((row: any, i: number) => ({
       id: (row['Item ID (auto generated)'] ?? row['Item ID'] ?? row.id ?? `c_${Date.now()}_${i}`).toString(),
       name: (row.Name ?? row.name ?? row.שם ?? '').toString().trim() || 'ללא שם',
-      phone: (row.פלאפון ?? row.phone ?? row.Phone ?? row.טלפון ?? '').toString().trim() || '-',
+      phone: fixPhone(row.פלאפון ?? row.phone ?? row.Phone ?? row.טלפון ?? '') || '-',
       email: (row.מייל ?? row.email ?? row.Email ?? row.אימייל ?? '').toString().trim() || '',
       companyName: (row.companyName ?? row.company ?? row.חברה ?? '').toString().trim() || undefined,
       notes: (row.הערות ?? row['איך שמעת עלינו'] ?? row.notes ?? '').toString().trim() || undefined,

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import {
   Download, PlayCircle, Sparkles, ChevronDown, ExternalLink, BookOpen, MapPin, ChevronUp,
@@ -92,9 +92,11 @@ const PICKUP_LOCATIONS = [
 
 const ClientJourneyPortal: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const { leads, customers, settings } = useApp();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [currentStep, setCurrentStep] = useState(0);
+  const stepFromUrl = searchParams.get('step');
+  const [currentStep, setCurrentStep] = useState(stepFromUrl ? parseInt(stepFromUrl) : 0);
 
   const displayName = useMemo(() => {
     const lead = leads.find(l => l.id === id);

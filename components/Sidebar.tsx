@@ -18,8 +18,9 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 text-white h-full flex flex-col shadow-xl">
-      <div className="p-6 border-b border-slate-700 flex justify-between items-center">
+    <aside className="w-64 bg-slate-900 text-white h-screen flex flex-col shadow-xl">
+      {/* Header - Fixed */}
+      <div className="p-6 border-b border-slate-700 flex justify-between items-center shrink-0">
         <div>
             <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
             ME-CFM
@@ -33,7 +34,8 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
         )}
       </div>
 
-      <nav className="flex-1 py-6 space-y-2">
+      {/* Navigation - Scrollable */}
+      <nav className="flex-1 py-6 space-y-2 overflow-y-auto">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -53,7 +55,8 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-slate-700 bg-slate-800/50">
+      {/* Footer - Fixed */}
+      <div className="p-4 border-t border-slate-700 bg-slate-800/50 shrink-0">
         <div className="flex items-center gap-3 mb-4 px-2">
            <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center font-bold text-white shadow-lg border border-purple-400">
               {userEmail.charAt(0).toUpperCase()}

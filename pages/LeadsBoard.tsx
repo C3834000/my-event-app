@@ -38,6 +38,16 @@ const LeadsBoard: React.FC = () => {
     return out;
   };
 
+  const fixPhone = (val: any): string => {
+    if (!val) return '';
+    let str = String(val).trim();
+    if (/^\d+\.?\d*E\+\d+$/i.test(str)) {
+      const num = parseFloat(str);
+      str = num.toFixed(0);
+    }
+    return str;
+  };
+
   const parseCsv = (text: string): Lead[] => {
     const lines = text.trim().split(/\r?\n/).filter(Boolean);
     if (lines.length === 0) return [];
@@ -48,6 +58,7 @@ const LeadsBoard: React.FC = () => {
     const emailIdx = header.findIndex((x: string) => /^(email|אימייל|mail)$/.test(String(x).replace(/["']/g, '').trim().toLowerCase()));
     const sourceIdx = header.findIndex((x: string) => /^(source|מקור)$/.test(String(x).replace(/["']/g, '').trim().toLowerCase()));
     const notesIdx = header.findIndex((x: string) => /^(notes|הערות)$/.test(String(x).replace(/["']/g, '').trim().toLowerCase()));
+    const eventDetailsIdx = header.findIndex((x: string) => /^(eventDetails|פרטי.*אירוע|event)$/.test(String(x).replace(/["']/g, '').trim().toLowerCase()));
     const hasHeader = nameIdx >= 0 || phoneIdx >= 0 || (header.length > 0 && header.some((x: string) => /^(name|שם|phone|טלפון|email|אימייל)$/.test(String(x).replace(/["']/g, '').trim().toLowerCase())));
     const rows = hasHeader ? lines.slice(1) : lines;
     return rows.map((row, i) => {
@@ -57,13 +68,15 @@ const LeadsBoard: React.FC = () => {
       const email = emailIdx >= 0 ? (cells[emailIdx] ?? '') : '';
       const source = sourceIdx >= 0 ? (cells[sourceIdx] ?? 'ייבוא') : 'ייבוא';
       const notes = notesIdx >= 0 ? (cells[notesIdx] ?? '') : '';
+      const eventDetails = eventDetailsIdx >= 0 ? (cells[eventDetailsIdx] ?? '') : '';
       return {
         id: `l_${Date.now()}_${i}`,
         name: String(name).trim(),
-        phone: String(phone).trim(),
+        phone: fixPhone(phone),
         email: String(email).trim() || undefined,
         source: String(source).trim() || 'ייבוא',
         notes: String(notes).trim() || undefined,
+        eventDetails: String(eventDetails).trim() || undefined,
         status: LeadStatus.New,
       };
     }).filter(l => l.name || l.phone);
@@ -90,7 +103,7 @@ const LeadsBoard: React.FC = () => {
   };
 
   const [newLead, setNewLead] = useState({
-    name: '', phone: '', email: '', source: 'Facebook', notes: '', followUpDate: ''
+    name: '', phone: '', email: '', source: 'Facebook', notes: '', eventDetails: '', followUpDate: ''
   });
 
   const handleSendPortalEmail = async (leadId: string) => {
@@ -115,7 +128,7 @@ const LeadsBoard: React.FC = () => {
       ...newLead
     });
     setIsModalOpen(false);
-    setNewLead({ name: '', phone: '', email: '', source: 'Facebook', notes: '', followUpDate: '' });
+    setNewLead({ name: '', phone: '', email: '', source: 'Facebook', notes: '', eventDetails: '', followUpDate: '' });
   };
 
   const handleWhatsAppShare = (lead: Lead) => {
@@ -168,6 +181,12 @@ const LeadsBoard: React.FC = () => {
                             <div className="flex items-center gap-2"><Phone size={12}/>{lead.phone}</div>
                             {lead.email && <div className="flex items-center gap-2"><Mail size={12}/>{lead.email}</div>}
                           </div>
+                          {lead.eventDetails && (
+                            <div className="mt-3 bg-purple-50 border border-purple-100 rounded-lg p-2">
+                              <div className="text-[10px] text-purple-600 font-black mb-1">פרטי האירוע:</div>
+                              <div className="text-xs text-slate-700 font-bold whitespace-pre-wrap">{lead.eventDetails}</div>
+                            </div>
+                          )}
                           <div className="mt-4 flex flex-col gap-2">
                              <div className="flex gap-2">
                                 <button type="button" onClick={() => handleViewPortal(lead.id)} className="flex-1 bg-indigo-50 text-indigo-600 py-2 rounded-lg text-[10px] font-black border border-indigo-100 flex items-center justify-center gap-1">
@@ -213,6 +232,16 @@ const LeadsBoard: React.FC = () => {
                         <div className="space-y-1"><label className="text-xs font-bold text-slate-400">שם מלא</label><input required className="w-full p-2 border rounded-xl font-bold" value={editingLead ? editingLead.name : newLead.name} onChange={e => editingLead ? setEditingLead({...editingLead, name: e.target.value}) : setNewLead({...newLead, name: e.target.value})}/></div>
                         <div className="space-y-1"><label className="text-xs font-bold text-slate-400">טלפון</label><input className="w-full p-2 border rounded-xl font-bold" value={editingLead ? editingLead.phone : newLead.phone} onChange={e => editingLead ? setEditingLead({...editingLead, phone: e.target.value}) : setNewLead({...newLead, phone: e.target.value})}/></div>
                         <div className="space-y-1"><label className="text-xs font-bold text-slate-400">אימייל</label><input className="w-full p-2 border rounded-xl font-bold" value={editingLead ? editingLead.email : newLead.email} onChange={e => editingLead ? setEditingLead({...editingLead, email: e.target.value}) : setNewLead({...newLead, email: e.target.value})}/></div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-400">פרטי האירוע שהלקוח מתעניין בו</label>
+                            <textarea 
+                                className="w-full p-2 border rounded-xl font-bold resize-none" 
+                                rows={3}
+                                placeholder="תאריך, סוג אירוע, מיקום..."
+                                value={editingLead ? (editingLead.eventDetails || '') : newLead.eventDetails} 
+                                onChange={e => editingLead ? setEditingLead({...editingLead, eventDetails: e.target.value}) : setNewLead({...newLead, eventDetails: e.target.value})}
+                            />
+                        </div>
                     </div>
                     <div className="flex justify-end gap-3 pt-4">
                         <button type="submit" className="w-full bg-purple-600 text-white py-4 rounded-xl font-black text-lg shadow-xl">שמור שינויים</button>

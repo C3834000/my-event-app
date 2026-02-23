@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 const CustomersBoard: React.FC = () => {
   const { customers, events, addCustomer, importCustomers, addEvent, sendPortalEmailForCustomer, updateCustomer } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDebtOnly, setShowDebtOnly] = useState(false);
   const [expandedLetters, setExpandedLetters] = useState<Record<string, boolean>>({});
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -22,9 +23,34 @@ const CustomersBoard: React.FC = () => {
   const [newCust, setNewCust] = useState({ name: '', phone: '', email: '', notes: '' });
   const [newEventForm, setNewEventForm] = useState({ title: '', date: '', startTime: '10:00', endTime: '12:00', amount: 0, location: '', notes: '' });
 
-  const filtered = customers.filter(c => 
-    c.name.includes(searchTerm) || c.phone.includes(searchTerm) || c.email.includes(searchTerm)
-  );
+  const highlightText = (text: string, search: string) => {
+    if (!search.trim()) return text;
+    const regex = new RegExp(`(${search.trim()})`, 'gi');
+    const parts = text.split(regex);
+    return parts.map((part, i) => 
+      regex.test(part) ? <mark key={i} className="bg-yellow-200 font-black">{part}</mark> : part
+    );
+  };
+
+  const filtered = customers.filter(c => {
+    const term = searchTerm.toLowerCase().trim();
+    const matchesSearch = !term || (
+      c.name.toLowerCase().includes(term) || 
+      c.phone.includes(term) || 
+      (c.email && c.email.toLowerCase().includes(term)) ||
+      (c.companyName && c.companyName.toLowerCase().includes(term))
+    );
+    
+    if (!matchesSearch) return false;
+    
+    if (showDebtOnly) {
+      const cEvents = events.filter(ev => ev.customerId === c.id || ev.phone === c.phone || (ev.email && ev.email === c.email));
+      const totalDebt = cEvents.reduce((sum, ev) => sum + (ev.amount - (ev.paidAmount || 0)), 0);
+      return totalDebt > 0;
+    }
+    
+    return true;
+  });
 
   const grouped = useMemo(() => {
     const groups: Record<string, Customer[]> = {};
@@ -44,6 +70,14 @@ const CustomersBoard: React.FC = () => {
     Object.keys(grouped).forEach(l => next[l] = expand);
     setExpandedLetters(next);
   };
+
+  React.useEffect(() => {
+    if (searchTerm.trim()) {
+      const next: Record<string, boolean> = {};
+      Object.keys(grouped).forEach(l => next[l] = true);
+      setExpandedLetters(next);
+    }
+  }, [searchTerm, grouped]);
 
   const handleWhatsApp = (phone: string) => {
     const clean = phone.replace(/[^0-9]/g, '');
@@ -104,10 +138,16 @@ const CustomersBoard: React.FC = () => {
     <div className="space-y-6">
        <div className="flex justify-between items-center">
            <div><h2 className="text-3xl font-bold text-slate-800">לקוחות (B)</h2><p className="text-slate-500">מאגר CRM וניהול תקשורת</p></div>
-           <div className="flex gap-2">
+           <div className="flex flex-wrap gap-2">
                 <button onClick={() => setIsAddingNew(true)} className="bg-purple-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={18}/> הוסף לקוח</button>
                 <input type="file" ref={fileInputRef} onChange={async (e) => { const file = e.target.files?.[0]; if(file) { importCustomers(await parseCSV(file)); alert('ייבוא לקוחות הושלם!'); } }} className="hidden" accept=".csv" />
                 <button onClick={() => fileInputRef.current?.click()} className="bg-white border px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm"><Upload size={18} /> ייבוא</button>
+                <button 
+                  onClick={() => setShowDebtOnly(!showDebtOnly)} 
+                  className={`px-4 py-2 rounded-xl font-bold transition-all ${showDebtOnly ? 'bg-red-500 text-white shadow-lg' : 'bg-white border text-slate-700'}`}
+                >
+                  {showDebtOnly ? '✓ חובות בלבד' : 'הצג חובות'}
+                </button>
                 <button onClick={() => toggleAll(true)} className="text-xs font-bold text-purple-600 hover:underline">פתח הכל</button>
                 <button onClick={() => toggleAll(false)} className="text-xs font-bold text-slate-400 hover:underline">כווץ הכל</button>
            </div>
@@ -118,9 +158,23 @@ const CustomersBoard: React.FC = () => {
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input 
                     type="text" placeholder="חפש לפי שם, טלפון או מייל..." 
-                    className="w-full pr-10 pl-4 py-3 bg-white border rounded-xl outline-none shadow-sm"
+                    className="w-full pr-10 pl-20 py-3 bg-white border rounded-xl outline-none shadow-sm focus:ring-2 focus:ring-purple-100"
                     value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                 />
+                {searchTerm.trim() && (
+                  <>
+                    <div className="absolute left-16 top-1/2 -translate-y-1/2 bg-purple-600 text-white px-3 py-1 rounded-full text-xs font-black">
+                      {filtered.length} תוצאות
+                    </div>
+                    <button 
+                      onClick={() => setSearchTerm('')}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
+                      title="נקה חיפוש"
+                    >
+                      <X size={16} />
+                    </button>
+                  </>
+                )}
             </div>
             <button 
                 onClick={() => { setIsSyncing(true); setTimeout(() => setIsSyncing(false), 2000); }}
@@ -130,6 +184,13 @@ const CustomersBoard: React.FC = () => {
                 {isSyncing ? 'מסנכרן...' : 'סנכרן וואטסאפ'}
             </button>
         </div>
+
+        {searchTerm.trim() && filtered.length === 0 && (
+          <div className="bg-yellow-50 border-2 border-yellow-200 rounded-2xl p-8 text-center">
+            <p className="text-xl font-bold text-yellow-800">לא נמצאו לקוחות התואמים לחיפוש "{searchTerm}"</p>
+            <button onClick={() => setSearchTerm('')} className="mt-4 bg-yellow-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-yellow-700">נקה חיפוש</button>
+          </div>
+        )}
 
         <div className="space-y-4">
             {Object.entries(grouped).map(([letter, list]: [string, any]) => (
@@ -151,12 +212,13 @@ const CustomersBoard: React.FC = () => {
                                 const totalPaid = cEvents.reduce((sum, ev) => sum + (ev.paidAmount || 0), 0);
                                 const totalDebt = cEvents.reduce((sum, ev) => sum + (ev.amount - (ev.paidAmount || 0)), 0);
                                 const isExpanded = expandedCustomer === c.id;
+                                const isSearchMatch = searchTerm.trim().length > 0;
                                 return (
-                                    <div key={c.id} className="p-5 hover:bg-slate-50/50 transition-colors">
+                                    <div key={c.id} className={`p-5 transition-all ${isSearchMatch ? 'bg-purple-50/50 border-r-4 border-purple-500' : 'hover:bg-slate-50/50'}`}>
                                         <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                                             <div className="flex-1 space-y-3">
                                                 <div className="flex items-center gap-3">
-                                                    <h4 className="text-lg font-bold text-slate-800">{c.name}</h4>
+                                                    <h4 className="text-lg font-bold text-slate-800">{highlightText(c.name, searchTerm)}</h4>
                                                     <button onClick={() => setExpandedCustomer(isExpanded ? null : c.id)} className="text-xs font-bold text-purple-600 hover:underline">{isExpanded ? 'כווץ' : 'הצג פרטים'}</button>
                                                 </div>
                                                 <div className="flex flex-wrap gap-4 text-sm text-slate-600">
@@ -242,8 +304,8 @@ const CustomersBoard: React.FC = () => {
                   <div className="space-y-1"><label className="text-xs font-bold text-slate-400">סכום (₪)</label><input type="number" className="w-full p-2 border rounded-lg" value={newEventForm.amount || ''} onChange={e => setNewEventForm({...newEventForm, amount: Number(e.target.value) || 0})}/></div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><label className="text-xs font-bold text-slate-400">התחלה</label><input type="time" className="w-full p-2 border rounded-lg" value={newEventForm.startTime} onChange={e => setNewEventForm({...newEventForm, startTime: e.target.value})}/></div>
-                  <div className="space-y-1"><label className="text-xs font-bold text-slate-400">סיום</label><input type="time" className="w-full p-2 border rounded-lg" value={newEventForm.endTime} onChange={e => setNewEventForm({...newEventForm, endTime: e.target.value})}/></div>
+                  <div className="space-y-1"><label className="text-xs font-bold text-slate-400">התחלה</label><input type="time" step="900" min="00:00" max="23:45" className="w-full p-2 border rounded-lg" value={newEventForm.startTime} onChange={e => setNewEventForm({...newEventForm, startTime: e.target.value})}/></div>
+                  <div className="space-y-1"><label className="text-xs font-bold text-slate-400">סיום</label><input type="time" step="900" min="00:00" max="23:45" className="w-full p-2 border rounded-lg" value={newEventForm.endTime} onChange={e => setNewEventForm({...newEventForm, endTime: e.target.value})}/></div>
                 </div>
                 <div className="space-y-1"><label className="text-xs font-bold text-slate-400">מיקום</label><input className="w-full p-2 border rounded-lg" value={newEventForm.location} onChange={e => setNewEventForm({...newEventForm, location: e.target.value})}/></div>
                 <div className="space-y-1"><label className="text-xs font-bold text-slate-400">הערות</label><textarea className="w-full p-2 border rounded-lg" value={newEventForm.notes} onChange={e => setNewEventForm({...newEventForm, notes: e.target.value})}/></div>

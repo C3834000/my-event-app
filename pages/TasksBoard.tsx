@@ -2,20 +2,60 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, TaskCategory, TaskPriority } from '../types';
-import { Star, Check, Trash2, Plus, Edit, X, Save, Clock, Tag, Upload, Search, Filter } from 'lucide-react';
+import { Star, Check, Trash2, Plus, Edit, X, Save, Clock, Tag, Upload, Search, Filter, Briefcase, User, Home, FlaskConical, TrendingUp, List, AlertTriangle } from 'lucide-react';
 import { parseCSV } from '../services/utils';
 
 const CATEGORIES: TaskCategory[] = ['קליכיף', 'אישי', 'בית', 'תוכנית מדע', 'שיווק', 'כללי', 'דחוף / לסיווג'];
-const CATEGORY_COLORS: Record<string, string> = {
-  'קליכיף': 'bg-indigo-50 border-indigo-100 text-indigo-800',
-  'אישי': 'bg-amber-50 border-amber-100 text-amber-800',
-  'בית': 'bg-emerald-50 border-emerald-100 text-emerald-800',
-  'תוכנית מדע': 'bg-sky-50 border-sky-100 text-sky-800',
-  'שיווק': 'bg-violet-50 border-violet-100 text-violet-800',
-  'כללי': 'bg-slate-50 border-slate-100 text-slate-700',
-  'דחוף / לסיווג': 'bg-rose-50 border-rose-100 text-rose-800',
+
+const CATEGORY_ICONS: Record<string, any> = {
+  'קליכיף': Briefcase,
+  'אישי': User,
+  'בית': Home,
+  'תוכנית מדע': FlaskConical,
+  'שיווק': TrendingUp,
+  'כללי': List,
+  'דחוף / לסיווג': AlertTriangle,
 };
-const getTaskCategoryStyle = (cat: string) => CATEGORY_COLORS[cat] || 'bg-slate-50 border-slate-100 text-slate-700';
+
+const CATEGORY_STYLES: Record<string, { badge: string; header: string; border: string }> = {
+  'קליכיף': { 
+    badge: 'bg-indigo-100 border-indigo-200 text-indigo-800',
+    header: 'bg-gradient-to-r from-indigo-500 to-blue-600',
+    border: 'border-indigo-200'
+  },
+  'אישי': { 
+    badge: 'bg-amber-100 border-amber-200 text-amber-800',
+    header: 'bg-gradient-to-r from-amber-500 to-orange-500',
+    border: 'border-amber-200'
+  },
+  'בית': { 
+    badge: 'bg-emerald-100 border-emerald-200 text-emerald-800',
+    header: 'bg-gradient-to-r from-emerald-500 to-green-600',
+    border: 'border-emerald-200'
+  },
+  'תוכנית מדע': { 
+    badge: 'bg-sky-100 border-sky-200 text-sky-800',
+    header: 'bg-gradient-to-r from-sky-500 to-cyan-500',
+    border: 'border-sky-200'
+  },
+  'שיווק': { 
+    badge: 'bg-violet-100 border-violet-200 text-violet-800',
+    header: 'bg-gradient-to-r from-violet-500 to-purple-600',
+    border: 'border-violet-200'
+  },
+  'כללי': { 
+    badge: 'bg-slate-100 border-slate-200 text-slate-700',
+    header: 'bg-gradient-to-r from-slate-500 to-slate-600',
+    border: 'border-slate-200'
+  },
+  'דחוף / לסיווג': { 
+    badge: 'bg-rose-100 border-rose-200 text-rose-800',
+    header: 'bg-gradient-to-r from-rose-500 to-red-600',
+    border: 'border-rose-200'
+  },
+};
+
+const getCategoryStyles = (cat: string) => CATEGORY_STYLES[cat] || CATEGORY_STYLES['כללי'];
 
 const TasksBoard: React.FC = () => {
   const { tasks, addTask, updateTask, toggleTask, deleteTask, updateTaskProgress, importTasks } = useApp();
@@ -131,39 +171,71 @@ const TasksBoard: React.FC = () => {
             </div>
         ) : Object.entries(groupedTasks).map(([category, taskList]) => {
           const isCollapsed = collapsedCategories[category];
+          const styles = getCategoryStyles(category);
+          const Icon = CATEGORY_ICONS[category] || List;
+          const completedCount = taskList.filter(t => t.isCompleted).length;
+          const urgentCount = taskList.filter(t => !t.isCompleted && t.priority === 5).length;
+          
           return (
-            <div key={category} className="bg-white rounded-[1.5rem] shadow-lg border-2 border-slate-200 overflow-hidden hover:shadow-xl transition-all">
+            <div key={category} className={`bg-white rounded-2xl shadow-lg border-2 ${styles.border} overflow-hidden hover:shadow-xl transition-all`}>
               <button 
                 onClick={() => toggleCategory(category)}
-                className={`w-full flex items-center justify-between p-5 hover:bg-slate-50 transition-all border-b-2 border-slate-100 ${getTaskCategoryStyle(category)}`}
+                className={`w-full flex items-center justify-between p-6 ${styles.header} hover:opacity-90 transition-all shadow-md`}
               >
-                <div className="flex items-center gap-3">
-                  <span className={`px-4 py-2 rounded-xl text-sm font-black border-2 shadow-sm ${getTaskCategoryStyle(category)}`}>{category}</span>
-                  <span className="text-sm font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg">{taskList.length} משימות</span>
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30 shadow-lg">
+                    <Icon size={24} className="text-white" />
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-black text-white">{category}</div>
+                    <div className="text-xs text-white/80 font-bold flex items-center gap-2">
+                      <span>{taskList.length} משימות</span>
+                      {completedCount > 0 && <span>• ✓ {completedCount}</span>}
+                      {urgentCount > 0 && <span className="bg-red-500 text-white px-2 py-0.5 rounded-full">🔥 {urgentCount}</span>}
+                    </div>
+                  </div>
                 </div>
-                {isCollapsed ? <Plus size={22} className="text-slate-500" /> : <X size={22} className="text-slate-500" />}
+                <div className="flex items-center gap-2">
+                  {isCollapsed ? <Plus size={24} className="text-white" /> : <X size={24} className="text-white" />}
+                </div>
               </button>
               {!isCollapsed && (
-                <div className="divide-y-2 divide-slate-100">
-                  {taskList.map(task => {
-                    const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && !task.isCompleted;
+                <div className="p-4 space-y-3 bg-slate-50/30">
+                  {taskList.filter(t => !t.isCompleted).length > 0 && (
+                    <div className="text-xs font-black text-slate-400 px-2 mb-2">פתוחות ({taskList.filter(t => !t.isCompleted).length})</div>
+                  )}
+                  {taskList.filter(t => !t.isCompleted).map((task, idx) => {
+                    const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
+                    const styles = getCategoryStyles(category);
                     return (
-                      <div key={task.id} className={`p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:bg-slate-50 transition-all ${task.isCompleted ? 'opacity-60' : ''} ${isOverdue ? 'bg-red-50 border-r-4 border-red-500' : ''}`}>
+                      <div key={task.id} className={`p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 group transition-all shadow-md hover:shadow-xl hover:scale-[1.01] border-2 ${isOverdue ? 'bg-red-50 border-red-400 hover:border-red-500' : `bg-white ${styles.border} hover:${styles.border}`}`}>
                         <div className="flex items-start md:items-center gap-4 flex-1 min-w-0">
-                          <button 
-                            onClick={() => toggleTask(task.id)} 
-                            className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all shrink-0 shadow-sm hover:shadow-md ${task.isCompleted ? 'bg-green-500 border-green-600 text-white scale-105' : 'bg-white border-slate-300 hover:border-purple-500 hover:bg-purple-50'}`}
-                          >
-                            {task.isCompleted && <Check size={16} strokeWidth={3} />}
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-black text-slate-600 shrink-0">
+                              {idx + 1}
+                            </div>
+                            <button 
+                              onClick={() => toggleTask(task.id)} 
+                              className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center transition-all shrink-0 shadow-md hover:shadow-lg hover:scale-105 ${task.isCompleted ? 'bg-green-500 border-green-600 text-white' : 'bg-white border-slate-300 hover:border-purple-500 hover:bg-purple-50'}`}
+                            >
+                              {task.isCompleted && <Check size={18} strokeWidth={4} />}
+                            </button>
+                          </div>
                           <div className="flex-1 min-w-0">
-                            <h4 className={`font-bold text-base transition-all ${task.isCompleted ? 'line-through opacity-70' : 'text-slate-800'}`}>{task.title}</h4>
-                            <div className="flex flex-wrap gap-2 mt-2 items-center">
-                               {task.estimatedTimeMin > 0 && <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg flex items-center gap-1 border border-slate-200"><Clock size={12}/> {task.estimatedTimeMin} דק׳</span>}
-                               {task.priority === 5 && !task.isCompleted && <span className="text-xs font-black bg-red-500 text-white px-3 py-1 rounded-lg shadow-sm">🔥 דחוף</span>}
-                               {!task.isCompleted && task.progress > 0 && <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200">{task.progress}%</span>}
-                               {task.dueDate && <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${isOverdue ? 'bg-red-100 text-red-700 border-red-300' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>📅 {new Date(task.dueDate).toLocaleDateString('he-IL')}</span>}
-                               {isOverdue && <span className="text-xs font-black bg-red-600 text-white px-3 py-1 rounded-lg shadow-md animate-pulse">⚠️ איחור!</span>}
+                            <h4 className={`font-bold text-base transition-all mb-2 ${task.isCompleted ? 'line-through opacity-70 text-slate-500' : 'text-slate-900'}`}>{task.title}</h4>
+                            <div className="flex flex-wrap gap-2 items-center">
+                               {task.estimatedTimeMin > 0 && <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5 border border-slate-200 shadow-sm"><Clock size={13}/> {task.estimatedTimeMin} דק׳</span>}
+                               {task.priority === 5 && !task.isCompleted && <span className="text-xs font-black bg-red-500 text-white px-3 py-1.5 rounded-lg shadow-md animate-pulse">🔥 דחוף</span>}
+                               {!task.isCompleted && task.progress > 0 && (
+                                 <div className="flex items-center gap-2">
+                                   <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                     <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all" style={{ width: `${task.progress}%` }}></div>
+                                   </div>
+                                   <span className="text-xs font-bold text-purple-700">{task.progress}%</span>
+                                 </div>
+                               )}
+                               {task.dueDate && <span className={`text-xs font-bold px-3 py-1.5 rounded-lg border shadow-sm ${isOverdue ? 'bg-red-100 text-red-800 border-red-300' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>📅 {new Date(task.dueDate).toLocaleDateString('he-IL')}</span>}
+                               {isOverdue && <span className="text-xs font-black bg-red-600 text-white px-3 py-1.5 rounded-lg shadow-md animate-pulse">⚠️ איחור!</span>}
                             </div>
                           </div>
                         </div>
@@ -174,6 +246,48 @@ const TasksBoard: React.FC = () => {
                       </div>
                     );
                   })}
+                  
+                  {taskList.filter(t => t.isCompleted).length > 0 && (
+                    <>
+                      <div className="pt-4 pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 border-t-2 border-slate-200"></div>
+                          <span className="text-xs font-black text-slate-400 px-2">הושלמו ({taskList.filter(t => t.isCompleted).length})</span>
+                          <div className="flex-1 border-t-2 border-slate-200"></div>
+                        </div>
+                      </div>
+                      {taskList.filter(t => t.isCompleted).map((task, idx) => {
+                        const styles = getCategoryStyles(category);
+                        return (
+                          <div key={task.id} className="p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 group transition-all shadow-sm hover:shadow-md border-2 bg-slate-50 border-slate-200 opacity-60">
+                            <div className="flex items-start md:items-center gap-4 flex-1 min-w-0">
+                              <div className="flex items-center gap-3">
+                                <div className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center text-xs font-black text-green-700 shrink-0">
+                                  ✓
+                                </div>
+                                <button 
+                                  onClick={() => toggleTask(task.id)} 
+                                  className="w-9 h-9 rounded-xl border-2 flex items-center justify-center transition-all shrink-0 shadow-md hover:shadow-lg hover:scale-105 bg-green-500 border-green-600 text-white"
+                                >
+                                  <Check size={18} strokeWidth={4} />
+                                </button>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-bold text-base transition-all mb-2 line-through text-slate-500">{task.title}</h4>
+                                <div className="flex flex-wrap gap-2 items-center">
+                                   {task.completedDate && <span className="text-xs font-bold text-green-700 bg-green-100 px-3 py-1.5 rounded-lg border border-green-200 shadow-sm">✓ הושלם: {new Date(task.completedDate).toLocaleDateString('he-IL')}</span>}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => setEditingTask(task)} className="p-2.5 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all border border-transparent hover:border-purple-200 shadow-sm"><Edit size={18}/></button>
+                              <button onClick={() => deleteTask(task.id)} className="p-2.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-200 shadow-sm"><Trash2 size={18}/></button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
                 </div>
               )}
             </div>

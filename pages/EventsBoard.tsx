@@ -33,6 +33,25 @@ const getCategoryStyle = (category: string) => {
   return CATEGORY_COLORS[idx];
 };
 
+const HEADER_BG_COLORS: string[] = [
+  'bg-gradient-to-r from-blue-500 to-blue-600',
+  'bg-gradient-to-r from-purple-500 to-purple-600',
+  'bg-gradient-to-r from-pink-500 to-rose-500',
+  'bg-gradient-to-r from-orange-500 to-amber-500',
+  'bg-gradient-to-r from-green-500 to-emerald-600',
+  'bg-gradient-to-r from-teal-500 to-cyan-500',
+  'bg-gradient-to-r from-indigo-500 to-blue-600',
+  'bg-gradient-to-r from-red-500 to-pink-500',
+  'bg-gradient-to-r from-yellow-500 to-orange-500',
+  'bg-gradient-to-r from-lime-500 to-green-500',
+];
+
+const getHeaderBg = (category: string) => {
+  if (category === '🆕 אירועים חדשים') return 'bg-gradient-to-r from-purple-600 to-pink-600';
+  const idx = Math.abs(category.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % HEADER_BG_COLORS.length;
+  return HEADER_BG_COLORS[idx];
+};
+
 const PAYMENT_STATUS_STYLES: Record<string, string> = {
   [PaymentStatus.NotPaid]: 'bg-[#c4c4c4] text-white',
   [PaymentStatus.PaidCash]: 'bg-[#9cd326] text-white',
@@ -248,8 +267,8 @@ const EditEventModal: React.FC<{ event?: Partial<AppEvent>; onClose: () => void;
                     <div className="space-y-1"><label className="text-xs font-bold text-slate-400">סוג אירוע</label><select className="w-full p-2 border rounded-lg" value={formData.eventType} onChange={e => setFormData({...formData, eventType: e.target.value as any})}>{Object.values(EventType).map(v => <option key={v} value={v}>{v}</option>)}</select></div>
                     <div className="space-y-1"><label className="text-xs font-bold text-slate-400">תג אירוע</label><select className="w-full p-2 border rounded-lg" value={formData.tag} onChange={e => setFormData({...formData, tag: e.target.value})}>{Object.keys(EVENT_TAGS).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                     <div className="space-y-1"><label className="text-xs font-bold text-slate-400">מס׳ משתתפים / קליקרים</label><input type="number" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.clickersNeeded || 0} onChange={e => setFormData({...formData, clickersNeeded: Number(e.target.value)})} placeholder="50"/></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">שעת התחלה</label><input type="time" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})}/></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">שעת סיום</label><input type="time" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})}/></div>
+                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">שעת התחלה</label><input type="time" step="900" min="00:00" max="23:45" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})}/></div>
+                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">שעת סיום</label><input type="time" step="900" min="00:00" max="23:45" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})}/></div>
                     <div className="md:col-span-2 space-y-1"><label className="text-xs font-bold text-slate-400">כתובת</label><input className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})}/></div>
                     <div className="md:col-span-2 space-y-1"><label className="text-xs font-bold text-slate-400">הערות</label><textarea className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})}/></div>
                 </div>
@@ -273,6 +292,14 @@ const EventsBoard: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<'all' | 'unpaid'>('all');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  
+  React.useEffect(() => {
+      const initialState: Record<string, boolean> = {};
+      Object.keys(groupedEvents).forEach(key => {
+          initialState[key] = key !== '🆕 אירועים חדשים';
+      });
+      setCollapsedGroups(initialState);
+  }, []);
 
   const filtered = useMemo(() => {
       return events.filter(e => {
@@ -285,47 +312,28 @@ const EventsBoard: React.FC = () => {
 
   const groupedEvents = useMemo(() => {
       const groups: Record<string, AppEvent[]> = {};
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
       filtered.forEach(e => {
-          const groupName = (e as any).category || e.tag || 'כללי';
+          const eventDate = new Date(e.date);
+          eventDate.setHours(0, 0, 0, 0);
+          const isFutureEvent = eventDate >= today;
+          
+          const groupName = isFutureEvent ? '🆕 אירועים חדשים' : ((e as any).category || e.tag || 'כללי');
           if (!groups[groupName]) groups[groupName] = [];
           groups[groupName].push(e);
       });
-      return Object.keys(groups).sort((a, b) => (a === 'לבדיקה' ? -1 : b === 'לבדיקה' ? 1 : a.localeCompare(b))).reduce((obj: any, key) => {
+      
+      return Object.keys(groups).sort((a, b) => {
+          if (a === '🆕 אירועים חדשים') return -1;
+          if (b === '🆕 אירועים חדשים') return 1;
+          if (a === 'לבדיקה') return -1;
+          if (b === 'לבדיקה') return 1;
+          return a.localeCompare(b);
+      }).reduce((obj: any, key) => {
           obj[key] = groups[key].sort((a, b) => {
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const aDate = new Date(a.date);
-              const bDate = new Date(b.date);
-              aDate.setHours(0, 0, 0, 0);
-              bDate.setHours(0, 0, 0, 0);
-              
-              const aIsPaid = [PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck, PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider].includes(a.paymentStatus);
-              const bIsPaid = [PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck, PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider].includes(b.paymentStatus);
-              
-              const aIsFuture = aDate >= today;
-              const bIsFuture = bDate >= today;
-              const aIsPast = aDate < today;
-              const bIsPast = bDate < today;
-              
-              // 1. אירועים עתידיים קרובים (לא שולמו)
-              if (aIsFuture && !aIsPaid && bIsFuture && !bIsPaid) return aDate.getTime() - bDate.getTime();
-              if (aIsFuture && !aIsPaid) return -1;
-              if (bIsFuture && !bIsPaid) return 1;
-              
-              // 2. אירועים שבוצעו ולא שולמו
-              if (aIsPast && !aIsPaid && bIsPast && !bIsPaid) return bDate.getTime() - aDate.getTime();
-              if (aIsPast && !aIsPaid) return -1;
-              if (bIsPast && !bIsPaid) return 1;
-              
-              // 3. אירועים שבוצעו ושולמו
-              if (aIsPast && aIsPaid && bIsPast && bIsPaid) return bDate.getTime() - aDate.getTime();
-              if (aIsPast && aIsPaid) return -1;
-              if (bIsPast && bIsPaid) return 1;
-              
-              // 4. אירועים עתידיים ששולמו (או בלי תאריך)
-              if (aIsFuture && aIsPaid && bIsFuture && bIsPaid) return aDate.getTime() - bDate.getTime();
-              
-              return aDate.getTime() - bDate.getTime();
+              return b.id.localeCompare(a.id);
           });
           return obj;
       }, {});
@@ -371,13 +379,13 @@ const EventsBoard: React.FC = () => {
             <div key={group} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <button 
                     onClick={() => toggleGroup(group)}
-                    className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200"
+                    className={`w-full flex items-center justify-between p-4 ${getHeaderBg(group)} hover:opacity-90 transition-all border-b border-white/20 shadow-sm`}
                 >
                     <div className="flex items-center gap-3">
-                        <span className={`px-3 py-1 rounded-full text-xs font-black ${EVENT_TAGS[group] || getCategoryStyle(group)}`}>{group}</span>
-                        <span className="text-sm font-bold text-slate-500">{list.length} אירועים</span>
+                        <span className="px-3 py-1 rounded-full text-xs font-black bg-white/20 text-white backdrop-blur-sm">{group}</span>
+                        <span className="text-sm font-bold text-white/90">{list.length} אירועים</span>
                     </div>
-                    {collapsedGroups[group] ? <ChevronDown size={20} className="text-slate-400" /> : <ChevronUp size={20} className="text-slate-400" />}
+                    {collapsedGroups[group] ? <ChevronDown size={20} className="text-white" /> : <ChevronUp size={20} className="text-white" />}
                 </button>
                 {!collapsedGroups[group] && (
                     <div className="divide-y divide-slate-50">

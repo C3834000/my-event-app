@@ -99,6 +99,7 @@ export interface Lead {
   phone: string;
   email?: string;
   notes?: string;
+  eventDetails?: string;
   followUpDate?: string;
   followUpReminder?: string; 
 }
