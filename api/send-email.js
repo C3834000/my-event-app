@@ -1,6 +1,6 @@
 const nodemailer = require('nodemailer');
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   if (!host || !user || !pass) {
     return res.status(503).json({
       success: false,
-      error: 'Email not configured',
+      error: 'Email not configured - missing SMTP credentials',
     });
   }
 
@@ -49,11 +49,11 @@ export default async function handler(req, res) {
     });
 
     return res.status(200).json({ success: true });
-  } catch (err: any) {
+  } catch (err) {
     console.error('Send email error:', err);
     return res.status(500).json({
       success: false,
       error: err.message || 'Failed to send email',
     });
   }
-}
+};
