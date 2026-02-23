@@ -1,6 +1,6 @@
-const nodemailer = require('nodemailer');
+import nodemailer from 'nodemailer';
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -24,6 +24,7 @@ module.exports = async function handler(req, res) {
   const pass = process.env.SMTP_PASS;
 
   if (!host || !user || !pass) {
+    console.error('Missing SMTP env vars:', { host: !!host, user: !!user, pass: !!pass });
     return res.status(503).json({
       success: false,
       error: 'Email not configured - missing SMTP credentials',
@@ -31,6 +32,8 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    console.log('Creating transporter with:', { host, user, port: process.env.SMTP_PORT });
+    
     const transporter = nodemailer.createTransport({
       host,
       port: Number(process.env.SMTP_PORT) || 587,
@@ -40,6 +43,8 @@ module.exports = async function handler(req, res) {
 
     const from = process.env.FROM_EMAIL || user;
 
+    console.log('Sending email to:', to);
+
     await transporter.sendMail({
       from: `"${process.env.FROM_NAME || 'קליכיף'}" <${from}>`,
       to: Array.isArray(to) ? to.join(', ') : to,
@@ -48,6 +53,7 @@ module.exports = async function handler(req, res) {
       html: html || undefined,
     });
 
+    console.log('Email sent successfully to:', to);
     return res.status(200).json({ success: true });
   } catch (err) {
     console.error('Send email error:', err);
@@ -56,4 +62,4 @@ module.exports = async function handler(req, res) {
       error: err.message || 'Failed to send email',
     });
   }
-};
+}
