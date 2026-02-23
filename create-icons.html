@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>יצירת אייקונים לקליכיף</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 40px;
+            background: #f0f0f0;
+        }
+        canvas {
+            border: 2px solid #333;
+            margin: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        button {
+            background: #9333ea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        button:hover {
+            background: #7c3aed;
+        }
+        .instructions {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            max-width: 600px;
+            margin: 20px auto;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎨 יצירת אייקונים לקליכיף CRM</h1>
+    
+    <div class="instructions">
+        <h3>הוראות:</h3>
+        <ol>
+            <li>לחץ על "צור אייקון 192x192"</li>
+            <li>לחץ על "הורד" ושמור כ-<code>icon-192.png</code></li>
+            <li>לחץ על "צור אייקון 512x512"</li>
+            <li>לחץ על "הורד" ושמור כ-<code>icon-512.png</code></li>
+            <li>העתק את שני הקבצים לתיקיה <code>public</code></li>
+        </ol>
+    </div>
+
+    <canvas id="canvas192" width="192" height="192"></canvas>
+    <canvas id="canvas512" width="512" height="512"></canvas>
+    
+    <br>
+    
+    <button onclick="createIcon(192)">צור אייקון 192x192</button>
+    <button onclick="downloadIcon(192)">הורד 192x192</button>
+    <br>
+    <button onclick="createIcon(512)">צור אייקון 512x512</button>
+    <button onclick="downloadIcon(512)">הורד 512x512</button>
+
+    <script>
+        function createIcon(size) {
+            const canvas = document.getElementById(`canvas${size}`);
+            const ctx = canvas.getContext('2d');
+            
+            // רקע סגול
+            ctx.fillStyle = '#9333ea';
+            ctx.fillRect(0, 0, size, size);
+            
+            // עיגול לבן באמצע
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, size * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // טקסט "ק" בסגול
+            ctx.fillStyle = '#9333ea';
+            ctx.font = `bold ${size * 0.45}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('ק', size/2, size/2);
+            
+            // מסגרת לבנה
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = size * 0.03;
+            ctx.strokeRect(size * 0.05, size * 0.05, size * 0.9, size * 0.9);
+            
+            alert(`אייקון ${size}x${size} נוצר! לחץ על "הורד" כדי לשמור`);
+        }
+
+        function downloadIcon(size) {
+            const canvas = document.getElementById(`canvas${size}`);
+            const link = document.createElement('a');
+            link.download = `icon-${size}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // צור אוטומטית בטעינת הדף
+        window.onload = function() {
+            createIcon(192);
+            createIcon(512);
+        };
+    </script>
+</body>
+</html>

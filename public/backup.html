@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>גיבוי נתונים - קליכיף CRM</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px;
+            margin: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #9333ea;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .section {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            border-right: 4px solid #9333ea;
+        }
+        button {
+            background: #9333ea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #7c3aed;
+        }
+        button.danger {
+            background: #ef4444;
+        }
+        button.danger:hover {
+            background: #dc2626;
+        }
+        button.success {
+            background: #22c55e;
+        }
+        button.success:hover {
+            background: #16a34a;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            display: none;
+        }
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 2px solid #10b981;
+            display: block;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 2px solid #ef4444;
+            display: block;
+        }
+        .status.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 2px solid #3b82f6;
+            display: block;
+        }
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            resize: vertical;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 2px solid #e2e8f0;
+        }
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #9333ea;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ גיבוי ושחזור נתונים</h1>
+        <p class="subtitle">כלי לגיבוי ושחזור הנתונים שלך מ-localStorage</p>
+
+        <div id="status" class="status"></div>
+
+        <div class="section">
+            <h3>📊 סטטיסטיקות נתונים</h3>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number" id="eventsCount">-</div>
+                    <div class="stat-label">אירועים</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="customersCount">-</div>
+                    <div class="stat-label">לקוחות</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="leadsCount">-</div>
+                    <div class="stat-label">לידים</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" id="tasksCount">-</div>
+                    <div class="stat-label">משימות</div>
+                </div>
+            </div>
+            <button onclick="loadStats()">🔄 רענן סטטיסטיקות</button>
+        </div>
+
+        <div class="section">
+            <h3>💾 גיבוי נתונים</h3>
+            <p>שמור את כל הנתונים שלך לקובץ</p>
+            <button onclick="backupData()">📥 הורד גיבוי מלא (JSON)</button>
+            <button onclick="copyBackup()">📋 העתק גיבוי ללוח</button>
+        </div>
+
+        <div class="section">
+            <h3>♻️ שחזור נתונים</h3>
+            <p><strong>⚠️ אזהרה:</strong> פעולה זו תחליף את כל הנתונים הקיימים!</p>
+            <textarea id="restoreData" placeholder="הדבק כאן את הגיבוי (JSON)..."></textarea>
+            <button class="danger" onclick="restoreData()">⚠️ שחזר נתונים מגיבוי</button>
+        </div>
+
+        <div class="section">
+            <h3>🗑️ ניקוי נתונים</h3>
+            <p><strong>⚠️ אזהרה:</strong> פעולה זו תמחק את כל הנתונים!</p>
+            <button class="danger" onclick="clearAllData()">🗑️ מחק את כל הנתונים</button>
+        </div>
+
+        <div class="section">
+            <h3>🚀 מעבר ל-Supabase</h3>
+            <p>העבר את הנתונים ל-Supabase (בסיס נתונים בענן)</p>
+            <button class="success" onclick="migrateToSupabase()">☁️ העבר ל-Supabase</button>
+            <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                * דורש הגדרת Supabase מראש (ראה DATA_PROTECTION.md)
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'ME_CFM_STORAGE_V12';
+
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            setTimeout(() => {
+                status.className = 'status';
+            }, 5000);
+        }
+
+        function loadStats() {
+            try {
+                const data = localStorage.getItem(STORAGE_KEY);
+                if (!data) {
+                    showStatus('❌ לא נמצאו נתונים', 'error');
+                    return;
+                }
+                const parsed = JSON.parse(data);
+                document.getElementById('eventsCount').textContent = (parsed.events || []).length;
+                document.getElementById('customersCount').textContent = (parsed.customers || []).length;
+                document.getElementById('leadsCount').textContent = (parsed.leads || []).length;
+                document.getElementById('tasksCount').textContent = (parsed.tasks || []).length;
+                showStatus('✅ סטטיסטיקות עודכנו', 'success');
+            } catch (err) {
+                showStatus('❌ שגיאה בטעינת נתונים: ' + err.message, 'error');
+            }
+        }
+
+        function backupData() {
+            try {
+                const data = localStorage.getItem(STORAGE_KEY);
+                if (!data) {
+                    showStatus('❌ לא נמצאו נתונים לגיבוי', 'error');
+                    return;
+                }
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `clickef-backup-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showStatus('✅ הגיבוי הורד בהצלחה!', 'success');
+            } catch (err) {
+                showStatus('❌ שגיאה ביצירת גיבוי: ' + err.message, 'error');
+            }
+        }
+
+        function copyBackup() {
+            try {
+                const data = localStorage.getItem(STORAGE_KEY);
+                if (!data) {
+                    showStatus('❌ לא נמצאו נתונים לגיבוי', 'error');
+                    return;
+                }
+                navigator.clipboard.writeText(data);
+                showStatus('✅ הגיבוי הועתק ללוח!', 'success');
+            } catch (err) {
+                showStatus('❌ שגיאה בהעתקה: ' + err.message, 'error');
+            }
+        }
+
+        function restoreData() {
+            const data = document.getElementById('restoreData').value.trim();
+            if (!data) {
+                showStatus('❌ אנא הדבק את הגיבוי בשדה', 'error');
+                return;
+            }
+            if (!confirm('⚠️ האם אתה בטוח? פעולה זו תחליף את כל הנתונים הקיימים!')) {
+                return;
+            }
+            try {
+                JSON.parse(data); // בדיקה שזה JSON תקין
+                localStorage.setItem(STORAGE_KEY, data);
+                showStatus('✅ הנתונים שוחזרו בהצלחה! רענן את הדף.', 'success');
+                setTimeout(() => location.reload(), 2000);
+            } catch (err) {
+                showStatus('❌ שגיאה בשחזור: ' + err.message, 'error');
+            }
+        }
+
+        function clearAllData() {
+            if (!confirm('⚠️ האם אתה בטוח? פעולה זו תמחק את כל הנתונים!')) {
+                return;
+            }
+            if (!confirm('⚠️⚠️ אזהרה אחרונה! האם אתה בטוח לחלוטין?')) {
+                return;
+            }
+            localStorage.removeItem(STORAGE_KEY);
+            showStatus('✅ כל הנתונים נמחקו. רענן את הדף.', 'success');
+            setTimeout(() => location.reload(), 2000);
+        }
+
+        async function migrateToSupabase() {
+            if (typeof window.migrateFromLocalStorage !== 'function') {
+                showStatus('❌ פונקציית המיגרציה לא זמינה. פתח את המערכת הראשית.', 'error');
+                return;
+            }
+            if (!confirm('האם הגדרת את Supabase? (ראה DATA_PROTECTION.md)')) {
+                return;
+            }
+            try {
+                showStatus('⏳ מעביר נתונים ל-Supabase...', 'info');
+                await window.migrateFromLocalStorage();
+                showStatus('✅ הנתונים הועברו ל-Supabase בהצלחה!', 'success');
+            } catch (err) {
+                showStatus('❌ שגיאה במיגרציה: ' + err.message, 'error');
+            }
+        }
+
+        // טען סטטיסטיקות בטעינת הדף
+        window.onload = loadStats;
+    </script>
+</body>
+</html>

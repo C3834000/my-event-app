@@ -1,0 +1,245 @@
+
+import React, { useState, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
+import { useSearchParams } from 'react-router-dom';
+import { CheckCircle2, Send, Sparkles, ShieldCheck, Heart, Mail, Check, AlertTriangle, X, FileText, Calendar, Clock, MapPin, CreditCard, User } from 'lucide-react';
+
+const TERMS_TEXT = `אישור תנאי הזמנה
+1. שעות פעילות המשרד: בין השעות 9:30-18:00 בשאר השעות ובסוף שבוע יינתן רק מענה דחוף. תמיכה, בירורים, שאלות ותיאומים נא לבצע בשעות הפעילות בלבד.
+
+2. הגברה ומקרן הכלולים במחיר מתייחסים לארוע של עד כ 200 איש. כשמס' המשתתפים גבוה יותר מחיר ההגברה וההקרנה משתנה בהתאם. בהשכרת קליק פור יו לא כלול ציוד הגברה והקרנה.
+
+3. הכנת החידון תתבצע באתר הייעודי של חברת קליכיף. מאתר זה גם תתבצע הורדת התוכנה. קישור להורדת החידון והפעלת התוכנה יישלח במייל עם ביצוע התשלום ושליחת אסמכתא. האחריות על תוכן השאלות וסימון התשובות היא על מכין החידון, כולל השאלות שנמצאות במאגר השאלות שלנו.
+
+4. בעת הזמנת האירוע תקבלו קישור להורדת חוברת הוראות וסרטון הדרכה. בהשכרת ערכה, חובה על השוכר לבדוק ולוודא לפחות 12 שעות לפני האירוע שהכל עובד כראוי.
+
+5. תשלום: בהשכרת ערכות קליק פור יו תתאפשר הורדת החידון רק עם ביצוע התשלום ושליחת אסמכתא. בקליכיף אירועים במוסדות חינוך התשלום יבוצע מיד עם סיום האירוע.
+
+6. ניתן לשלם בכ.א. בתוספת של 1.5% מהסך הכללי לתשלום בתיאום מראש בלבד.
+
+7. במקרה של ביטול ארוע מתחייב המזמין לשלם סך 50% משווי הארוע. ביטול תוך שבועיים מתאריך קיום האירוע יחייב את הלקוח בתשלום מלא.
+
+8. עיכוב משמעותי מהשעה שסוכמה בהתחלת ארוע או סיום הארוע יחויב בתוספת תשלום – לפי 100 ₪ לכל חצי שעה.
+
+9. על המזמין למנות אחראי שיספור את הקליקרים. על כל קליקר שיחסר ייגבה תשלום בסך 100 ₪.
+
+10. אם מיקום האירוע הינו במקום שיש שם בעיות חניה נא ציינו זאת בטופס.
+
+11. השוכר מתחייב להחזיר את הערכה למחרת האירוע עד השעה 11:00.
+
+12. המחירים אינם כוללים מע"מ.
+
+13. הלקוח אחראי לוודא את תוכן השאלות. וודאו שיש לכם גיבוי.`;
+
+const BookingForm: React.FC = () => {
+  const { handlePublicBookingSubmit, leads, customForms } = useApp();
+  const [searchParams] = useSearchParams();
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  const leadId = searchParams.get('leadId');
+  const formConfig = customForms[0]; 
+
+  const [formData, setFormData] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    if (formConfig) {
+      const initial: Record<string, any> = {};
+      formConfig.fields.forEach(f => {
+        initial[f.id] = '';
+      });
+      const lead = leadId ? leads.find(l => l.id === leadId) : null;
+      if (lead) {
+        formConfig.fields.forEach(f => {
+            if (f.mapping === 'name') initial[f.id] = lead.name;
+            if (f.mapping === 'phone') initial[f.id] = lead.phone;
+            if (f.mapping === 'email') initial[f.id] = lead.email || '';
+        });
+      }
+      setFormData(initial);
+    }
+  }, [formConfig, leads, leadId]);
+
+  const handleInputChange = (fieldId: string, mapping: string | undefined, value: any) => {
+    setFormData(prev => {
+        const next = { ...prev, [fieldId]: value };
+        // Auto-calculate end time (1.5h later)
+        if (mapping === 'startTime' && value) {
+            const [h, m] = value.split(':').map(Number);
+            let endH = h + 1;
+            let endM = m + 30;
+            if (endM >= 60) { endH++; endM -= 60; }
+            const endTimeStr = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+            const endField = formConfig.fields.find(f => f.mapping === 'endTime');
+            if (endField) next[endField.id] = endTimeStr;
+        }
+        return next;
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!termsAccepted) {
+        setShowTerms(true);
+        return;
+    }
+    setIsLoading(true);
+    try {
+      const payload: any = {};
+      formConfig.fields.forEach(f => {
+          if (f.mapping) payload[f.mapping] = formData[f.id];
+      });
+      await handlePublicBookingSubmit(payload);
+      setIsSubmitted(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      alert('שגיאה בשליחת הטופס. נסה שוב או פנה למשרד.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isSubmitted) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 dir-rtl font-sans">
+        <div className="max-w-xl w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 relative">
+           <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-8 text-white shadow-xl">
+              <CheckCircle2 size={56} className="animate-in zoom-in duration-300" />
+           </div>
+           <h2 className="text-4xl font-black text-slate-900 mb-6">ההזמנה נקלטה במערכת!</h2>
+           <div className="space-y-6 mb-10 text-right">
+              <div className="p-4 bg-green-50 border border-green-100 rounded-2xl flex items-start gap-4">
+                 <Mail className="text-green-600 mt-1 shrink-0" size={24} />
+                 <p className="text-sm font-bold text-green-800">אישור הזמנה רשמי נשלח כעת למייל שלך ({formData[formConfig.fields.find(f=>f.mapping==='email')?.id || '']}). זהו האישור ששריינת את האירוע.</p>
+              </div>
+              <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-4">
+                 <Calendar className="text-blue-600 mt-1 shrink-0" size={24} />
+                 <p className="text-sm font-bold text-blue-800">היומן של קליכיף עודכן אוטומטית בתאריך האירוע שלך. שים לב - ההזמנה מחייבת.</p>
+              </div>
+              <p className="text-slate-500 text-center font-bold">עכשיו אתם מוזמנים להמשיך לשלבי ההכנה והאיסוף בפורטל!</p>
+           </div>
+           <button onClick={() => window.history.back()} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-xl hover:bg-slate-800 transition-all shadow-xl">חזרה לפורטל האישי</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 py-12 px-4 dir-rtl font-sans">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center mb-12 space-y-4">
+            <h1 className="text-5xl font-black text-slate-900 tracking-tight">{formConfig?.title}</h1>
+            <p className="text-slate-500 text-lg max-w-lg mx-auto font-medium">השלב הראשון והכי חשוב כדי לשריין את האירוע המבוקש!</p>
+        </div>
+
+        <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-slate-100">
+           <form onSubmit={handleSubmit} className="p-8 md:p-14 space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {formConfig?.fields.map(field => (
+                    <div key={field.id} className={`space-y-2 ${field.type === 'textarea' ? 'md:col-span-2' : ''}`}>
+                        <label className="text-sm font-black text-slate-700 block flex items-center gap-2">
+                            {field.label} {field.required && <span className="text-red-500">*</span>}
+                        </label>
+                        {field.type === 'select' ? (
+                            <select required={field.required} value={formData[field.id] || ''} onChange={e => handleInputChange(field.id, field.mapping, e.target.value)} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-purple-500 transition-all font-bold">
+                                <option value="">בחר...</option>
+                                {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                        ) : field.type === 'textarea' ? (
+                            <div className="space-y-1">
+                                <textarea required={field.required} placeholder={field.placeholder} value={formData[field.id] || ''} onChange={e => handleInputChange(field.id, field.mapping, e.target.value)} rows={4} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-purple-500 transition-all font-bold resize-none"/>
+                                <p className="text-[10px] text-slate-400 font-bold">כאן המקום לציין אם מיקום האירוע הוא במקום עם קשיי חניה או חניה מרוחקת.</p>
+                            </div>
+                        ) : field.type === 'time' ? (
+                            <input 
+                                type="time" 
+                                required={field.required} 
+                                step="900"
+                                min="00:00"
+                                max="23:45"
+                                placeholder={field.placeholder}
+                                value={formData[field.id] || ''} 
+                                onChange={e => handleInputChange(field.id, field.mapping, e.target.value)} 
+                                className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-purple-500 transition-all font-bold"
+                                list={`${field.id}-times`}
+                            />
+                        ) : (
+                            <input 
+                                type={field.type} 
+                                required={field.required} 
+                                placeholder={field.placeholder}
+                                value={formData[field.id] || ''} 
+                                onChange={e => handleInputChange(field.id, field.mapping, e.target.value)} 
+                                className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-purple-500 transition-all font-bold"
+                            />
+                        )}
+                    </div>
+                ))}
+              </div>
+
+              {/* Terms Checkbox UI */}
+              <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-200 space-y-6">
+                  <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-black text-slate-800 flex items-center gap-2"><ShieldCheck size={20} className="text-purple-600"/> אישור תנאי ההזמנה</h3>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowTerms(true)}
+                        className="text-purple-600 font-black hover:underline flex items-center gap-1"
+                      >
+                         <FileText size={18}/> קרא תנאים מלאים
+                      </button>
+                  </div>
+                  <div className="flex items-center gap-4">
+                      <input 
+                        type="checkbox" 
+                        id="terms"
+                        required 
+                        checked={termsAccepted} 
+                        onChange={e => setTermsAccepted(e.target.checked)}
+                        className="w-6 h-6 accent-purple-600 rounded-lg cursor-pointer"
+                      />
+                      <label htmlFor="terms" className="text-sm font-bold text-slate-600 cursor-pointer italic">קראתי את התנאים ואני מאשר אותם</label>
+                  </div>
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={isLoading} 
+                className={`w-full py-6 rounded-[2.5rem] font-black text-2xl shadow-2xl transition-all flex items-center justify-center gap-3 ${termsAccepted ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-slate-200 text-slate-400'}`}
+              >
+                {isLoading ? <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin"></div> : <> <Send size={28}/> שלח טופס הזמנה ושריין תאריך </>}
+              </button>
+           </form>
+        </div>
+      </div>
+
+      {/* Terms Modal */}
+      {showTerms && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 overflow-y-auto">
+            <div className="my-auto bg-white rounded-[3rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+                <div className="bg-slate-900 p-8 text-white flex justify-between items-center shrink-0">
+                    <h3 className="text-2xl font-black">תנאי הזמנה ושימוש - קליכיף</h3>
+                    <button onClick={() => setShowTerms(false)} className="hover:rotate-90 transition-transform"><X size={28} /></button>
+                </div>
+                <div className="p-8 md:p-12 overflow-y-auto bg-slate-50 text-slate-700 whitespace-pre-line font-medium leading-relaxed text-right scroll-smooth">
+                    {TERMS_TEXT}
+                </div>
+                <div className="p-8 bg-white border-t flex flex-col items-center gap-4 shrink-0">
+                    <button 
+                        onClick={() => { setTermsAccepted(true); setShowTerms(false); }}
+                        className="bg-green-600 text-white px-12 py-5 rounded-2xl font-black text-2xl shadow-xl hover:bg-green-700 transition-all w-full flex items-center justify-center gap-3"
+                    >
+                        <Check size={28} /> קראתי והבנתי, אני מאשר/ת
+                    </button>
+                    <button onClick={() => setShowTerms(false)} className="text-slate-400 font-bold hover:underline">סגור ללא אישור</button>
+                </div>
+            </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default BookingForm;
