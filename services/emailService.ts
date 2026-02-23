@@ -12,8 +12,11 @@ export interface SendEmailParams {
 
 export async function sendEmail(params: SendEmailParams): Promise<{ success: boolean; error?: string }> {
   try {
-    const base = typeof window !== 'undefined' ? '' : 'http://localhost:4000'; // SSR-safe
+    // ב-Production משתמשים ב-Vercel Function, בפיתוח (אם רץ server מקומי) ניתן להשתמש ב-localhost
+    const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+    const base = isProduction ? '' : 'http://localhost:4000';
     const url = `${base}/api/send-email`;
+    
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -24,13 +27,17 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
         html: params.html,
       }),
     });
+    
     const data = await res.json().catch(() => ({}));
+    
     if (!res.ok) {
       return { success: false, error: data.error || res.statusText };
     }
+    
     return { success: !!data.success, error: data.error };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    console.error('❌ Email service error:', message);
     return { success: false, error: message };
   }
 }
