@@ -47,7 +47,7 @@ interface AppContextType {
   updateLeadStatus: (id: string, status: LeadStatus) => void;
   updateLead: (id: string, updates: Partial<Lead>) => void;
   convertLeadToCustomer: (leadId: string) => void;
-  handlePublicBookingSubmit: (data: any, leadId?: string) => Promise<void>;
+  handlePublicBookingSubmit: (data: any, leadId?: string) => Promise<{ eventId: string }>;
   sendBookingEmail: (leadId: string) => Promise<{ success: boolean; email: string; url: string }>;
   sendPortalEmail: (leadId: string) => Promise<{ success: boolean; email: string; url: string }>;
   sendEventUpdateEmail: (event: AppEvent) => Promise<void>;
@@ -286,7 +286,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       else addActivity('email', `שליחת מייל נכשלה: ${error || 'לא מוגדר'}`);
     }
 
-    return Promise.resolve();
+    return Promise.resolve({ eventId: event.id });
   };
 
   const sendPortalEmail = async (leadId: string) => {

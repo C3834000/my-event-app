@@ -82,6 +82,8 @@ const BookingForm: React.FC = () => {
     });
   };
 
+  const [submittedEventId, setSubmittedEventId] = React.useState<string>('');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!termsAccepted) {
@@ -94,7 +96,8 @@ const BookingForm: React.FC = () => {
       formConfig.fields.forEach(f => {
           if (f.mapping) payload[f.mapping] = formData[f.id];
       });
-      await handlePublicBookingSubmit(payload, leadId || undefined);
+      const result = await handlePublicBookingSubmit(payload, leadId || undefined);
+      setSubmittedEventId(result.eventId);
       setIsSubmitted(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
@@ -107,8 +110,11 @@ const BookingForm: React.FC = () => {
   if (isSubmitted) {
     React.useEffect(() => {
       const timer = setTimeout(() => {
-        const portalUrl = `/portal/${leadId}`;
-        window.location.href = `${portalUrl}?step=1`;
+        const portalId = leadId || submittedEventId;
+        if (portalId) {
+          const portalUrl = `/portal/${portalId}`;
+          window.location.href = `${portalUrl}?step=1`;
+        }
       }, 3000);
       return () => clearTimeout(timer);
     }, []);
