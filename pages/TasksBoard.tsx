@@ -85,13 +85,16 @@ const TasksBoard: React.FC = () => {
 
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
+  const [selectedTaskCategories, setSelectedTaskCategories] = useState<Set<string>>(new Set());
+
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
         const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = filterCategory === 'all' || task.category === filterCategory;
         const matchesStatus = filterStatus === 'all' || 
             (filterStatus === 'completed' ? task.isCompleted : !task.isCompleted);
-        return matchesSearch && matchesCategory && matchesStatus;
+        const matchesCategoryFilter = selectedTaskCategories.size === 0 || selectedTaskCategories.has(task.category);
+        return matchesSearch && matchesCategory && matchesStatus && matchesCategoryFilter;
     }).sort((a, b) => {
         // משימות שהושלמו בסוף
         if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
@@ -142,10 +145,38 @@ const TasksBoard: React.FC = () => {
     setCollapsedCategories(initialState);
   }, [groupedTasks]);
 
+  const taskStats = useMemo(() => {
+    const completed = filteredTasks.filter(t => t.isCompleted).length;
+    const pending = filteredTasks.filter(t => !t.isCompleted && t.progress === 0).length;
+    const inProgress = filteredTasks.filter(t => !t.isCompleted && t.progress > 0).length;
+    return { completed, pending, inProgress };
+  }, [filteredTasks]);
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 dir-rtl">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div><h2 className="text-3xl font-bold text-slate-800">משימות</h2><p className="text-slate-500">ניהול סדר יום ומשימות שוטפות</p></div>
+        <div>
+          <div className="flex items-center gap-3">
+            <div>
+              <h2 className="text-3xl font-bold text-slate-800">משימות</h2>
+              <p className="text-slate-500">ניהול סדר יום ומשימות שוטפות</p>
+            </div>
+            <div className="flex gap-2">
+              <div className="bg-green-100 border border-green-300 text-green-700 px-3 py-2 rounded-lg shadow-sm">
+                <div className="text-xs font-bold">✓ הושלמו</div>
+                <div className="text-xl font-black">{taskStats.completed}</div>
+              </div>
+              <div className="bg-blue-100 border border-blue-300 text-blue-700 px-3 py-2 rounded-lg shadow-sm">
+                <div className="text-xs font-bold">⏳ בתהליך</div>
+                <div className="text-xl font-black">{taskStats.inProgress}</div>
+              </div>
+              <div className="bg-slate-100 border border-slate-300 text-slate-700 px-3 py-2 rounded-lg shadow-sm">
+                <div className="text-xs font-bold">⏸️ בהמתנה</div>
+                <div className="text-xl font-black">{taskStats.pending}</div>
+              </div>
+            </div>
+          </div>
+        </div>
         <div className="flex gap-2">
             <button onClick={() => setIsFormOpen(true)} className="bg-purple-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-purple-700 transition-all"><Plus size={20}/> משימה חדשה</button>
             <input type="file" ref={fileInputRef} onChange={async (e) => { const file = e.target.files?.[0]; if(file) { importTasks(await parseCSV(file)); alert('ייבוא משימות הושלם!'); } }} className="hidden" accept=".csv" />
@@ -186,10 +217,39 @@ const TasksBoard: React.FC = () => {
           </div>
       </div>
 
-      {/* Expand/Collapse All */}
-      <div className="flex justify-end gap-2">
-        <button onClick={() => toggleAllCategories(false)} className="text-xs font-bold text-purple-600 bg-purple-50 px-4 py-2 rounded-lg hover:bg-purple-100 transition-all">פתח הכל</button>
-        <button onClick={() => toggleAllCategories(true)} className="text-xs font-bold text-slate-500 bg-slate-50 px-4 py-2 rounded-lg hover:bg-slate-100 transition-all">כווץ הכל</button>
+      {/* Category Filter */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-black text-slate-700">🏷️ סנן קטגוריות:</h3>
+          <div className="flex gap-2">
+            <button onClick={() => setSelectedTaskCategories(new Set(CATEGORIES))} className="text-xs font-bold text-blue-600 hover:underline">בחר הכל</button>
+            <button onClick={() => setSelectedTaskCategories(new Set())} className="text-xs font-bold text-slate-500 hover:underline">נקה הכל</button>
+            <button onClick={() => toggleAllCategories(false)} className="text-xs font-bold text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg hover:bg-purple-100 transition-all">פתח הכל</button>
+            <button onClick={() => toggleAllCategories(true)} className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-all">כווץ הכל</button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              onClick={() => {
+                setSelectedTaskCategories(prev => {
+                  const next = new Set(prev);
+                  if (next.has(cat)) next.delete(cat);
+                  else next.add(cat);
+                  return next;
+                });
+              }}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                selectedTaskCategories.size === 0 || selectedTaskCategories.has(cat)
+                  ? 'bg-purple-100 text-purple-700 border-2 border-purple-300'
+                  : 'bg-slate-100 text-slate-400 border-2 border-transparent'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-4">

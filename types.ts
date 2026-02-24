@@ -89,6 +89,7 @@ export interface AppEvent {
   phone?: string;
   email?: string;
   termsAccepted?: boolean;
+  taskId?: string;
 }
 
 export interface Lead {

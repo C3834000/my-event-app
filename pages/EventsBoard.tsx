@@ -77,7 +77,8 @@ const EVENT_TYPE_STYLES: Record<string, string> = {
 };
 
 const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void }> = ({ event, onEdit }) => {
-  const { getCustomerById, updateEvent } = useApp();
+  const { getCustomerById, updateEvent, tasks } = useApp();
+  const linkedTask = tasks.find(t => t.id === event.taskId);
   const customer = getCustomerById(event.customerId);
   const debt = event.amount - event.paidAmount;
   const isPaid = [PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck, PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider].includes(event.paymentStatus);
@@ -165,6 +166,47 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void }> = 
                           {Object.values(PaymentStatus).map(s => <option key={s} value={s} className="bg-white text-slate-800">{s}</option>)}
                       </select>
                   </div>
+              </div>
+
+              {/* Linked Task */}
+              <div className="border-t border-slate-100 pt-3 mt-3">
+                {linkedTask ? (
+                  <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-lg p-3">
+                    <div className="flex-1">
+                      <div className="text-xs font-bold text-purple-600 mb-1">📋 משימה מקושרת:</div>
+                      <div className="text-sm font-bold text-slate-800">{linkedTask.title}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {linkedTask.isCompleted ? (
+                        <span className="text-xs font-bold bg-green-500 text-white px-3 py-1 rounded-lg">✓ הושלמה</span>
+                      ) : linkedTask.progress > 0 ? (
+                        <span className="text-xs font-bold bg-blue-500 text-white px-3 py-1 rounded-lg">⏳ {linkedTask.progress}%</span>
+                      ) : (
+                        <span className="text-xs font-bold bg-slate-300 text-slate-700 px-3 py-1 rounded-lg">⏸️ ממתינה</span>
+                      )}
+                      <button 
+                        onClick={() => updateEvent(event.id, { taskId: undefined })}
+                        className="text-red-500 hover:bg-red-50 p-1 rounded transition-all"
+                        title="נתק משימה"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <select
+                    value={event.taskId || ''}
+                    onChange={(e) => updateEvent(event.id, { taskId: e.target.value || undefined })}
+                    className="w-full text-xs font-bold px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg hover:border-purple-300 transition-all"
+                  >
+                    <option value="">🔗 קשר למשימה...</option>
+                    {tasks.filter(t => !t.isCompleted).map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.title} ({t.category})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
           </div>
       </div>
@@ -292,6 +334,7 @@ const EventsBoard: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<'all' | 'unpaid'>('all');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   
   React.useEffect(() => {
       const initialState: Record<string, boolean> = {};
@@ -321,6 +364,12 @@ const EventsBoard: React.FC = () => {
           const isFutureEvent = eventDate >= today;
           
           const groupName = isFutureEvent ? '🆕 אירועים חדשים' : ((e as any).category || e.tag || 'כללי');
+          
+          // סינון קטגוריות אם יש בחירה
+          if (selectedCategories.size > 0 && !selectedCategories.has(groupName)) {
+            return;
+          }
+          
           if (!groups[groupName]) groups[groupName] = [];
           groups[groupName].push(e);
       });
@@ -337,7 +386,7 @@ const EventsBoard: React.FC = () => {
           });
           return obj;
       }, {});
-  }, [filtered]);
+  }, [filtered, selectedCategories]);
 
   const toggleGroup = (group: string) => {
       setCollapsedGroups(prev => ({...prev, [group]: !prev[group]}));
@@ -349,10 +398,53 @@ const EventsBoard: React.FC = () => {
       setCollapsedGroups(next);
   };
 
+  const allCategories = useMemo(() => {
+    const cats = new Set<string>();
+    events.forEach(e => {
+      const eventDate = new Date(e.date);
+      eventDate.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const isFutureEvent = eventDate >= today;
+      const groupName = isFutureEvent ? '🆕 אירועים חדשים' : ((e as any).category || e.tag || 'כללי');
+      cats.add(groupName);
+    });
+    return Array.from(cats).sort();
+  }, [events]);
+
+  const totalRevenueFiltered = useMemo(() => {
+    const eventsToCount = selectedCategories.size === 0 
+      ? Object.values(groupedEvents).flat()
+      : Object.entries(groupedEvents)
+          .filter(([cat]) => selectedCategories.has(cat))
+          .map(([, list]) => list).flat();
+    return eventsToCount.reduce((sum, e: AppEvent) => sum + (e.paidAmount || 0), 0);
+  }, [groupedEvents, selectedCategories]);
+
+  const toggleCategoryFilter = (cat: string) => {
+    setSelectedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div><h2 className="text-3xl font-bold text-slate-800">אירועים</h2><p className="text-slate-500">ניהול לוח זמנים, סיווגים וגבייה</p></div>
+        <div>
+          <div className="flex items-center gap-4">
+            <div>
+              <h2 className="text-3xl font-bold text-slate-800">אירועים</h2>
+              <p className="text-slate-500">ניהול לוח זמנים, סיווגים וגבייה</p>
+            </div>
+            <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-3 rounded-xl shadow-lg">
+              <div className="text-xs font-bold opacity-90">סך הכנסות</div>
+              <div className="text-2xl font-black">₪{totalRevenueFiltered.toLocaleString()}</div>
+            </div>
+          </div>
+        </div>
         <div className="flex gap-2">
           <input type="file" ref={fileInputRef} onChange={async (e) => { const file = e.target.files?.[0]; if(file) { importEvents(await parseCSV(file)); alert('ייבוא וסנכרון הושלם!'); } }} className="hidden" accept=".csv" />
           <button onClick={() => setIsAddingNew(true)} className="bg-purple-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-lg"><Plus size={18} /> הוסף אירוע</button>
@@ -372,6 +464,32 @@ const EventsBoard: React.FC = () => {
               <button onClick={() => toggleAllGroups(false)} className="text-xs font-bold text-purple-600 bg-purple-50 px-3 py-2 rounded-lg">פתח הכל</button>
               <button onClick={() => toggleAllGroups(true)} className="text-xs font-bold text-slate-400 bg-slate-50 px-3 py-2 rounded-lg">כווץ הכל</button>
           </div>
+      </div>
+
+      {/* Category Filter */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-black text-slate-700">🏷️ סנן קטגוריות:</h3>
+          <div className="flex gap-2">
+            <button onClick={() => setSelectedCategories(new Set(allCategories))} className="text-xs font-bold text-blue-600 hover:underline">בחר הכל</button>
+            <button onClick={() => setSelectedCategories(new Set())} className="text-xs font-bold text-slate-500 hover:underline">נקה הכל</button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {allCategories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => toggleCategoryFilter(cat)}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                selectedCategories.size === 0 || selectedCategories.has(cat)
+                  ? 'bg-purple-100 text-purple-700 border-2 border-purple-300'
+                  : 'bg-slate-100 text-slate-400 border-2 border-transparent'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-4">
