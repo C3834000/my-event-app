@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { EventStatus, PaymentStatus, EventType, AppEvent, PaymentMethod } from '../types';
 import { Plus, Search, FileText, Calendar as CalendarIcon, Download, X, Save, MapPin, Users, Clock, ChevronDown, ChevronUp, MousePointer2, Info, Upload, Edit, Trash2 } from 'lucide-react';
 import { exportToCSV, parseCSV } from '../services/utils';
+import { Link } from 'react-router-dom';
 
 const EVENT_TAGS: Record<string, string> = {
   'קליכיף': 'bg-blue-500 text-white',
@@ -330,7 +331,6 @@ const EventsBoard: React.FC = () => {
   const { events, getCustomerById, importEvents } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingEvent, setEditingEvent] = useState<AppEvent | null>(null);
-  const [isAddingNew, setIsAddingNew] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<'all' | 'unpaid'>('all');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -447,7 +447,7 @@ const EventsBoard: React.FC = () => {
         </div>
         <div className="flex gap-2">
           <input type="file" ref={fileInputRef} onChange={async (e) => { const file = e.target.files?.[0]; if(file) { importEvents(await parseCSV(file)); alert('ייבוא וסנכרון הושלם!'); } }} className="hidden" accept=".csv" />
-          <button onClick={() => setIsAddingNew(true)} className="bg-purple-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-lg"><Plus size={18} /> הוסף אירוע</button>
+          <Link to="/book?skipPortal=true" className="bg-purple-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-lg hover:bg-purple-700 transition-all"><Plus size={18} /> הוסף אירוע</Link>
           <button onClick={() => fileInputRef.current?.click()} className="bg-white border px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-slate-50 transition-all"><Upload size={18} /> ייבוא</button>
           <button onClick={() => setViewMode(v => v === 'all' ? 'unpaid' : 'all')} className={`px-4 py-2 rounded-xl font-bold transition-all shadow-sm ${viewMode === 'unpaid' ? 'bg-red-500 text-white' : 'bg-white text-slate-700 border'}`}>
             {viewMode === 'unpaid' ? 'הצג הכל' : 'הצג חובות'}
@@ -523,7 +523,6 @@ const EventsBoard: React.FC = () => {
       </div>
 
       {editingEvent && <EditEventModal event={editingEvent} onClose={() => setEditingEvent(null)} />}
-      {isAddingNew && <EditEventModal isNew onClose={() => setIsAddingNew(false)} />}
     </div>
   );
 };

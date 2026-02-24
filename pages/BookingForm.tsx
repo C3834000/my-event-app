@@ -32,7 +32,7 @@ const TERMS_TEXT = `אישור תנאי הזמנה
 13. הלקוח אחראי לוודא את תוכן השאלות. וודאו שיש לכם גיבוי.`;
 
 const BookingForm: React.FC = () => {
-  const { handlePublicBookingSubmit, leads, customForms } = useApp();
+  const { handlePublicBookingSubmit, leads, customers, customForms } = useApp();
   const [searchParams] = useSearchParams();
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,6 +40,8 @@ const BookingForm: React.FC = () => {
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const leadId = searchParams.get('leadId');
+  const customerId = searchParams.get('customerId');
+  const skipPortal = searchParams.get('skipPortal') === 'true';
   const formConfig = customForms[0]; 
 
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -51,16 +53,18 @@ const BookingForm: React.FC = () => {
         initial[f.id] = '';
       });
       const lead = leadId ? leads.find(l => l.id === leadId) : null;
-      if (lead) {
+      const customer = customerId ? customers.find(c => c.id === customerId) : null;
+      const source = lead || customer;
+      if (source) {
         formConfig.fields.forEach(f => {
-            if (f.mapping === 'name') initial[f.id] = lead.name;
-            if (f.mapping === 'phone') initial[f.id] = lead.phone;
-            if (f.mapping === 'email') initial[f.id] = lead.email || '';
+            if (f.mapping === 'name') initial[f.id] = source.name;
+            if (f.mapping === 'phone') initial[f.id] = source.phone;
+            if (f.mapping === 'email') initial[f.id] = source.email || '';
         });
       }
       setFormData(initial);
     }
-  }, [formConfig, leads, leadId]);
+  }, [formConfig, leads, customers, leadId, customerId]);
 
   const handleInputChange = (fieldId: string, mapping: string | undefined, value: any) => {
     setFormData(prev => {
@@ -96,7 +100,7 @@ const BookingForm: React.FC = () => {
       formConfig.fields.forEach(f => {
           if (f.mapping) payload[f.mapping] = formData[f.id];
       });
-      const result = await handlePublicBookingSubmit(payload, leadId || undefined);
+      const result = await handlePublicBookingSubmit(payload, leadId || undefined, customerId || undefined);
       setSubmittedEventId(result.eventId);
       setIsSubmitted(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -227,21 +231,36 @@ const BookingForm: React.FC = () => {
           </div>
 
           {/* Next Step Button */}
-          <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl shadow-2xl p-8 text-center mb-6">
-            <h3 className="text-2xl font-black text-white mb-4">🚀 מוכנים להמשיך?</h3>
-            <p className="text-purple-100 font-bold text-lg mb-6">עכשיו הזמן להתחיל להכין את החידון שלך!</p>
-            <button
-              onClick={() => {
-                const portalId = leadId || submittedEventId;
-                if (portalId) {
-                  window.location.href = `/portal/${portalId}?step=1`;
-                }
-              }}
-              className="bg-white text-purple-600 px-10 py-5 rounded-2xl font-black text-xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300"
-            >
-              המשך לשלב הבא - הכנת החידון שלך ✨
-            </button>
-          </div>
+          {!skipPortal && (
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl shadow-2xl p-8 text-center mb-6">
+              <h3 className="text-2xl font-black text-white mb-4">🚀 מוכנים להמשיך?</h3>
+              <p className="text-purple-100 font-bold text-lg mb-6">עכשיו הזמן להתחיל להכין את החידון שלך!</p>
+              <button
+                onClick={() => {
+                  const portalId = leadId || customerId || submittedEventId;
+                  if (portalId) {
+                    window.location.href = `/portal/${portalId}?step=1`;
+                  }
+                }}
+                className="bg-white text-purple-600 px-10 py-5 rounded-2xl font-black text-xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300"
+              >
+                המשך לשלב הבא - הכנת החידון שלך ✨
+              </button>
+            </div>
+          )}
+
+          {skipPortal && (
+            <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-3xl shadow-2xl p-8 text-center mb-6">
+              <h3 className="text-2xl font-black text-white mb-4">✅ האירוע נשמר בהצלחה!</h3>
+              <p className="text-white/90 font-bold text-lg mb-6">פרטי האירוע נשלחו למייל הלקוח</p>
+              <button
+                onClick={() => { window.location.href = '/#/customers'; }}
+                className="bg-white text-green-600 px-10 py-5 rounded-2xl font-black text-xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300"
+              >
+                חזור ללוח לקוחות 📋
+              </button>
+            </div>
+          )}
 
           {/* Important Notice */}
           <div className="bg-amber-50 border-r-4 border-amber-400 rounded-2xl p-6 shadow-lg">

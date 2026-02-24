@@ -63,6 +63,7 @@ export interface Customer {
   email: string;
   companyName?: string;
   notes?: string;
+  taskIds?: string[];
 }
 
 export interface AppEvent {

@@ -169,13 +169,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSettings(prev => ({ ...prev, ...newSettings }));
   };
 
-  const handlePublicBookingSubmit = async (data: any, leadId?: string) => {
-    console.log('🎯 handlePublicBookingSubmit נקרא עם הנתונים:', data, 'leadId:', leadId);
+  const handlePublicBookingSubmit = async (data: any, leadId?: string, customerId?: string) => {
+    console.log('🎯 handlePublicBookingSubmit נקרא עם הנתונים:', data, 'leadId:', leadId, 'customerId:', customerId);
     
     const event: AppEvent = {
         id: `e_${Date.now()}`,
-        customerId: '',
-        title: `הזמנה מפורטל: ${data.name || 'לקוח'}`,
+        customerId: customerId || '',
+        title: customerId ? `אירוע - ${data.name || 'לקוח'}` : `הזמנה מפורטל: ${data.name || 'לקוח'}`,
         date: data.date || new Date().toISOString().split('T')[0],
         startTime: data.startTime || '10:00',
         endTime: data.endTime || '11:30',
@@ -185,7 +185,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         paymentStatus: PaymentStatus.NotPaid,
         eventType: data.eventType || EventType.ClickersProgram,
         location: data.location || '',
-        tag: 'לבדיקה',
+        tag: customerId ? 'קליכיף' : 'לבדיקה',
         phone: data.phone || '',
         email: data.email || '',
         clickersNeeded: Number(data.clickersNeeded || 0),
@@ -264,9 +264,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 <p style="color: #4a5568; margin: 4px 0;"><strong>אימייל:</strong> ${data.email || 'לא צוין'}</p>
               </div>
 
-              ${leadId ? `<div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+              ${(leadId || customerId) ? `<div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
                 <p style="color: white; margin: 0 0 16px; font-size: 16px; font-weight: 700;">🚀 המשך לשלב הבא - הכנת החידון!</p>
-                <a href="https://my-app-kappa-beige-46.vercel.app/#/portal/${leadId}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 900; font-size: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">היכנס לפורטל האישי שלך</a>
+                <a href="https://my-app-kappa-beige-46.vercel.app/#/portal/${leadId || customerId}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 900; font-size: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">היכנס לפורטל האישי שלך</a>
               </div>` : ''}
 
               <div style="background: #fef3c7; border-right: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 24px 0;">
