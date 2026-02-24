@@ -2,7 +2,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, TaskCategory, TaskPriority } from '../types';
-import { Star, Check, Trash2, Plus, Edit, X, Save, Clock, Tag, Upload, Search, Filter, Briefcase, User, Home, FlaskConical, TrendingUp, List, AlertTriangle } from 'lucide-react';
+import { Star, Check, Trash2, Plus, Edit, X, Save, Clock, Tag, Upload, Search, Filter, Briefcase, User, Home, FlaskConical, TrendingUp, List, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { parseCSV } from '../services/utils';
 
 const CATEGORIES: TaskCategory[] = ['קליכיף', 'אישי', 'בית', 'תוכנית מדע', 'שיווק', 'כללי', 'דחוף / לסיווג'];
@@ -20,37 +20,37 @@ const CATEGORY_ICONS: Record<string, any> = {
 const CATEGORY_STYLES: Record<string, { badge: string; header: string; border: string }> = {
   'קליכיף': { 
     badge: 'bg-indigo-100 border-indigo-200 text-indigo-800',
-    header: 'bg-gradient-to-r from-indigo-500 to-blue-600',
+    header: 'bg-gradient-to-r from-indigo-400 to-blue-400',
     border: 'border-indigo-200'
   },
   'אישי': { 
     badge: 'bg-amber-100 border-amber-200 text-amber-800',
-    header: 'bg-gradient-to-r from-amber-500 to-orange-500',
+    header: 'bg-gradient-to-r from-amber-400 to-orange-400',
     border: 'border-amber-200'
   },
   'בית': { 
     badge: 'bg-emerald-100 border-emerald-200 text-emerald-800',
-    header: 'bg-gradient-to-r from-emerald-500 to-green-600',
+    header: 'bg-gradient-to-r from-emerald-400 to-green-400',
     border: 'border-emerald-200'
   },
   'תוכנית מדע': { 
     badge: 'bg-sky-100 border-sky-200 text-sky-800',
-    header: 'bg-gradient-to-r from-sky-500 to-cyan-500',
+    header: 'bg-gradient-to-r from-sky-400 to-cyan-400',
     border: 'border-sky-200'
   },
   'שיווק': { 
     badge: 'bg-violet-100 border-violet-200 text-violet-800',
-    header: 'bg-gradient-to-r from-violet-500 to-purple-600',
+    header: 'bg-gradient-to-r from-violet-400 to-purple-400',
     border: 'border-violet-200'
   },
   'כללי': { 
     badge: 'bg-slate-100 border-slate-200 text-slate-700',
-    header: 'bg-gradient-to-r from-slate-500 to-slate-600',
+    header: 'bg-gradient-to-r from-slate-400 to-slate-500',
     border: 'border-slate-200'
   },
   'דחוף / לסיווג': { 
     badge: 'bg-rose-100 border-rose-200 text-rose-800',
-    header: 'bg-gradient-to-r from-rose-500 to-red-600',
+    header: 'bg-gradient-to-r from-rose-400 to-red-400',
     border: 'border-rose-200'
   },
 };
@@ -118,6 +118,30 @@ const TasksBoard: React.FC = () => {
     setCollapsedCategories(prev => ({...prev, [cat]: !prev[cat]}));
   };
 
+  const toggleAllCategories = (collapse: boolean) => {
+    const next: Record<string, boolean> = {};
+    Object.keys(groupedTasks).forEach(k => next[k] = collapse);
+    setCollapsedCategories(next);
+  };
+
+  React.useEffect(() => {
+    const today = new Date();
+    const weekEnd = new Date(today);
+    weekEnd.setDate(today.getDate() + 7);
+    
+    const initialState: Record<string, boolean> = {};
+    Object.entries(groupedTasks).forEach(([cat, taskList]) => {
+      const hasUrgent = taskList.some((t: Task) => !t.isCompleted && t.priority === 5);
+      const hasThisWeek = taskList.some((t: Task) => {
+        if (t.isCompleted || !t.dueDate) return false;
+        const dueDate = new Date(t.dueDate);
+        return dueDate >= today && dueDate <= weekEnd;
+      });
+      initialState[cat] = !(hasUrgent || hasThisWeek || cat === 'דחוף / לסיווג');
+    });
+    setCollapsedCategories(initialState);
+  }, [groupedTasks]);
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 dir-rtl">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -162,6 +186,12 @@ const TasksBoard: React.FC = () => {
           </div>
       </div>
 
+      {/* Expand/Collapse All */}
+      <div className="flex justify-end gap-2">
+        <button onClick={() => toggleAllCategories(false)} className="text-xs font-bold text-purple-600 bg-purple-50 px-4 py-2 rounded-lg hover:bg-purple-100 transition-all">פתח הכל</button>
+        <button onClick={() => toggleAllCategories(true)} className="text-xs font-bold text-slate-500 bg-slate-50 px-4 py-2 rounded-lg hover:bg-slate-100 transition-all">כווץ הכל</button>
+      </div>
+
       <div className="space-y-4">
         {filteredTasks.length === 0 ? (
             <div className="bg-white p-12 rounded-3xl border border-dashed border-slate-200 text-center space-y-4">
@@ -177,18 +207,18 @@ const TasksBoard: React.FC = () => {
           const urgentCount = taskList.filter(t => !t.isCompleted && t.priority === 5).length;
           
           return (
-            <div key={category} className={`bg-white rounded-2xl shadow-lg border-2 ${styles.border} overflow-hidden hover:shadow-xl transition-all`}>
+            <div key={category} className={`bg-white rounded-xl shadow-sm border-2 ${styles.border} overflow-hidden hover:shadow-md transition-all`}>
               <button 
                 onClick={() => toggleCategory(category)}
-                className={`w-full flex items-center justify-between p-6 ${styles.header} hover:opacity-90 transition-all shadow-md`}
+                className={`w-full flex items-center justify-between py-3 px-5 ${styles.header} hover:opacity-90 transition-all shadow-sm`}
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30 shadow-lg">
-                    <Icon size={24} className="text-white" />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white/25 backdrop-blur-sm rounded-lg flex items-center justify-center border border-white/30 shadow-sm">
+                    <Icon size={20} className="text-white" />
                   </div>
                   <div className="text-right">
-                    <div className="text-lg font-black text-white">{category}</div>
-                    <div className="text-xs text-white/80 font-bold flex items-center gap-2">
+                    <div className="text-base font-black text-white">{category}</div>
+                    <div className="text-xs text-white/85 font-bold flex items-center gap-2">
                       <span>{taskList.length} משימות</span>
                       {completedCount > 0 && <span>• ✓ {completedCount}</span>}
                       {urgentCount > 0 && <span className="bg-red-500 text-white px-2 py-0.5 rounded-full">🔥 {urgentCount}</span>}
@@ -196,7 +226,7 @@ const TasksBoard: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {isCollapsed ? <Plus size={24} className="text-white" /> : <X size={24} className="text-white" />}
+                  {isCollapsed ? <ChevronDown size={22} className="text-white" /> : <ChevronUp size={22} className="text-white" />}
                 </div>
               </button>
               {!isCollapsed && (

@@ -34,20 +34,20 @@ const getCategoryStyle = (category: string) => {
 };
 
 const HEADER_BG_COLORS: string[] = [
-  'bg-gradient-to-r from-blue-500 to-blue-600',
-  'bg-gradient-to-r from-purple-500 to-purple-600',
-  'bg-gradient-to-r from-pink-500 to-rose-500',
-  'bg-gradient-to-r from-orange-500 to-amber-500',
-  'bg-gradient-to-r from-green-500 to-emerald-600',
-  'bg-gradient-to-r from-teal-500 to-cyan-500',
-  'bg-gradient-to-r from-indigo-500 to-blue-600',
-  'bg-gradient-to-r from-red-500 to-pink-500',
-  'bg-gradient-to-r from-yellow-500 to-orange-500',
-  'bg-gradient-to-r from-lime-500 to-green-500',
+  'bg-gradient-to-r from-blue-400 to-sky-400',
+  'bg-gradient-to-r from-purple-400 to-violet-400',
+  'bg-gradient-to-r from-pink-400 to-rose-400',
+  'bg-gradient-to-r from-orange-400 to-amber-400',
+  'bg-gradient-to-r from-green-400 to-emerald-400',
+  'bg-gradient-to-r from-teal-400 to-cyan-400',
+  'bg-gradient-to-r from-indigo-400 to-blue-400',
+  'bg-gradient-to-r from-red-400 to-pink-400',
+  'bg-gradient-to-r from-yellow-400 to-orange-400',
+  'bg-gradient-to-r from-lime-400 to-green-400',
 ];
 
 const getHeaderBg = (category: string) => {
-  if (category === '🆕 אירועים חדשים') return 'bg-gradient-to-r from-purple-600 to-pink-600';
+  if (category === '🆕 אירועים חדשים') return 'bg-gradient-to-r from-purple-500 to-pink-500';
   const idx = Math.abs(category.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % HEADER_BG_COLORS.length;
   return HEADER_BG_COLORS[idx];
 };
@@ -374,18 +374,26 @@ const EventsBoard: React.FC = () => {
           </div>
       </div>
 
-      <div className="space-y-6">
-        {Object.entries(groupedEvents).map(([group, list]: [string, any]) => (
-            <div key={group} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="space-y-4">
+        {Object.entries(groupedEvents).map(([group, list]: [string, any]) => {
+            const totalRevenue = list.reduce((sum: number, e: AppEvent) => sum + (e.paidAmount || 0), 0);
+            const totalAmount = list.reduce((sum: number, e: AppEvent) => sum + e.amount, 0);
+            
+            return (
+            <div key={group} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <button 
                     onClick={() => toggleGroup(group)}
-                    className={`w-full flex items-center justify-between p-4 ${getHeaderBg(group)} hover:opacity-90 transition-all border-b border-white/20 shadow-sm`}
+                    className={`w-full flex items-center justify-between py-3 px-5 ${getHeaderBg(group)} hover:opacity-90 transition-all shadow-sm`}
                 >
-                    <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 rounded-full text-xs font-black bg-white/20 text-white backdrop-blur-sm">{group}</span>
-                        <span className="text-sm font-bold text-white/90">{list.length} אירועים</span>
+                    <div className="flex items-center gap-4">
+                        <span className="px-3 py-1.5 rounded-full text-xs font-black bg-white/30 text-white backdrop-blur-sm shadow-sm">{group}</span>
+                        <span className="text-sm font-bold text-white/95">{list.length} אירועים</span>
+                        <span className="text-sm font-black text-white/95">💰 ₪{totalRevenue.toLocaleString()}</span>
+                        {totalAmount > totalRevenue && (
+                            <span className="text-xs font-bold text-white/80">/ ₪{totalAmount.toLocaleString()}</span>
+                        )}
                     </div>
-                    {collapsedGroups[group] ? <ChevronDown size={20} className="text-white" /> : <ChevronUp size={20} className="text-white" />}
+                    {collapsedGroups[group] ? <ChevronDown size={22} className="text-white" /> : <ChevronUp size={22} className="text-white" />}
                 </button>
                 {!collapsedGroups[group] && (
                     <div className="divide-y divide-slate-50">
@@ -393,7 +401,7 @@ const EventsBoard: React.FC = () => {
                     </div>
                 )}
             </div>
-        ))}
+        )})}
       </div>
 
       {editingEvent && <EditEventModal event={editingEvent} onClose={() => setEditingEvent(null)} />}
