@@ -108,38 +108,152 @@ const BookingForm: React.FC = () => {
   };
 
   if (isSubmitted) {
-    React.useEffect(() => {
-      const timer = setTimeout(() => {
-        const portalId = leadId || submittedEventId;
-        if (portalId) {
-          const portalUrl = `/portal/${portalId}`;
-          window.location.href = `${portalUrl}?step=1`;
-        }
-      }, 3000);
-      return () => clearTimeout(timer);
-    }, []);
+    const eventData = {
+      id: submittedEventId,
+      name: formData[formConfig.fields.find(f=>f.mapping==='name')?.id || ''] || '',
+      email: formData[formConfig.fields.find(f=>f.mapping==='email')?.id || ''] || '',
+      phone: formData[formConfig.fields.find(f=>f.mapping==='phone')?.id || ''] || '',
+      date: formData[formConfig.fields.find(f=>f.mapping==='date')?.id || ''] || '',
+      hebrewDate: formData[formConfig.fields.find(f=>f.mapping==='hebrewDate')?.id || ''] || '',
+      startTime: formData[formConfig.fields.find(f=>f.mapping==='startTime')?.id || ''] || '',
+      endTime: formData[formConfig.fields.find(f=>f.mapping==='endTime')?.id || ''] || '',
+      location: formData[formConfig.fields.find(f=>f.mapping==='location')?.id || ''] || '',
+      eventType: formData[formConfig.fields.find(f=>f.mapping==='eventType')?.id || ''] || '',
+      clickersNeeded: formData[formConfig.fields.find(f=>f.mapping==='clickersNeeded')?.id || ''] || 0,
+      amount: formData[formConfig.fields.find(f=>f.mapping==='amount')?.id || ''] || 0,
+      notes: formData[formConfig.fields.find(f=>f.mapping==='notes')?.id || ''] || '',
+    };
 
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 dir-rtl font-sans">
-        <div className="max-w-xl w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 relative">
-           <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-8 text-white shadow-xl">
-              <CheckCircle2 size={56} className="animate-in zoom-in duration-300" />
-           </div>
-           <h2 className="text-4xl font-black text-slate-900 mb-6">ההזמנה נקלטה במערכת!</h2>
-           <div className="space-y-6 mb-10 text-right">
-              <div className="p-4 bg-green-50 border border-green-100 rounded-2xl flex items-start gap-4">
-                 <Mail className="text-green-600 mt-1 shrink-0" size={24} />
-                 <p className="text-sm font-bold text-green-800">אישור הזמנה רשמי נשלח כעת למייל שלך ({formData[formConfig.fields.find(f=>f.mapping==='email')?.id || '']}). זהו האישור ששריינת את האירוע.</p>
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 py-12 px-4 dir-rtl font-sans">
+        <div className="max-w-3xl mx-auto">
+          {/* Success Header */}
+          <div className="text-center mb-8">
+            <div className="w-32 h-32 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl">
+              <CheckCircle2 size={72} className="text-white animate-in zoom-in duration-300" />
+            </div>
+            <h1 className="text-5xl font-black text-slate-900 mb-4">🎉 ההזמנה נקלטה בהצלחה!</h1>
+            <p className="text-xl text-slate-600 font-bold">שלום {eventData.name}, תודה שבחרת בנו! 👋</p>
+            <div className="bg-slate-100 border-2 border-slate-300 rounded-2xl px-6 py-3 inline-block mt-4">
+              <span className="text-slate-500 text-sm font-bold">מספר הזמנה:</span>
+              <span className="text-slate-900 text-lg font-black mr-2">#{submittedEventId.substring(2, 15)}</span>
+            </div>
+          </div>
+
+          {/* Email Confirmation Notice */}
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-3xl p-6 mb-6 shadow-lg">
+            <div className="flex items-start gap-4">
+              <Mail className="text-green-600 mt-1 shrink-0" size={32} />
+              <div className="text-right">
+                <h3 className="text-lg font-black text-green-900 mb-2">✅ מייל אישור נשלח אליך!</h3>
+                <p className="text-sm font-bold text-green-700">העתק מלא של פרטי ההזמנה נשלח למייל: <span className="underline">{eventData.email}</span></p>
+                <p className="text-xs text-green-600 mt-2">בדוק את תיבת הדואר שלך (וגם בספאם למקרה)</p>
               </div>
-              <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-4">
-                 <Calendar className="text-blue-600 mt-1 shrink-0" size={24} />
-                 <p className="text-sm font-bold text-blue-800">היומן של קליכיף עודכן אוטומטית בתאריך האירוע שלך. שים לב - ההזמנה מחייבת.</p>
+            </div>
+          </div>
+
+          {/* Event Details Card - Same as Email */}
+          <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border-2 border-slate-200 mb-6">
+            <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-6 text-center">
+              <h2 className="text-2xl font-black text-white">📋 פרטי האירוע שלך</h2>
+            </div>
+            
+            <div className="p-8">
+              <div className="bg-gradient-to-b from-blue-50 to-sky-50 border-2 border-blue-200 rounded-2xl p-6 shadow-inner">
+                <table className="w-full">
+                  <tbody className="space-y-2">
+                    <tr className="bg-white rounded-xl">
+                      <td className="p-4 text-slate-600 font-bold border-b border-slate-200">👤 שם המזמין:</td>
+                      <td className="p-4 text-slate-900 font-black text-lg border-b border-slate-200">{eventData.name}</td>
+                    </tr>
+                    <tr className="bg-slate-50 rounded-xl">
+                      <td className="p-4 text-slate-600 font-bold border-b border-slate-200">📞 טלפון:</td>
+                      <td className="p-4 text-slate-900 font-bold border-b border-slate-200">{eventData.phone}</td>
+                    </tr>
+                    <tr className="bg-white rounded-xl">
+                      <td className="p-4 text-slate-600 font-bold border-b border-slate-200">📧 אימייל:</td>
+                      <td className="p-4 text-slate-900 font-bold border-b border-slate-200">{eventData.email}</td>
+                    </tr>
+                    <tr className="bg-slate-50 rounded-xl">
+                      <td className="p-4 text-slate-600 font-bold border-b border-slate-200">📅 תאריך:</td>
+                      <td className="p-4 text-slate-900 font-black text-lg border-b border-slate-200">
+                        {new Date(eventData.date).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </td>
+                    </tr>
+                    {eventData.hebrewDate && (
+                      <tr className="bg-white rounded-xl">
+                        <td className="p-4 text-slate-600 font-bold border-b border-slate-200">🗓️ תאריך עברי:</td>
+                        <td className="p-4 text-slate-900 font-black border-b border-slate-200">{eventData.hebrewDate}</td>
+                      </tr>
+                    )}
+                    <tr className="bg-slate-50 rounded-xl">
+                      <td className="p-4 text-slate-600 font-bold border-b border-slate-200">⏰ שעת התחלה:</td>
+                      <td className="p-4 text-slate-900 font-black text-lg border-b border-slate-200">{eventData.startTime}</td>
+                    </tr>
+                    <tr className="bg-white rounded-xl">
+                      <td className="p-4 text-slate-600 font-bold border-b border-slate-200">⏰ שעת סיום:</td>
+                      <td className="p-4 text-slate-900 font-black text-lg border-b border-slate-200">{eventData.endTime}</td>
+                    </tr>
+                    <tr className="bg-slate-50 rounded-xl">
+                      <td className="p-4 text-slate-600 font-bold border-b border-slate-200">📍 מיקום האירוע:</td>
+                      <td className="p-4 text-slate-900 font-bold border-b border-slate-200">{eventData.location || 'לא צוין'}</td>
+                    </tr>
+                    <tr className="bg-white rounded-xl">
+                      <td className="p-4 text-slate-600 font-bold border-b border-slate-200">🎯 סוג האירוע:</td>
+                      <td className="p-4 text-slate-900 font-bold border-b border-slate-200">{eventData.eventType}</td>
+                    </tr>
+                    {Number(eventData.clickersNeeded) > 0 && (
+                      <tr className="bg-slate-50 rounded-xl">
+                        <td className="p-4 text-slate-600 font-bold border-b border-slate-200">🖱️ מספר קליקרים:</td>
+                        <td className="p-4 text-purple-600 font-black text-xl border-b border-slate-200">{eventData.clickersNeeded} קליקרים</td>
+                      </tr>
+                    )}
+                    <tr className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl">
+                      <td className="p-5 text-green-700 font-black text-lg">💰 סכום לתשלום:</td>
+                      <td className="p-5 text-green-700 font-black text-3xl">₪{Number(eventData.amount).toLocaleString()}</td>
+                    </tr>
+                    {eventData.notes && (
+                      <tr className="bg-amber-50 rounded-xl">
+                        <td colSpan={2} className="p-4 text-amber-900 font-bold">
+                          <span className="font-black">📝 הערות:</span><br/>
+                          <span className="font-semibold">{eventData.notes}</span>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-              <div className="p-4 bg-purple-50 border border-purple-100 rounded-2xl">
-                 <p className="text-sm font-bold text-purple-800">מעביר אותך עכשיו לשלב הבא - הכנת החידון...</p>
-                 <div className="w-8 h-8 border-4 border-purple-300 border-t-purple-600 rounded-full animate-spin mx-auto mt-4"></div>
+            </div>
+          </div>
+
+          {/* Next Step Button */}
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl shadow-2xl p-8 text-center mb-6">
+            <h3 className="text-2xl font-black text-white mb-4">🚀 מוכנים להמשיך?</h3>
+            <p className="text-purple-100 font-bold text-lg mb-6">עכשיו הזמן להתחיל להכין את החידון שלך!</p>
+            <button
+              onClick={() => {
+                const portalId = leadId || submittedEventId;
+                if (portalId) {
+                  window.location.href = `/portal/${portalId}?step=1`;
+                }
+              }}
+              className="bg-white text-purple-600 px-10 py-5 rounded-2xl font-black text-xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300"
+            >
+              המשך לשלב הבא - הכנת החידון שלך ✨
+            </button>
+          </div>
+
+          {/* Important Notice */}
+          <div className="bg-amber-50 border-r-4 border-amber-400 rounded-2xl p-6 shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="text-3xl">💡</div>
+              <div className="text-right">
+                <h4 className="font-black text-amber-900 text-lg mb-2">שימו לב:</h4>
+                <p className="text-amber-800 font-bold">ההזמנה שלכם שמורה במערכת שלנו. נציג יצור איתכם קשר בהקדם לאישור סופי ותיאום פרטים נוספים.</p>
               </div>
-           </div>
+            </div>
+          </div>
+
         </div>
       </div>
     );
