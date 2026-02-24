@@ -266,7 +266,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
               ${leadId ? `<div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
                 <p style="color: white; margin: 0 0 16px; font-size: 16px; font-weight: 700;">🚀 המשך לשלב הבא - הכנת החידון!</p>
-                <a href="${window.location.origin}/#/portal/${leadId}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 900; font-size: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">היכנס לפורטל האישי שלך</a>
+                <a href="https://my-app-kappa-beige-46.vercel.app/#/portal/${leadId}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 900; font-size: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">היכנס לפורטל האישי שלך</a>
               </div>` : ''}
 
               <div style="background: #fef3c7; border-right: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 24px 0;">
@@ -293,7 +293,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const lead = leads.find(l => l.id === leadId);
     if (!lead) throw new Error('Lead not found');
 
-    const portalUrl = `${window.location.origin}/#/portal/${leadId}`;
+    const portalUrl = `https://my-app-kappa-beige-46.vercel.app/#/portal/${leadId}`;
     const toEmail = (lead.email || '').trim();
     if (toEmail) {
       const { success, error } = await sendEmail({
@@ -351,7 +351,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const sendBookingEmail = async (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return { success: false, email: '', url: '' };
-    const bookUrl = `${window.location.origin}/#/book?leadId=${leadId}`;
+    const bookUrl = `https://my-app-kappa-beige-46.vercel.app/#/book?leadId=${leadId}`;
     const toEmail = (lead.email || '').trim();
     if (toEmail) {
       const { success, error } = await sendEmail({
@@ -388,7 +388,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const sendPortalEmailForCustomer = async (customerId: string) => {
     const customer = customers.find(c => c.id === customerId);
     if (!customer) throw new Error('Customer not found');
-    const portalUrl = `${window.location.origin}${window.location.pathname || '/'}`.replace(/\/$/, '') + `#/portal/${customerId}`;
+    const portalUrl = `https://my-app-kappa-beige-46.vercel.app/#/portal/${customerId}`;
     const toEmail = (customer.email || '').trim();
     if (toEmail) {
       const { success, error } = await sendEmail({
