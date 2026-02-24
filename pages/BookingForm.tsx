@@ -286,18 +286,36 @@ const BookingForm: React.FC = () => {
                                 <p className="text-[10px] text-slate-400 font-bold">כאן המקום לציין אם מיקום האירוע הוא במקום עם קשיי חניה או חניה מרוחקת.</p>
                             </div>
                         ) : field.type === 'time' ? (
-                            <input 
-                                type="time" 
-                                required={field.required} 
-                                step="900"
-                                min="00:00"
-                                max="23:45"
-                                placeholder={field.placeholder}
-                                value={formData[field.id] || ''} 
-                                onChange={e => handleInputChange(field.id, field.mapping, e.target.value)} 
-                                className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-purple-500 transition-all font-bold"
-                                list={`${field.id}-times`}
-                            />
+                            <>
+                                <input 
+                                    type="time" 
+                                    required={field.required} 
+                                    step="900"
+                                    min="00:00"
+                                    max="23:45"
+                                    placeholder={field.placeholder}
+                                    value={formData[field.id] || ''} 
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        if (!val) return handleInputChange(field.id, field.mapping, val);
+                                        const [h, m] = val.split(':').map(Number);
+                                        if (m % 15 !== 0) {
+                                            alert('⏰ נא לבחור שעה ברבעי שעה בלבד (00, 15, 30, 45)');
+                                            return;
+                                        }
+                                        handleInputChange(field.id, field.mapping, val);
+                                    }} 
+                                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-purple-500 transition-all font-bold"
+                                    list={`${field.id}-times`}
+                                />
+                                <datalist id={`${field.id}-times`}>
+                                    {Array.from({ length: 96 }, (_, i) => {
+                                        const h = Math.floor(i / 4);
+                                        const m = (i % 4) * 15;
+                                        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                                    }).map(time => <option key={time} value={time} />)}
+                                </datalist>
+                            </>
                         ) : (
                             <input 
                                 type={field.type} 
