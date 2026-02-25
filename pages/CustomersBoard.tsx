@@ -8,7 +8,7 @@ import { EventStatus, PaymentStatus, EventType } from '../types';
 import { Link } from 'react-router-dom';
 
 const CustomersBoard: React.FC = () => {
-  const { customers, events, tasks, addCustomer, importCustomers, addEvent, sendPortalEmailForCustomer, updateCustomer } = useApp();
+  const { customers, events, tasks, addCustomer, importCustomers, addEvent, sendPortalEmailForCustomer, updateCustomer, addTask } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [showDebtOnly, setShowDebtOnly] = useState(false);
   const [expandedLetters, setExpandedLetters] = useState<Record<string, boolean>>({});
@@ -17,9 +17,11 @@ const CustomersBoard: React.FC = () => {
   const [sendingPortalId, setSendingPortalId] = useState<string | null>(null);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
+  const [creatingTaskFor, setCreatingTaskFor] = useState<Customer | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [newCust, setNewCust] = useState({ name: '', phone: '', email: '', notes: '' });
+  const [newTask, setNewTask] = useState({ title: '', category: 'כללי' as any, priority: 3 });
 
   const highlightText = (text: string, search: string) => {
     if (!search.trim()) return text;
@@ -105,6 +107,24 @@ const CustomersBoard: React.FC = () => {
     } finally {
       setSendingPortalId(null);
     }
+  };
+
+  const handleCreateTask = () => {
+    if (!creatingTaskFor || !newTask.title.trim()) return;
+    const taskId = `t_${Date.now()}`;
+    addTask({
+      id: taskId,
+      title: newTask.title,
+      category: newTask.category,
+      priority: newTask.priority,
+      isCompleted: false,
+      progress: 0,
+      estimatedTimeMin: 30,
+    });
+    const updatedTaskIds = [...(creatingTaskFor.taskIds || []), taskId];
+    updateCustomer(creatingTaskFor.id, { taskIds: updatedTaskIds });
+    setNewTask({ title: '', category: 'כללי', priority: 3 });
+    setCreatingTaskFor(null);
   };
 
   return (
@@ -225,7 +245,16 @@ const CustomersBoard: React.FC = () => {
                                                             const customerTasks = (c.taskIds || []).map(tid => tasks.find(t => t.id === tid)).filter(Boolean) as any[];
                                                             return (
                                                                 <div className="space-y-2">
-                                                                    <h5 className="text-xs font-bold text-slate-600 uppercase">✅ משימות ({customerTasks.length})</h5>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <h5 className="text-xs font-bold text-slate-600 uppercase">✅ משימות ({customerTasks.length})</h5>
+                                                                        <button
+                                                                            onClick={() => setCreatingTaskFor(c)}
+                                                                            className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"
+                                                                        >
+                                                                            <Plus size={14} />
+                                                                            צור משימה חדשה
+                                                                        </button>
+                                                                    </div>
                                                                     {customerTasks.map((task: any) => (
                                                                         <div key={task.id} className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200">
                                                                             <div className="flex-1">
@@ -253,24 +282,6 @@ const CustomersBoard: React.FC = () => {
                                                                             </div>
                                                                         </div>
                                                                     ))}
-                                                                    {/* Add Task Selector */}
-                                                                    <select
-                                                                        value=""
-                                                                        onChange={(e) => {
-                                                                            if (e.target.value) {
-                                                                                const updatedTaskIds = [...(c.taskIds || []), e.target.value];
-                                                                                updateCustomer(c.id, { taskIds: updatedTaskIds });
-                                                                            }
-                                                                        }}
-                                                                        className="w-full text-xs font-bold px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg hover:border-blue-300 transition-all"
-                                                                    >
-                                                                        <option value="">➕ קשר משימה...</option>
-                                                                        {tasks.filter(t => !t.isCompleted && !(c.taskIds || []).includes(t.id)).map(t => (
-                                                                            <option key={t.id} value={t.id}>
-                                                                                {t.title} ({t.category})
-                                                                            </option>
-                                                                        ))}
-                                                                    </select>
                                                                 </div>
                                                             );
                                                         })()}
@@ -319,6 +330,43 @@ const CustomersBoard: React.FC = () => {
                       <div className="space-y-1"><label className="text-xs font-bold text-slate-400">הערות</label><textarea className="w-full p-2 border rounded-lg" value={editingCustomer.notes || ''} onChange={e => setEditingCustomer({...editingCustomer, notes: e.target.value})}/></div>
                   </div>
                   <div className="flex justify-end gap-3"><button onClick={() => setEditingCustomer(null)} className="px-4 py-2 font-bold text-slate-400">ביטול</button><button onClick={handleUpdateCust} className="bg-purple-600 text-white px-8 py-2 rounded-xl font-bold">שמור</button></div>
+              </div>
+          </div>
+        )}
+
+        {creatingTaskFor && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-xl font-bold">משימה חדשה – {creatingTaskFor.name}</h3>
+                    <button onClick={() => { setCreatingTaskFor(null); setNewTask({ title: '', category: 'כללי', priority: 3 }); }}><X size={24}/></button>
+                  </div>
+                  <div className="space-y-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-400">שם המשימה</label>
+                        <input className="w-full p-3 border rounded-lg font-bold" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} placeholder="הקלד שם משימה..."/>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-400">קטגוריה</label>
+                        <select className="w-full p-3 border rounded-lg font-bold" value={newTask.category} onChange={e => setNewTask({...newTask, category: e.target.value as any})}>
+                          <option value="קליכיף">קליכיף</option>
+                          <option value="אישי">אישי</option>
+                          <option value="בית">בית</option>
+                          <option value="תוכנית מדע">תוכנית מדע</option>
+                          <option value="שיווק">שיווק</option>
+                          <option value="כללי">כללי</option>
+                          <option value="דחוף / לסיווג">דחוף / לסיווג</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-400">עדיפות (1=נמוך, 5=גבוה)</label>
+                        <input type="number" min="1" max="5" className="w-full p-3 border rounded-lg font-bold" value={newTask.priority} onChange={e => setNewTask({...newTask, priority: Number(e.target.value)})}/>
+                      </div>
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <button onClick={() => { setCreatingTaskFor(null); setNewTask({ title: '', category: 'כללי', priority: 3 }); }} className="px-4 py-2 font-bold text-slate-400">ביטול</button>
+                    <button onClick={handleCreateTask} className="bg-purple-600 text-white px-8 py-2 rounded-xl font-bold">צור משימה</button>
+                  </div>
               </div>
           </div>
         )}

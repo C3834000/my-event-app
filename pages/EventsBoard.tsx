@@ -77,7 +77,7 @@ const EVENT_TYPE_STYLES: Record<string, string> = {
   [EventType.PhoneClick]: 'bg-[#e23344] text-white',
 };
 
-const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void }> = ({ event, onEdit }) => {
+const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCreateTask?: (event: AppEvent) => void }> = ({ event, onEdit, onCreateTask }) => {
   const { getCustomerById, updateEvent, tasks } = useApp();
   const linkedTask = tasks.find(t => t.id === event.taskId);
   const customer = getCustomerById(event.customerId);
@@ -195,18 +195,15 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void }> = 
                     </div>
                   </div>
                 ) : (
-                  <select
-                    value={event.taskId || ''}
-                    onChange={(e) => updateEvent(event.id, { taskId: e.target.value || undefined })}
-                    className="w-full text-xs font-bold px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg hover:border-purple-300 transition-all"
-                  >
-                    <option value="">🔗 קשר למשימה...</option>
-                    {tasks.filter(t => !t.isCompleted).map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.title} ({t.category})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => onCreateTask?.(event)}
+                      className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-3 py-2 rounded-lg border-2 border-purple-300 transition-all flex items-center gap-1"
+                    >
+                      <Plus size={14} />
+                      צור משימה חדשה
+                    </button>
+                  </div>
                 )}
               </div>
           </div>
@@ -328,13 +325,15 @@ const EditEventModal: React.FC<{ event?: Partial<AppEvent>; onClose: () => void;
 };
 
 const EventsBoard: React.FC = () => {
-  const { events, getCustomerById, importEvents } = useApp();
+  const { events, getCustomerById, importEvents, addTask, updateEvent } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [editingEvent, setEditingEvent] = useState<AppEvent | null>(null);
+  const [creatingTaskForEvent, setCreatingTaskForEvent] = useState<AppEvent | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<'all' | 'unpaid'>('all');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const [newTask, setNewTask] = useState({ title: '', category: 'כללי' as any, priority: 3 });
   
   React.useEffect(() => {
       const initialState: Record<string, boolean> = {};
@@ -396,6 +395,23 @@ const EventsBoard: React.FC = () => {
       const next: Record<string, boolean> = {};
       Object.keys(groupedEvents).forEach(k => next[k] = collapse);
       setCollapsedGroups(next);
+  };
+
+  const handleCreateTaskForEvent = () => {
+    if (!creatingTaskForEvent || !newTask.title.trim()) return;
+    const taskId = `t_${Date.now()}`;
+    addTask({
+      id: taskId,
+      title: newTask.title,
+      category: newTask.category,
+      priority: newTask.priority,
+      isCompleted: false,
+      progress: 0,
+      estimatedTimeMin: 30,
+    });
+    updateEvent(creatingTaskForEvent.id, { taskId });
+    setNewTask({ title: '', category: 'כללי', priority: 3 });
+    setCreatingTaskForEvent(null);
   };
 
   const allCategories = useMemo(() => {
@@ -515,7 +531,7 @@ const EventsBoard: React.FC = () => {
                 </button>
                 {!collapsedGroups[group] && (
                     <div className="divide-y divide-slate-50">
-                        {list.map((e: AppEvent) => <EventRow key={e.id} event={e} onEdit={setEditingEvent} />)}
+                        {list.map((e: AppEvent) => <EventRow key={e.id} event={e} onEdit={setEditingEvent} onCreateTask={setCreatingTaskForEvent} />)}
                     </div>
                 )}
             </div>
@@ -523,6 +539,43 @@ const EventsBoard: React.FC = () => {
       </div>
 
       {editingEvent && <EditEventModal event={editingEvent} onClose={() => setEditingEvent(null)} />}
+      
+      {creatingTaskForEvent && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xl font-bold">משימה חדשה – {creatingTaskForEvent.title}</h3>
+                  <button onClick={() => { setCreatingTaskForEvent(null); setNewTask({ title: '', category: 'כללי', priority: 3 }); }}><X size={24}/></button>
+                </div>
+                <div className="space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-400">שם המשימה</label>
+                      <input className="w-full p-3 border rounded-lg font-bold" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} placeholder="הקלד שם משימה..."/>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-400">קטגוריה</label>
+                      <select className="w-full p-3 border rounded-lg font-bold" value={newTask.category} onChange={e => setNewTask({...newTask, category: e.target.value as any})}>
+                        <option value="קליכיף">קליכיף</option>
+                        <option value="אישי">אישי</option>
+                        <option value="בית">בית</option>
+                        <option value="תוכנית מדע">תוכנית מדע</option>
+                        <option value="שיווק">שיווק</option>
+                        <option value="כללי">כללי</option>
+                        <option value="דחוף / לסיווג">דחוף / לסיווג</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-400">עדיפות (1=נמוך, 5=גבוה)</label>
+                      <input type="number" min="1" max="5" className="w-full p-3 border rounded-lg font-bold" value={newTask.priority} onChange={e => setNewTask({...newTask, priority: Number(e.target.value)})}/>
+                    </div>
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => { setCreatingTaskForEvent(null); setNewTask({ title: '', category: 'כללי', priority: 3 }); }} className="px-4 py-2 font-bold text-slate-400">ביטול</button>
+                  <button onClick={handleCreateTaskForEvent} className="bg-purple-600 text-white px-8 py-2 rounded-xl font-bold">צור משימה</button>
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 };
