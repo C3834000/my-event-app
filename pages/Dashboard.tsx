@@ -2,8 +2,8 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
-  DollarSign, AlertCircle, Briefcase, Calendar as CalendarIcon, 
-  CheckCircle2, Check, Zap, Clock, MapPin, Users, Mail, RefreshCw, ArrowLeft, ArrowRight
+  AlertCircle, Briefcase, Calendar as CalendarIcon, 
+  CheckCircle2, Check, Zap, Clock, MapPin, Users, Mail, RefreshCw, ArrowLeft, ArrowRight, TrendingUp
 } from 'lucide-react';
 import { EventStatus, EventType } from '../types';
 
@@ -124,7 +124,7 @@ const Dashboard: React.FC = () => {
           </div>
           <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center group hover:shadow-md transition-all">
              <div className="min-w-0"><p className="text-xs font-medium text-slate-500 truncate">סה״כ הכנסות</p><h3 className="text-lg font-bold text-green-600 mt-0.5 truncate">₪{kpis.totalRevenue.toLocaleString()}</h3></div>
-             <div className="p-2 bg-green-50 rounded-lg text-green-500 shrink-0"><DollarSign size={20} /></div>
+             <div className="p-2 bg-green-50 rounded-lg text-green-500 shrink-0"><TrendingUp size={20} /></div>
           </div>
           <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center group hover:shadow-md transition-all">
              <div className="min-w-0"><p className="text-xs font-medium text-slate-500 truncate">משימות דחופות</p><h3 className="text-lg font-bold text-orange-500 mt-0.5">{tasks.filter(t=>!t.isCompleted && t.priority===5).length}</h3></div>
