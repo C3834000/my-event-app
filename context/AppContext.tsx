@@ -208,8 +208,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const start = `${d}T${(event.startTime || '10:00').replace(':', '')}00`;
       const end = `${d}T${(event.endTime || '12:00').replace(':', '')}00`;
       const calTitle = encodeURIComponent(`אירוע קליכיף – ${data.name || 'הזמנה'}`);
-      const hebrewDateInfo = event.hebrewDate ? `\\nתאריך עברי: ${event.hebrewDate}` : '';
-      const calDetails = encodeURIComponent(`הזמנה דרך פורטל קליכיף${hebrewDateInfo}\\nמיקום: ${event.location || '-'}\\nטלפון: ${event.phone || '-'}\\nאימייל: ${event.email || '-'}\\nקליקרים: ${event.clickersNeeded || 0}\\nלשאלות: ${settings.contactPhone}`);
+      const hebrewDateInfo = event.hebrewDate ? `\nתאריך עברי: ${event.hebrewDate}` : '';
+      const calDetails = encodeURIComponent(`הזמנה דרך פורטל קליכיף${hebrewDateInfo}\nמיקום: ${event.location || '-'}\nטלפון: ${event.phone || '-'}\nאימייל: ${event.email || '-'}\nקליקרים: ${event.clickersNeeded || 0}\nלשאלות: ${settings.contactPhone}`);
       const calLocation = encodeURIComponent(event.location || '');
       const googleCalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTitle}&dates=${start}/${end}&details=${calDetails}&location=${calLocation}`;
       
