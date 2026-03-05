@@ -108,7 +108,7 @@ const Dashboard: React.FC = () => {
     <div className="space-y-6 animate-fade-in pb-12 dir-rtl">
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-bold text-slate-800">דשבורד</h2>
-        <button onClick={() => setRefreshKey(k => k + 1)} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg hover:bg-purple-700 transition-all">
+        <button onClick={() => { setRefreshKey(k => k + 1); window.location.reload(); }} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg hover:bg-purple-700 transition-all">
           <RefreshCw size={18} /> רענן נתונים
         </button>
       </div>
