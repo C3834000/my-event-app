@@ -78,7 +78,6 @@ const TasksBoard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [activeView, setActiveView] = useState<'board' | 'dashboard'>('board');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAddTask = (e: React.FormEvent) => {
@@ -183,54 +182,14 @@ const TasksBoard: React.FC = () => {
     return { completed, pending, inProgress };
   }, [filteredTasks]);
 
-  const calculateTaskScore = (task: Task): number => {
-    const today = new Date();
-    const dueDate = task.dueDate ? new Date(task.dueDate) : null;
-    const daysUntilDue = dueDate ? Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 999;
-    
-    let score = 0;
-    score += task.priority * 20;
-    score += ((task.potentialRevenue || 0) / 1000) * 10;
-    score += (task.easeOfExecution || 3) * 8;
-    score += (60 - (task.estimatedTimeMin || 30)) / 10;
-    if (daysUntilDue <= 3) score += 50;
-    else if (daysUntilDue <= 7) score += 30;
-    else if (daysUntilDue <= 14) score += 10;
-    score += (task.waitingDays || 0) * 2;
-    
-    return score;
-  };
-
-  const smartSortedTasks = useMemo(() => {
-    const openTasks = tasks.filter(t => !t.isCompleted);
-    return openTasks.map(t => ({ task: t, score: calculateTaskScore(t) }))
-      .sort((a, b) => b.score - a.score);
-  }, [tasks]);
-
   return (
     <div className="max-w-4xl mx-auto space-y-6 dir-rtl">
-      {/* Tab Navigation */}
-      <div className="bg-white rounded-2xl shadow-lg p-2 flex gap-2 border border-slate-100">
-        <button 
-          onClick={() => setActiveView('board')}
-          className={`flex-1 py-3 px-6 rounded-xl font-black text-sm transition-all ${activeView === 'board' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-50'}`}
-        >
-          📋 לוח משימות
-        </button>
-        <button 
-          onClick={() => setActiveView('dashboard')}
-          className={`flex-1 py-3 px-6 rounded-xl font-black text-sm transition-all ${activeView === 'dashboard' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-600 hover:bg-slate-50'}`}
-        >
-          🎯 שולחן עבודה חכם
-        </button>
-      </div>
-
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <div className="flex items-center gap-3">
             <div>
-              <h2 className="text-3xl font-bold text-slate-800">{activeView === 'board' ? 'משימות' : 'שולחן עבודה חכם'}</h2>
-              <p className="text-slate-500">{activeView === 'board' ? 'ניהול סדר יום ומשימות שוטפות' : 'תכנון יום ותעדוף משימות אוטומטי'}</p>
+              <h2 className="text-3xl font-bold text-slate-800">משימות</h2>
+              <p className="text-slate-500">ניהול סדר יום ומשימות שוטפות</p>
             </div>
             <div className="flex gap-2">
               <div className="bg-green-100 border border-green-300 text-green-700 px-3 py-2 rounded-lg shadow-sm">
@@ -323,95 +282,8 @@ const TasksBoard: React.FC = () => {
         </div>
       </div>
 
-      {activeView === 'dashboard' ? (
-        /* Smart Dashboard View */
-        <div className="space-y-6">
-          <div className="bg-gradient-to-br from-purple-500 to-blue-600 rounded-3xl p-8 text-white shadow-2xl">
-            <h3 className="text-3xl font-black mb-2">🎯 תוכנית עבודה מומלצת להיום</h3>
-            <p className="text-white/80 text-sm">המשימות מסודרות לפי: עדיפות, כסף פוטנציאלי, קלות ביצוע, זמן קצר, תאריך יעד וזמן המתנה</p>
-          </div>
-
-          {smartSortedTasks.slice(0, 10).map(({ task, score }, idx) => {
-            const styles = getCategoryStyles(task.category);
-            const Icon = CATEGORY_ICONS[task.category] || List;
-            const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
-            
-            return (
-              <div key={task.id} className={`bg-white rounded-2xl p-6 shadow-lg border-2 ${styles.border} hover:shadow-xl transition-all relative`}>
-                <div className="absolute -top-3 -right-3 w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-black text-lg shadow-xl">
-                  {idx + 1}
-                </div>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${styles.badge}`}>
-                        <Icon size={20} />
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-black text-lg text-slate-800">{task.title}</h4>
-                        <span className={`text-xs font-bold px-2 py-1 rounded ${styles.badge}`}>{task.category}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-                      <div className="bg-purple-50 border border-purple-200 rounded-xl p-3">
-                        <div className="text-xs text-purple-600 font-bold mb-1">📊 ציון חכם</div>
-                        <div className="text-lg font-black text-purple-700">{Math.round(score)}</div>
-                      </div>
-                      {task.priority === 5 && (
-                        <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-                          <div className="text-xs text-red-600 font-bold mb-1">🔥 עדיפות</div>
-                          <div className="text-lg font-black text-red-700">גבוהה</div>
-                        </div>
-                      )}
-                      {(task.potentialRevenue || 0) > 0 && (
-                        <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-                          <div className="text-xs text-green-600 font-bold mb-1">💰 הכנסה</div>
-                          <div className="text-lg font-black text-green-700">₪{task.potentialRevenue?.toLocaleString()}</div>
-                        </div>
-                      )}
-                      {task.estimatedTimeMin > 0 && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                          <div className="text-xs text-blue-600 font-bold mb-1">⏱️ זמן</div>
-                          <div className="text-lg font-black text-blue-700">{task.estimatedTimeMin} דק'</div>
-                        </div>
-                      )}
-                      {(task.easeOfExecution || 0) > 0 && (
-                        <div className="bg-teal-50 border border-teal-200 rounded-xl p-3">
-                          <div className="text-xs text-teal-600 font-bold mb-1">😊 קלות</div>
-                          <div className="text-lg font-black text-teal-700">{task.easeOfExecution}/5</div>
-                        </div>
-                      )}
-                      {task.dueDate && (
-                        <div className={`${isOverdue ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'} border rounded-xl p-3`}>
-                          <div className={`text-xs ${isOverdue ? 'text-red-600' : 'text-amber-600'} font-bold mb-1`}>📅 יעד</div>
-                          <div className={`text-sm font-black ${isOverdue ? 'text-red-700' : 'text-amber-700'}`}>{new Date(task.dueDate).toLocaleDateString('he-IL', { day: 'numeric', month: 'short' })}</div>
-                        </div>
-                      )}
-                    </div>
-
-                    {task.requiredResources && (
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3">
-                        <div className="text-xs text-slate-600 font-bold mb-1">🔧 משאבים נדרשים:</div>
-                        <div className="text-sm text-slate-700">{task.requiredResources}</div>
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setEditingTask(task)} className="flex-1 bg-purple-600 text-white py-3 px-4 rounded-xl font-bold hover:bg-purple-700 transition-all shadow-md">ערוך משימה</button>
-                      <button onClick={() => toggleTask(task.id)} className="bg-green-500 text-white py-3 px-4 rounded-xl font-bold hover:bg-green-600 transition-all shadow-md">
-                        {task.isCompleted ? '↩️ בטל' : '✓ סיים'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        /* Regular Board View */
-        <div className="space-y-4">
+      {/* Regular Board View */}
+      <div className="space-y-4">
         {filteredTasks.length === 0 ? (
             <div className="bg-white p-12 rounded-3xl border border-dashed border-slate-200 text-center space-y-4">
                 <Filter className="mx-auto text-slate-300" size={48} />
@@ -555,8 +427,7 @@ const TasksBoard: React.FC = () => {
             </div>
           );
         })}
-        </div>
-      )}
+      </div>
 
       {/* Manual Add Modal */}
       {isFormOpen && (

@@ -146,28 +146,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     loadFromStorage();
-    
-    const autoRefreshInterval = setInterval(() => {
-      const savedData = localStorage.getItem(STORAGE_KEY);
-      if (savedData) {
-        const parsed = JSON.parse(savedData);
-        const currentData = JSON.stringify({ events, customers, leads, tasks });
-        const newData = JSON.stringify({ events: parsed.events || [], customers: parsed.customers || [], leads: parsed.leads || [], tasks: parsed.tasks || [] });
-        
-        if (currentData !== newData) {
-          console.log('🔄 נתונים השתנו - מרענן אוטומטית...');
-          setEvents(parsed.events || []);
-          setCustomers(parsed.customers || []);
-          setLeads(parsed.leads || []);
-          setTasks(parsed.tasks || []);
-          if (parsed.settings) setSettings(parsed.settings);
-          if (parsed.customForms?.length) setCustomForms(parsed.customForms);
-        }
-      }
-    }, 5000);
-    
-    return () => clearInterval(autoRefreshInterval);
-  }, [events, customers, leads, tasks]);
+  }, []);
 
   useEffect(() => {
     if (isLoaded) {
