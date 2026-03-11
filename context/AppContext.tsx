@@ -146,7 +146,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     loadFromStorage();
-  }, []);
+    
+    const autoRefreshInterval = setInterval(() => {
+      const savedData = localStorage.getItem(STORAGE_KEY);
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        const currentData = JSON.stringify({ events, customers, leads, tasks });
+        const newData = JSON.stringify({ events: parsed.events || [], customers: parsed.customers || [], leads: parsed.leads || [], tasks: parsed.tasks || [] });
+        
+        if (currentData !== newData) {
+          console.log('🔄 נתונים השתנו - מרענן אוטומטית...');
+          setEvents(parsed.events || []);
+          setCustomers(parsed.customers || []);
+          setLeads(parsed.leads || []);
+          setTasks(parsed.tasks || []);
+          if (parsed.settings) setSettings(parsed.settings);
+          if (parsed.customForms?.length) setCustomForms(parsed.customForms);
+        }
+      }
+    }, 5000);
+    
+    return () => clearInterval(autoRefreshInterval);
+  }, [events, customers, leads, tasks]);
 
   useEffect(() => {
     if (isLoaded) {
@@ -453,10 +474,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const toEmail = (event.email || getCustomerById(event.customerId)?.email || '').trim();
     if (!toEmail) return;
     const custName = getCustomerById(event.customerId)?.name || event.title;
+    const portalLink = event.customerId ? `<div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center;"><p style="color: white; margin: 0 0 12px; font-size: 16px; font-weight: 700;">✨ זה הזמן להתקדם לשלב הכנת החידון שלכם!</p><a href="https://my-app-kappa-beige-46.vercel.app/#/portal/${event.customerId}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 900; font-size: 17px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">🎯 כניסה לפורטל האישי שלכם ←</a></div>` : '';
     await sendEmail({
       to: toEmail,
       subject: `עדכון באירוע - ${settings.companyName}`,
-      html: `<div dir="rtl" style="font-family: Heebo, sans-serif;"><p>שלום ${custName},</p><p>מעדכנים אותך כי בוצע עדכון באירוע שלך.</p><p><strong>תאריך:</strong> ${event.date} | <strong>שעה:</strong> ${event.startTime}–${event.endTime}</p><p><strong>מיקום:</strong> ${event.location || '-'}</p><p>לשאלות: ${settings.contactPhone}</p><p>בברכה,<br/>${settings.companyName}</p></div>`,
+      html: `<div dir="rtl" style="font-family: Heebo, sans-serif; max-width: 600px; margin: 0 auto;"><p>שלום ${custName},</p><p>מעדכנים אותך כי בוצע עדכון באירוע שלך.</p><p><strong>תאריך:</strong> ${event.date} | <strong>שעה:</strong> ${event.startTime}–${event.endTime}</p><p><strong>מיקום:</strong> ${event.location || '-'}</p>${portalLink}<p>לשאלות: ${settings.contactPhone}</p><p>בברכה,<br/>${settings.companyName}</p></div>`,
     });
     addActivity('email', `הודעת עדכון אירוע נשלחה ל-${toEmail}`);
   };

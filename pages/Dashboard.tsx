@@ -45,7 +45,7 @@ const getHebrewDayGematria = (date: Date) => {
 };
 
 const Dashboard: React.FC = () => {
-  const { kpis, tasks, events, toggleTask, activities } = useApp();
+  const { kpis, tasks, events, toggleTask, activities, customers, updateTask } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -77,6 +77,41 @@ const Dashboard: React.FC = () => {
   const selectedDayEvents = useMemo(() => events.filter(e => e.date === selectedDate).sort((a, b) => a.startTime.localeCompare(b.startTime)), [events, selectedDate]);
   const displayTasks = useMemo(() => [...tasks].sort((a,b) => (a.isCompleted === b.isCompleted ? 0 : a.isCompleted ? 1 : -1)).slice(0, 5), [tasks]);
   const hours = Array.from({ length: 16 }, (_, i) => `${String(i + 8).padStart(2, '0')}:00`);
+  
+  const calculateTaskScore = (task: any): number => {
+    const today = new Date();
+    const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+    const daysUntilDue = dueDate ? Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 999;
+    
+    let score = 0;
+    score += task.priority * 20;
+    score += ((task.potentialRevenue || 0) / 1000) * 10;
+    score += (task.easeOfExecution || 3) * 8;
+    score += (60 - (task.estimatedTimeMin || 30)) / 10;
+    if (daysUntilDue <= 3) score += 50;
+    else if (daysUntilDue <= 7) score += 30;
+    else if (daysUntilDue <= 14) score += 10;
+    score += (task.waitingDays || 0) * 2;
+    
+    return score;
+  };
+
+  const smartTasks = useMemo(() => {
+    const openTasks = tasks.filter(t => !t.isCompleted);
+    return openTasks.map(t => ({ task: t, score: calculateTaskScore(t) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+  }, [tasks]);
+
+  const debtCustomers = useMemo(() => {
+    return customers.map(c => {
+      const cEvents = events.filter(ev => ev.customerId === c.id);
+      const totalDebt = cEvents.reduce((sum, ev) => sum + (ev.amount - (ev.paidAmount || 0)), 0);
+      return { customer: c, debt: totalDebt, eventsCount: cEvents.length };
+    }).filter(item => item.debt > 0)
+      .sort((a, b) => b.debt - a.debt)
+      .slice(0, 8);
+  }, [customers, events]);
   const clickersTypes = useMemo(() => {
     let clickers = 0;
     let clickaorim = 0;
@@ -271,6 +306,85 @@ const Dashboard: React.FC = () => {
                     )}
                 </div>
             </div>
+        </div>
+      </div>
+
+      {/* NEW SECTIONS - Smart Tasks, Activities, Debt Customers */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Smart Tasks */}
+        <div className="xl:col-span-1 bg-gradient-to-br from-purple-500 to-blue-600 rounded-3xl p-6 shadow-xl text-white">
+          <h3 className="text-xl font-black mb-4 flex items-center gap-2">
+            🎯 משימות מומלצות להיום
+          </h3>
+          <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar">
+            {smartTasks.map(({ task, score }, idx) => (
+              <div key={task.id} className="bg-white/95 backdrop-blur rounded-xl p-4 shadow-lg text-slate-800 hover:scale-105 transition-all relative">
+                <div className="absolute -top-2 -right-2 w-7 h-7 bg-purple-600 rounded-full flex items-center justify-center text-white font-black text-sm shadow-lg">
+                  {idx + 1}
+                </div>
+                <h4 className="font-bold text-sm mb-2 pr-4">{task.title}</h4>
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded font-bold">📊 {Math.round(score)}</span>
+                  {task.priority === 5 && <span className="bg-red-100 text-red-700 px-2 py-1 rounded font-bold">🔥 דחוף</span>}
+                  {(task.potentialRevenue || 0) > 0 && <span className="bg-green-100 text-green-700 px-2 py-1 rounded font-bold">💰 ₪{task.potentialRevenue?.toLocaleString()}</span>}
+                  {task.estimatedTimeMin > 0 && <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold">⏱️ {task.estimatedTimeMin}'</span>}
+                </div>
+                <button 
+                  onClick={() => updateTask(task.id, { progress: task.progress === 100 ? 0 : 100, isCompleted: task.progress !== 100 })}
+                  className="mt-3 w-full bg-purple-600 text-white py-2 rounded-lg font-bold text-xs hover:bg-purple-700 transition-all"
+                >
+                  {task.isCompleted ? '↩️ בטל' : '✓ סיים'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Activities Log - Enhanced */}
+        <div className="xl:col-span-1 bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+          <h3 className="text-xl font-black mb-4 flex items-center gap-2 text-slate-800">
+            📊 פעילות אחרונה
+          </h3>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
+            {activities.slice(0, 15).map(act => (
+              <div key={act.id} className="flex gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-all">
+                <div className={`p-2 rounded-lg ${act.type === 'email' ? 'bg-blue-100 text-blue-600' : act.type === 'sync' ? 'bg-green-100 text-green-600' : 'bg-purple-100 text-purple-600'}`}>
+                  {act.type === 'email' ? <Mail size={16}/> : act.type === 'sync' ? <RefreshCw size={16}/> : <CheckCircle2 size={16}/>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-700 leading-tight">{act.message}</p>
+                  <span className="text-[10px] text-slate-400 font-medium">{act.timestamp.toLocaleString('he-IL', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'})}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Debt Customers */}
+        <div className="xl:col-span-1 bg-red-50 rounded-3xl p-6 shadow-lg border-2 border-red-200">
+          <h3 className="text-xl font-black mb-4 flex items-center gap-2 text-red-700">
+            ⚠️ לקוחות עם חובות
+          </h3>
+          <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar">
+            {debtCustomers.map(({ customer, debt, eventsCount }) => (
+              <div key={customer.id} className="bg-white rounded-xl p-4 shadow-md border border-red-200 hover:shadow-lg hover:border-red-300 transition-all">
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-bold text-sm text-slate-800">{customer.name}</h4>
+                  <span className="bg-red-500 text-white px-3 py-1 rounded-lg font-black text-sm">₪{debt.toLocaleString()}</span>
+                </div>
+                <div className="text-xs text-slate-600 space-y-1">
+                  <p>📞 {customer.phone}</p>
+                  {customer.email && <p>📧 {customer.email}</p>}
+                  <p className="text-red-600 font-bold">{eventsCount} אירועים</p>
+                </div>
+              </div>
+            ))}
+            {debtCustomers.length === 0 && (
+              <div className="text-center py-8">
+                <p className="text-sm text-green-600 font-bold">🎉 אין חובות פתוחים!</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

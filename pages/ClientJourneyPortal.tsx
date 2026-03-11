@@ -201,13 +201,32 @@ const ClientJourneyPortal: React.FC = () => {
           {currentStep === 1 && (
             <div className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-4 border-blue-500 flex flex-col">
-                  <div className="flex items-center gap-4 mb-6"><div className="bg-blue-50 p-4 rounded-2xl text-blue-600"><BookOpen size={32} /></div><h4 className="text-xl font-black text-slate-800">איך מכינים חידון?</h4></div>
-                  <p className="text-sm text-slate-600 mb-4 font-medium leading-relaxed">בשביל להכין חידון עליכם להכנס לקישור הזה בו תוכלו להכין את החידון שלכם.</p>
-                  <div className="bg-amber-50 border-r-4 border-amber-400 rounded-xl p-4 mb-6">
-                    <p className="text-xs text-amber-900 font-bold leading-relaxed"><strong className="text-amber-700">⚠️ שימו לב!</strong> בפעם הראשונה עליכם לבצע הרשמה לאתר בכפתור הוורוד, ולא על "התחבר". יש גם אפשרות להתחבר דרך חשבון גוגל.</p>
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-8 rounded-[2.5rem] shadow-xl border-2 border-blue-200 flex flex-col">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="bg-blue-500 p-5 rounded-2xl text-white shadow-lg">
+                      <BookOpen size={36} />
+                    </div>
+                    <h4 className="text-2xl font-black text-slate-800">איך מכינים חידון?</h4>
                   </div>
-                  <a href="https://app.funclickgames.com/account/?ps=clickkef" target="_blank" rel="noopener noreferrer" className="mt-auto bg-blue-600 text-white px-6 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-all">כניסה לאתר ההכנה <ExternalLink size={18} /></a>
+                  
+                  <div className="bg-white rounded-2xl p-6 mb-6 shadow-md border border-blue-100">
+                    <p className="text-sm text-slate-700 mb-4 font-bold leading-relaxed">בשביל להכין חידון עליכם להכנס לקישור הזה בו תוכלו להכין את החידון שלכם:</p>
+                    <a href="https://app.funclickgames.com/account/?ps=clickkef" target="_blank" rel="noopener noreferrer" className="block bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-xl font-bold text-center shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2">
+                      <ExternalLink size={20} />
+                      כניסה לאתר ההכנה
+                    </a>
+                  </div>
+
+                  <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 shadow-md">
+                    <div className="flex items-start gap-3">
+                      <div className="bg-amber-400 text-white w-8 h-8 rounded-full flex items-center justify-center font-black text-lg shrink-0">!</div>
+                      <div className="flex-1">
+                        <p className="text-sm text-amber-900 font-bold leading-relaxed mb-2">שימו לב!</p>
+                        <p className="text-xs text-amber-800 leading-relaxed">בפעם הראשונה עליכם לבצע <strong>הרשמה</strong> לאתר בכפתור הוורוד, ולא על "התחבר".</p>
+                        <p className="text-xs text-amber-800 leading-relaxed mt-2">💡 יש גם אפשרות להתחבר דרך חשבון גוגל.</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-4 border-pink-500 flex flex-col">
                   <div className="flex items-center gap-4 mb-6"><div className="bg-pink-50 p-4 rounded-2xl text-pink-600"><Download size={32} /></div><h4 className="text-xl font-black text-slate-800">חומרי עזר</h4></div>
@@ -390,6 +409,32 @@ const ClientJourneyPortal: React.FC = () => {
                 <a href={ACTIVATION_GUIDE_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-3 bg-white text-purple-600 px-8 py-4 rounded-2xl font-black hover:bg-purple-50 transition-all shadow-lg text-lg">
                   <FileText size={24} /> הורדת חוברת הפעלה
                 </a>
+              </div>
+
+              <div className="bg-white rounded-3xl p-6 shadow-xl border border-slate-100">
+                <h4 className="text-lg font-black text-slate-800 mb-4">חוברת ההדרכה להפעלת התוכנה</h4>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="lg:col-span-2 bg-slate-50 rounded-2xl p-4 overflow-hidden">
+                    <div className="overflow-y-auto max-h-[600px] space-y-4">
+                      {ACTIVATION_TOC.map((item) => (
+                        <img key={item.page} src={activationPagePath(item.page)} alt={item.label} className="w-full rounded-lg shadow-md" />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="lg:col-span-1">
+                    <div className="bg-slate-50 rounded-2xl p-4 sticky top-4">
+                      <h5 className="text-sm font-black text-slate-700 mb-3">ראשי פרקים</h5>
+                      <div className="space-y-2 overflow-y-auto max-h-[560px]">
+                        {ACTIVATION_TOC.map((item, idx) => (
+                          <a key={idx} href={`#activation-page-${item.page}`} className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-white hover:bg-green-50 border border-slate-100 text-right text-xs font-bold text-slate-700 transition-colors">
+                            <span className="flex-1">{item.label}</span>
+                            <span className="text-slate-400 text-[10px]">עמ׳ {item.page}</span>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

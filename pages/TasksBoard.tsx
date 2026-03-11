@@ -62,6 +62,7 @@ const TasksBoard: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showSubTasksForm, setShowSubTasksForm] = useState(false);
+  const [editingSubTask, setEditingSubTask] = useState<{ parentTaskId: string; subTaskIndex: number; subTask: any } | null>(null);
   const [newTask, setNewTask] = useState<Partial<Task>>({
     title: '',
     category: 'כללי',
@@ -771,16 +772,26 @@ const TasksBoard: React.FC = () => {
                                                 {st.priority === 5 && <span className="text-red-600 font-bold">⚡ דחוף</span>}
                                             </div>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const updated = (editingTask.subTasks || []).filter((_, i) => i !== idx);
-                                                setEditingTask({...editingTask, subTasks: updated});
-                                            }}
-                                            className="text-red-500 hover:bg-red-50 p-2 rounded transition-all"
-                                        >
-                                            <X size={16} />
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditingSubTask({ parentTaskId: editingTask.id, subTaskIndex: idx, subTask: {...st} })}
+                                                className="text-purple-500 hover:bg-purple-50 p-2 rounded transition-all"
+                                                title="ערוך תת-משימה"
+                                            >
+                                                <Edit size={14} />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const updated = (editingTask.subTasks || []).filter((_, i) => i !== idx);
+                                                    setEditingTask({...editingTask, subTasks: updated});
+                                                }}
+                                                className="text-red-500 hover:bg-red-50 p-2 rounded transition-all"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -819,6 +830,93 @@ const TasksBoard: React.FC = () => {
                     <button type="button" onClick={() => setEditingTask(null)} className="w-full py-2 font-bold text-slate-400 hover:text-slate-600">ביטול</button>
                 </div>
             </div>
+        </div>
+      )}
+
+      {/* Edit SubTask Modal */}
+      {editingSubTask && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[110] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl p-8 space-y-6 animate-in zoom-in-95 duration-200 my-8">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-black text-slate-800">✏️ עריכת תת-משימה</h3>
+              <button type="button" onClick={() => setEditingSubTask(null)} className="text-slate-400 hover:text-slate-900 transition-colors"><X size={24}/></button>
+            </div>
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-500 mr-2">תיאור התת-משימה</label>
+                <input 
+                  className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-purple-200 font-bold" 
+                  value={editingSubTask.subTask.title} 
+                  onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, title: e.target.value}})}
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-slate-500 mr-2">עדיפות</label>
+                  <select className="w-full p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" value={editingSubTask.subTask.priority} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, priority: Number(e.target.value)}})}>
+                    <option value={1}>נמוכה</option>
+                    <option value={3}>רגילה</option>
+                    <option value={5}>גבוהה/דחוף</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-slate-500 mr-2">משך זמן (דקות)</label>
+                  <input type="number" min="0" className="w-full p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" value={editingSubTask.subTask.estimatedTimeMin} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, estimatedTimeMin: Number(e.target.value)}})} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-slate-500 mr-2">כמה זה מחכה (ימים)</label>
+                  <input type="number" min="0" className="w-full p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" value={editingSubTask.subTask.waitingDays || 0} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, waitingDays: Number(e.target.value)}})} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-slate-500 mr-2">כמה כסף (₪)</label>
+                  <input type="number" min="0" className="w-full p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" value={editingSubTask.subTask.potentialRevenue || 0} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, potentialRevenue: Number(e.target.value)}})} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-slate-500 mr-2">קלות ביצוע (1-5)</label>
+                  <select className="w-full p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" value={editingSubTask.subTask.easeOfExecution || 3} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, easeOfExecution: Number(e.target.value)}})}>
+                    <option value={1}>1 - קשה מאוד</option>
+                    <option value={2}>2 - קשה</option>
+                    <option value={3}>3 - בינוני</option>
+                    <option value={4}>4 - קל</option>
+                    <option value={5}>5 - קל מאוד</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-slate-500 mr-2">תאריך יעד</label>
+                  <input type="date" className="w-full p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" value={editingSubTask.subTask.dueDate || ''} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, dueDate: e.target.value}})} />
+                </div>
+                <div className="md:col-span-2 space-y-1">
+                  <label className="text-xs font-black text-slate-500 mr-2">משאבים נדרשים</label>
+                  <textarea className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" rows={2} value={editingSubTask.subTask.requiredResources || ''} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, requiredResources: e.target.value}})} placeholder="למשל: מחשב, זמן צוות..." />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs font-black text-slate-500 mr-2">סטטוס ביצוע: {editingSubTask.subTask.progress}%</label>
+                  <input type="range" min="0" max="100" step="25" className="w-full h-3 rounded-lg accent-purple-600" value={editingSubTask.subTask.progress} onChange={e => setEditingSubTask({...editingSubTask, subTask: {...editingSubTask.subTask, progress: Number(e.target.value), isCompleted: Number(e.target.value) === 100}})} />
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 pt-4">
+              <button 
+                type="button"
+                onClick={() => {
+                  const parentTask = tasks.find(t => t.id === editingSubTask.parentTaskId);
+                  if (parentTask) {
+                    const updatedSubTasks = [...(parentTask.subTasks || [])];
+                    updatedSubTasks[editingSubTask.subTaskIndex] = editingSubTask.subTask;
+                    updateTask(editingSubTask.parentTaskId, { subTasks: updatedSubTasks });
+                    if (editingTask?.id === editingSubTask.parentTaskId) {
+                      setEditingTask({...editingTask, subTasks: updatedSubTasks});
+                    }
+                  }
+                  setEditingSubTask(null);
+                }}
+                className="w-full bg-purple-600 text-white py-4 rounded-2xl font-black text-lg shadow-xl hover:bg-purple-700 transition-all"
+              >
+                שמור תת-משימה
+              </button>
+              <button type="button" onClick={() => setEditingSubTask(null)} className="w-full py-2 font-bold text-slate-400 hover:text-slate-600">ביטול</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
