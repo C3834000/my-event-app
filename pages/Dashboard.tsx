@@ -141,6 +141,7 @@ const Dashboard: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [dailyNotes, setDailyNotes] = useState<Array<{id: string; text: string; done: boolean}>>([]);
+  const [newNoteText, setNewNoteText] = useState('');
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
@@ -516,45 +517,30 @@ const Dashboard: React.FC = () => {
                   <p className="text-[9px] text-pink-600">Status: Running</p>
                 </div>
 
-                {/* Marketing Tasks from קליכיף שוטף & שיווק categories */}
-                {tasks.filter(t => !t.isCompleted && (t.category === 'שיווק' || t.category === 'קליכיף')).slice(0, 5).map(task => (
-                  <div key={task.id} className="bg-slate-50 rounded-lg p-2 border border-slate-200 hover:bg-slate-100 transition-all">
-                    <div className="flex items-start gap-2 mb-1">
-                      <div className={`shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black ${
-                        task.priority === 5 ? 'bg-red-500 text-white' : 'bg-purple-400 text-white'
-                      }`}>
-                        {task.priority === 5 ? 'HIGH' : 'MEDIUM'}
-                      </div>
-                      <p className="text-[10px] font-bold text-slate-800 flex-1">{task.title}</p>
-                      <button 
-                        onClick={() => toggleTask(task.id)}
-                        className="shrink-0 w-3.5 h-3.5 rounded border-2 border-slate-300 hover:border-purple-500 flex items-center justify-center"
-                      >
-                        {task.isCompleted && <Check size={8} className="text-green-600" strokeWidth={4}/>}
-                      </button>
-                    </div>
-                    {(task.estimatedTimeMin > 0 || (task.potentialRevenue || 0) > 0) && (
-                      <div className="flex gap-1.5 text-[8px]">
-                        {task.estimatedTimeMin > 0 && <span className="text-slate-600">⏱️ {task.estimatedTimeMin}ד'</span>}
-                        {(task.potentialRevenue || 0) > 0 && <span className="text-green-600 font-bold">💰 ₪{(task.potentialRevenue / 1000).toFixed(0)}K</span>}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {/* Marketing Tasks with Full Details */}
+                <div className="space-y-2 mt-3">
+                  <h4 className="text-[10px] font-black text-purple-700">משימות שיווק</h4>
+                  {tasks.filter(t => !t.isCompleted && (t.category === 'שיווק' || t.category === 'קליכיף')).slice(0, 5).map(task => (
+                    <TaskCard key={task.id} task={task} onToggle={toggleTask} onUpdate={updateTask} />
+                  ))}
+                </div>
 
                 {/* Recent Leads */}
-                {leads.slice(0, 3).map(lead => (
-                  <div key={lead.id} className="bg-blue-50 rounded-lg p-2 border border-blue-200">
-                    <div className="flex items-start gap-2">
-                      <PhoneCall size={10} className="text-blue-600 shrink-0 mt-0.5"/>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-bold text-slate-800 truncate">{lead.name}</p>
-                        <p className="text-[8px] text-slate-500">{lead.phone}</p>
-                        {lead.eventDetails && <p className="text-[8px] text-slate-400 truncate mt-0.5">{lead.eventDetails}</p>}
+                <div className="space-y-2 mt-3">
+                  <h4 className="text-[10px] font-black text-blue-700">לידים אחרונים</h4>
+                  {leads.slice(0, 3).map(lead => (
+                    <div key={lead.id} className="bg-blue-50 rounded-lg p-2 border border-blue-200">
+                      <div className="flex items-start gap-2">
+                        <PhoneCall size={10} className="text-blue-600 shrink-0 mt-0.5"/>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-bold text-slate-800 truncate">{lead.name}</p>
+                          <p className="text-[8px] text-slate-500">{lead.phone}</p>
+                          {lead.eventDetails && <p className="text-[8px] text-slate-400 truncate mt-0.5">{lead.eventDetails}</p>}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -581,7 +567,7 @@ const Dashboard: React.FC = () => {
                   </h4>
                   <div className="space-y-2">
                     {dailyNotes.map(note => (
-                      <div key={note.id} className="flex items-start gap-2">
+                      <div key={note.id} className="flex items-start gap-2 group">
                         <input 
                           type="checkbox" 
                           checked={note.done}
@@ -590,25 +576,48 @@ const Dashboard: React.FC = () => {
                               n.id === note.id ? {...n, done: !n.done} : n
                             ));
                           }}
-                          className="mt-0.5 w-3 h-3 accent-purple-600"
+                          className="mt-0.5 w-3 h-3 accent-purple-600 shrink-0"
                         />
                         <p className={`text-[10px] font-bold flex-1 ${note.done ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                           {note.text}
                         </p>
+                        <button
+                          onClick={() => setDailyNotes(prev => prev.filter(n => n.id !== note.id))}
+                          className="opacity-0 group-hover:opacity-100 shrink-0 text-red-500 hover:text-red-700 transition-all"
+                          title="מחק פתק"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
                     ))}
                     <div className="flex gap-1 mt-2">
                       <input 
                         type="text"
+                        value={newNoteText}
+                        onChange={(e) => setNewNoteText(e.target.value)}
                         placeholder="הוסף תזכורת..."
                         className="flex-1 text-[10px] px-2 py-1 border border-yellow-300 rounded focus:outline-none focus:ring-1 focus:ring-purple-500"
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                            setDailyNotes(prev => [...prev, { id: `n_${Date.now()}`, text: e.currentTarget.value, done: false }]);
-                            e.currentTarget.value = '';
+                          if (e.key === 'Enter' && newNoteText.trim()) {
+                            setDailyNotes(prev => [...prev, { id: `n_${Date.now()}`, text: newNoteText, done: false }]);
+                            setNewNoteText('');
                           }
                         }}
                       />
+                      <button
+                        onClick={() => {
+                          if (newNoteText.trim()) {
+                            setDailyNotes(prev => [...prev, { id: `n_${Date.now()}`, text: newNoteText, done: false }]);
+                            setNewNoteText('');
+                          }
+                        }}
+                        className="shrink-0 bg-purple-600 text-white px-2 py-1 rounded text-[10px] font-bold hover:bg-purple-700 transition-all"
+                        title="הוסף פתק"
+                      >
+                        +
+                      </button>
                     </div>
                   </div>
                 </div>
