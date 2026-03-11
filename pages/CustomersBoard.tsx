@@ -102,7 +102,6 @@ const CustomersBoard: React.FC = () => {
     try {
       await sendPortalEmailForCustomer(c.id);
       alert('פורטל נשלח למייל בהצלחה!');
-      setTimeout(() => window.location.reload(), 500);
     } catch (e) {
       console.error('❌ שגיאה בשליחת פורטל:', e);
       alert('שגיאה בשליחת המייל או שלא הוגדר אימייל ללקוח.');

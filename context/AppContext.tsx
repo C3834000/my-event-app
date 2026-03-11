@@ -172,10 +172,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handlePublicBookingSubmit = async (data: any, leadId?: string, customerId?: string) => {
     console.log('🎯 handlePublicBookingSubmit נקרא עם הנתונים:', data, 'leadId:', leadId, 'customerId:', customerId);
     
+    let finalCustomerId = customerId;
+    if (!customerId && !leadId && data.name && data.phone) {
+      const newCustomer = {
+        id: `c_${Date.now()}`,
+        name: data.name,
+        phone: data.phone,
+        email: data.email || '',
+        nextEvent: data.date || '',
+        totalEvents: 0,
+        totalRevenue: 0
+      };
+      setCustomers(prev => [newCustomer, ...prev]);
+      finalCustomerId = newCustomer.id;
+      console.log('👤 לקוח חדש נוצר:', newCustomer);
+    }
+    
     const event: AppEvent = {
         id: `e_${Date.now()}`,
-        customerId: customerId || '',
-        title: customerId ? `אירוע - ${data.name || 'לקוח'}` : `הזמנה מפורטל: ${data.name || 'לקוח'}`,
+        customerId: finalCustomerId || '',
+        title: finalCustomerId ? `אירוע - ${data.name || 'לקוח'}` : `הזמנה מפורטל: ${data.name || 'לקוח'}`,
         date: data.date || new Date().toISOString().split('T')[0],
         startTime: data.startTime || '10:00',
         endTime: data.endTime || '11:30',
@@ -185,7 +201,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         paymentStatus: PaymentStatus.NotPaid,
         eventType: data.eventType || EventType.ClickersProgram,
         location: data.location || '',
-        tag: customerId ? 'קליכיף' : 'לבדיקה',
+        tag: finalCustomerId ? 'קליכיף' : 'לבדיקה',
         phone: data.phone || '',
         email: data.email || '',
         clickersNeeded: Number(data.clickersNeeded || 0),
@@ -264,11 +280,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 <p style="color: #4a5568; margin: 4px 0;"><strong>אימייל:</strong> ${data.email || 'לא צוין'}</p>
               </div>
 
-              ${(leadId || customerId) ? `<div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+              <div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
                 <p style="color: white; margin: 0 0 16px; font-size: 18px; font-weight: 800; line-height: 1.6;">✨ זה הזמן להתקדם לשלב הכנת החידון שלכם!</p>
                 <p style="color: white; margin: 0 0 20px; font-size: 15px; font-weight: 600; opacity: 0.95;">לחצו על הכפתור להמשך מרגש 🎉</p>
-                <a href="https://my-app-kappa-beige-46.vercel.app/#/portal/${leadId || customerId}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 19px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: all 0.3s;">🎯 כניסה לפורטל האישי שלכם ←</a>
-              </div>` : ''}
+                <a href="https://my-app-kappa-beige-46.vercel.app/#/portal/${leadId || finalCustomerId || event.id}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 19px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: all 0.3s;">🎯 כניסה לפורטל האישי שלכם ←</a>
+              </div>
 
               <div style="background: #fef3c7; border-right: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 24px 0;">
                 <p style="color: #92400e; margin: 0; font-size: 14px; font-weight: 600;">💡 <strong>שימו לב:</strong> ההזמנה שלכם שמורה במערכת שלנו. נציג יצור איתכם קשר בהקדם לאישור סופי ותיאום פרטים נוספים.</p>
@@ -333,7 +349,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    return Promise.resolve({ eventId: event.id });
+    return Promise.resolve({ eventId: event.id, customerId: finalCustomerId || '' });
   };
 
   const sendPortalEmail = async (leadId: string) => {

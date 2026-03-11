@@ -87,6 +87,7 @@ const BookingForm: React.FC = () => {
   };
 
   const [submittedEventId, setSubmittedEventId] = React.useState<string>('');
+  const [submittedCustomerId, setSubmittedCustomerId] = React.useState<string>('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,6 +103,7 @@ const BookingForm: React.FC = () => {
       });
       const result = await handlePublicBookingSubmit(payload, leadId || undefined, customerId || undefined);
       setSubmittedEventId(result.eventId);
+      setSubmittedCustomerId(result.customerId);
       setIsSubmitted(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
@@ -231,23 +233,21 @@ const BookingForm: React.FC = () => {
           </div>
 
           {/* Next Step Button */}
-          {!skipPortal && (
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl shadow-2xl p-8 text-center mb-6">
-              <h3 className="text-2xl font-black text-white mb-4">🚀 מוכנים להמשיך?</h3>
-              <p className="text-purple-100 font-bold text-lg mb-6">עכשיו הזמן להתחיל להכין את החידון שלך!</p>
-              <button
-                onClick={() => {
-                  const portalId = leadId || customerId || submittedEventId;
-                  if (portalId) {
-                    window.location.href = `/portal/${portalId}?step=1`;
-                  }
-                }}
-                className="bg-white text-purple-600 px-10 py-5 rounded-2xl font-black text-xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300"
-              >
-                המשך לשלב הבא - הכנת החידון שלך ✨
-              </button>
-            </div>
-          )}
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl shadow-2xl p-8 text-center mb-6">
+            <h3 className="text-2xl font-black text-white mb-4">🚀 מוכנים להמשיך?</h3>
+            <p className="text-purple-100 font-bold text-lg mb-6">עכשיו הזמן להתחיל להכין את החידון שלך!</p>
+            <button
+              onClick={() => {
+                const portalId = leadId || customerId || submittedCustomerId || submittedEventId;
+                if (portalId) {
+                  window.location.href = `/#/portal/${portalId}?step=1`;
+                }
+              }}
+              className="bg-white text-purple-600 px-10 py-5 rounded-2xl font-black text-xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300"
+            >
+              המשך לשלב הבא - הכנת החידון שלך ✨
+            </button>
+          </div>
 
           {skipPortal && (
             <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-3xl shadow-2xl p-8 text-center mb-6">
