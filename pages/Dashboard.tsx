@@ -3,7 +3,8 @@ import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   AlertCircle, Briefcase, Calendar as CalendarIcon, 
-  CheckCircle2, Check, Zap, Clock, MapPin, Users, Mail, RefreshCw, ArrowLeft, ArrowRight, TrendingUp
+  CheckCircle2, Check, Zap, Clock, MapPin, Users, Mail, RefreshCw, ArrowLeft, ArrowRight, TrendingUp,
+  Target, PhoneCall, MessageSquare, Facebook, Instagram, Bell, StickyNote
 } from 'lucide-react';
 import { EventStatus, EventType } from '../types';
 
@@ -45,7 +46,7 @@ const getHebrewDayGematria = (date: Date) => {
 };
 
 const Dashboard: React.FC = () => {
-  const { kpis, tasks, events, toggleTask, activities, customers, updateTask } = useApp();
+  const { kpis, tasks, events, toggleTask, activities, customers, updateTask, leads } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -140,207 +141,251 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-12 dir-rtl">
-      <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold text-slate-800">דשבורד</h2>
-        <button onClick={() => { setRefreshKey(k => k + 1); window.location.reload(); }} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg hover:bg-purple-700 transition-all">
-          <RefreshCw size={18} /> רענן נתונים
-        </button>
-      </div>
-      {/* KPI Cards - compact, responsive */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 max-w-4xl" key={refreshKey}>
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center group hover:shadow-md transition-all">
-             <div className="min-w-0"><p className="text-xs font-medium text-slate-500 truncate">גבייה פתוחה</p><h3 className="text-lg font-bold text-red-600 mt-0.5 truncate">₪{kpis.openDebt.toLocaleString()}</h3></div>
-             <div className="p-2 bg-red-50 rounded-lg text-red-500 shrink-0"><AlertCircle size={20} /></div>
+    <div className="h-[calc(100vh-2rem)] overflow-hidden dir-rtl flex flex-col gap-3 pb-4">
+      {/* Top Header with KPI Cards */}
+      <div className="shrink-0">
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-2xl font-bold text-slate-800">לוח בקרה</h2>
+          <button onClick={() => setRefreshKey(k => k + 1)} className="flex items-center gap-2 bg-purple-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-md hover:bg-purple-700 transition-all text-sm">
+            <RefreshCw size={14} /> רענן
+          </button>
+        </div>
+        
+        {/* KPI Cards Row */}
+        <div className="grid grid-cols-4 gap-3" key={refreshKey}>
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-bold text-slate-500">יתרת גבייה</p>
+              <h3 className="text-xl font-black text-red-600">₪{kpis.openDebt.toLocaleString()}</h3>
+            </div>
+            <div className="p-2 bg-red-50 rounded-lg text-red-500"><AlertCircle size={18} /></div>
           </div>
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center group hover:shadow-md transition-all">
-             <div className="min-w-0"><p className="text-xs font-medium text-slate-500 truncate">צפי הכנסות</p><h3 className="text-lg font-bold text-blue-600 mt-0.5 truncate">₪{kpis.projectedIncome.toLocaleString()}</h3></div>
-             <div className="p-2 bg-blue-50 rounded-lg text-blue-500 shrink-0"><Briefcase size={20} /></div>
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-bold text-slate-500">סה״כ הכנסות</p>
+              <h3 className="text-xl font-black text-green-600">₪{kpis.totalRevenue.toLocaleString()}</h3>
+            </div>
+            <div className="p-2 bg-green-50 rounded-lg text-green-500"><TrendingUp size={18} /></div>
           </div>
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center group hover:shadow-md transition-all">
-             <div className="min-w-0"><p className="text-xs font-medium text-slate-500 truncate">סה״כ הכנסות</p><h3 className="text-lg font-bold text-green-600 mt-0.5 truncate">₪{kpis.totalRevenue.toLocaleString()}</h3></div>
-             <div className="p-2 bg-green-50 rounded-lg text-green-500 shrink-0"><TrendingUp size={20} /></div>
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-bold text-slate-500">צפי הכנסות</p>
+              <h3 className="text-xl font-black text-blue-600">₪{kpis.projectedIncome.toLocaleString()}</h3>
+            </div>
+            <div className="p-2 bg-blue-50 rounded-lg text-blue-500"><Briefcase size={18} /></div>
           </div>
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center group hover:shadow-md transition-all">
-             <div className="min-w-0"><p className="text-xs font-medium text-slate-500 truncate">משימות דחופות</p><h3 className="text-lg font-bold text-orange-500 mt-0.5">{tasks.filter(t=>!t.isCompleted && t.priority===5).length}</h3></div>
-             <div className="p-2 bg-orange-50 rounded-lg text-orange-500 shrink-0"><Zap size={20} /></div>
+          <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-bold text-slate-500">משימות דחופות</p>
+              <h3 className="text-xl font-black text-orange-600">{tasks.filter(t=>!t.isCompleted && t.priority===5).length}</h3>
+            </div>
+            <div className="p-2 bg-orange-50 rounded-lg text-orange-500"><Zap size={18} /></div>
           </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 max-h-[calc(100vh-250px)]">
-        {/* RIGHT SIDE - COMPACT CALENDAR */}
-        <div className="xl:col-span-1 space-y-3">
-          <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
+      {/* 3 Column Grid Layout - Fixed Height with Internal Scrolling */}
+      <div className="grid grid-cols-3 gap-3 flex-1 overflow-hidden">
+        
+        {/* COLUMN 1 (Right) - Calendar + Daily Agenda */}
+        <div className="flex flex-col gap-3 overflow-hidden">
+          {/* Calendar Widget */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3">
             <div className="flex justify-between items-center mb-2">
-                <h3 className="text-xs font-black text-slate-700">{monthLabel}</h3>
-                <div className="flex gap-0.5">
-                    <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-100 rounded text-slate-400"><ArrowRight size={12}/></button>
-                    <button onClick={() => changeMonth(1)} className="p-1 hover:bg-slate-100 rounded text-slate-400"><ArrowLeft size={12}/></button>
-                </div>
+              <h3 className="text-sm font-black text-slate-700">{monthLabel}</h3>
+              <div className="flex gap-1">
+                <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-100 rounded text-slate-400"><ArrowRight size={14}/></button>
+                <button onClick={() => changeMonth(1)} className="p-1 hover:bg-slate-100 rounded text-slate-400"><ArrowLeft size={14}/></button>
+              </div>
             </div>
-            <div className="grid grid-cols-7 gap-0.5">
-              {['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'].map(d => <div key={d} className="text-center text-[8px] font-bold text-slate-400 py-1">{d}</div>)}
+            <div className="grid grid-cols-7 gap-1">
+              {['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'].map(d => <div key={d} className="text-center text-[9px] font-bold text-slate-400 py-1">{d}</div>)}
               {heatmapGrid.map((item, idx) => {
-                 if (!item.day) return <div key={idx} className="aspect-square"></div>;
-                 const isSelected = item.date === selectedDate;
-                 const hasEvents = item.count > 0;
-                 return (
-                   <button 
-                     key={idx} onClick={() => setSelectedDate(item.date)}
-                     className={`aspect-square rounded-md text-[10px] flex items-center justify-center font-bold transition-all ${
-                       isSelected ? 'bg-purple-600 text-white shadow-sm' : 
-                       hasEvents ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' : 
-                       'bg-white hover:bg-slate-50 text-slate-600'
-                     }`}
-                   >
-                      {item.day}
-                   </button>
-                 );
+                if (!item.day) return <div key={idx} className="aspect-square"></div>;
+                const isSelected = item.date === selectedDate;
+                const hasEvents = item.count > 0;
+                return (
+                  <button 
+                    key={idx} onClick={() => setSelectedDate(item.date)}
+                    className={`aspect-square rounded text-[11px] font-bold transition-all ${
+                      isSelected ? 'bg-purple-600 text-white shadow-md' : 
+                      hasEvents ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' : 
+                      'bg-slate-50 hover:bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {item.day}
+                  </button>
+                );
               })}
             </div>
           </div>
 
-          {/* Smart Tasks - Compact */}
-          <div className="bg-gradient-to-br from-purple-500 to-blue-600 rounded-xl p-3 shadow-lg text-white">
-            <h3 className="text-xs font-black mb-2">🎯 מומלץ היום</h3>
-            <div className="space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar">
-              {smartTasks.slice(0, 3).map(({ task, score }, idx) => (
-                <div key={task.id} className="bg-white/95 rounded-lg p-2 text-slate-800">
-                  <div className="flex items-start gap-2">
-                    <div className="w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center text-white font-black text-[10px] shrink-0">{idx + 1}</div>
+          {/* Daily Agenda Timeline - Internal Scroll */}
+          <div className="bg-yellow-50 rounded-xl border-2 border-yellow-300 p-3 flex-1 overflow-hidden flex flex-col">
+            <h3 className="text-sm font-black text-slate-800 mb-2 flex items-center gap-2">
+              <CalendarIcon size={16} className="text-purple-600"/> תוכנית יומית
+            </h3>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {selectedDayEvents.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-300 py-8">
+                  <CalendarIcon size={32} opacity={0.3} />
+                  <p className="text-xs font-bold mt-2">אין אירועים רשומים</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {selectedDayEvents.map(event => (
+                    <div key={event.id} className="bg-white rounded-lg p-3 border-r-4 border-purple-500 shadow-sm hover:shadow-md transition-all">
+                      <h4 className="font-bold text-xs text-slate-800 mb-1">{event.title}</h4>
+                      <div className="flex items-center gap-2 text-[10px] text-slate-600">
+                        <Clock size={10}/> {event.startTime}-{event.endTime}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-slate-600 mt-1">
+                        <MapPin size={10}/> {event.location || 'לא צוין'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* COLUMN 2 (Center) - Smart Tasks + Activity Stream */}
+        <div className="flex flex-col gap-3 overflow-hidden">
+          {/* Smart Task Board with Priority Tags */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 flex-1 overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-2 shrink-0">
+              <h3 className="text-sm font-black text-slate-800">לוח משימות</h3>
+              <div className="flex items-center gap-1 bg-purple-100 text-purple-700 px-2 py-1 rounded-lg">
+                <Target size={12}/>
+                <span className="text-[10px] font-black">AI Smart Sort</span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="space-y-2">
+                {smartTasks.map(({ task, score }, idx) => (
+                  <div key={task.id} className="bg-slate-50 rounded-lg p-3 border border-slate-200 hover:border-purple-300 hover:bg-purple-50/30 transition-all">
+                    <div className="flex items-start gap-2 mb-2">
+                      <div className={`shrink-0 px-2 py-0.5 rounded text-[9px] font-black ${
+                        task.priority === 5 ? 'bg-red-500 text-white' : 
+                        task.priority === 4 ? 'bg-orange-400 text-white' : 
+                        task.priority === 3 ? 'bg-yellow-400 text-slate-800' : 
+                        'bg-slate-300 text-slate-700'
+                      }`}>
+                        {task.priority === 5 ? 'HIGH' : task.priority === 4 ? 'HIGH' : task.priority === 3 ? 'MEDIUM' : 'LOW'}
+                      </div>
+                      <h4 className="font-bold text-xs text-slate-800 flex-1">{task.title}</h4>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {task.estimatedTimeMin > 0 && (
+                        <span className="text-[9px] text-slate-600 font-bold">⏱️ {task.estimatedTimeMin}ד'</span>
+                      )}
+                      {(task.potentialRevenue || 0) > 0 && (
+                        <span className="text-[9px] text-green-600 font-bold">💰 ₪{(task.potentialRevenue / 1000).toFixed(0)}K</span>
+                      )}
+                      {task.dueDate && (
+                        <span className="text-[9px] text-orange-600 font-bold">📅 {new Date(task.dueDate).toLocaleDateString('he-IL', {day: 'numeric', month: 'short'})}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Activity Stream / Newsfeed */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 flex-1 overflow-hidden flex flex-col">
+            <h3 className="text-sm font-black text-slate-800 mb-2 shrink-0">עדכונים אחרונים שוטפים</h3>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="space-y-2">
+                {activities.slice(0, 15).map(act => (
+                  <div key={act.id} className="flex gap-2 p-2 rounded-lg bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-all">
+                    <div className={`p-1.5 rounded ${act.type === 'email' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>
+                      {act.type === 'email' ? <Mail size={12}/> : <CheckCircle2 size={12}/>}
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-bold leading-tight">{task.title}</p>
-                      <div className="flex gap-1 mt-1 text-[8px]">
-                        {task.priority === 5 && <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">🔥</span>}
-                        {(task.potentialRevenue || 0) > 0 && <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">₪{(task.potentialRevenue / 1000).toFixed(0)}K</span>}
+                      <p className="text-[10px] font-bold text-slate-700 leading-tight truncate">{act.message}</p>
+                      <span className="text-[8px] text-slate-400">{act.timestamp.toLocaleString('he-IL', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+                  </div>
+                ))}
+                {activities.length === 0 && <p className="text-xs text-slate-400 text-center py-4">אין פעילות</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* COLUMN 3 (Left) - Marketing Hub + Daily Reminders */}
+        <div className="flex flex-col gap-3 overflow-hidden">
+          {/* Marketing Hub / Leads Center */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 flex-1 overflow-hidden flex flex-col">
+            <h3 className="text-sm font-black text-slate-800 mb-2 shrink-0">לוח שיווק</h3>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="space-y-2">
+                {/* Marketing Campaigns/Leads */}
+                <div className="bg-blue-50 rounded-lg p-2 border border-blue-200">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-black text-blue-700">Leads from Facebook:</span>
+                    <span className="text-xs font-black text-blue-700">{leads.filter(l => l.source?.includes('Facebook')).length}</span>
+                  </div>
+                  <p className="text-[9px] text-blue-600">(High Quality)</p>
+                </div>
+                
+                <div className="bg-pink-50 rounded-lg p-2 border border-pink-200">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-black text-pink-700">Instagram Campaign</span>
+                    <Instagram size={14} className="text-pink-600"/>
+                  </div>
+                  <p className="text-[9px] text-pink-600">Status: Running</p>
+                </div>
+
+                {leads.slice(0, 8).map(lead => (
+                  <div key={lead.id} className="bg-slate-50 rounded-lg p-2 border border-slate-200 hover:bg-slate-100 transition-all">
+                    <div className="flex items-start gap-2">
+                      <PhoneCall size={12} className="text-purple-600 shrink-0 mt-0.5"/>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-bold text-slate-800 truncate">{lead.name}</p>
+                        <p className="text-[9px] text-slate-500">{lead.phone}</p>
+                        {lead.eventDetails && <p className="text-[8px] text-slate-400 truncate mt-0.5">{lead.eventDetails}</p>}
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Debt Customers - Compact */}
-          <div className="bg-red-50 rounded-xl p-3 shadow-sm border-2 border-red-200">
-            <h3 className="text-xs font-black mb-2 text-red-700">⚠️ חובות</h3>
-            <div className="space-y-1.5 max-h-[200px] overflow-y-auto custom-scrollbar">
-              {debtCustomers.slice(0, 5).map(({ customer, debt }) => (
-                <div key={customer.id} className="bg-white rounded-lg p-2 border border-red-200">
-                  <div className="flex justify-between items-center">
-                    <p className="font-bold text-[10px] text-slate-800 truncate flex-1">{customer.name}</p>
-                    <span className="bg-red-500 text-white px-2 py-0.5 rounded font-black text-[9px]">₪{(debt / 1000).toFixed(1)}K</span>
-                  </div>
-                </div>
-              ))}
-              {debtCustomers.length === 0 && <p className="text-[10px] text-green-600 font-bold text-center py-2">אין חובות!</p>}
-            </div>
-          </div>
-        </div>
-
-        {/* DAY VIEW - COMPACT */}
-        <div className="xl:col-span-4">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden max-h-[calc(100vh-250px)] flex flex-col">
-                <div className="p-3 border-b border-slate-100 flex justify-between items-center gap-3 bg-slate-50/50 shrink-0">
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => goAdjacentDay(-1)} className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-purple-50 hover:text-purple-600 transition-all" title="יום קודם"><ArrowRight size={16}/></button>
-                        <div>
-                            <h3 className="text-sm font-black text-slate-800">תצוגת יום</h3>
-                            <p className="text-slate-500 font-bold text-[10px]">
-                              {selectedDate ? (
-                                <>
-                                  {new Date(selectedDate).toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'short' })}
-                                  <span className="text-purple-600 mr-1">• {getHebrewDayGematria(new Date(selectedDate))}</span>
-                                </>
-                              ) : 'בחר תאריך'}
-                            </p>
-                        </div>
-                        <button onClick={() => goAdjacentDay(1)} className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-purple-50 hover:text-purple-600 transition-all" title="יום הבא"><ArrowLeft size={16}/></button>
+          {/* Daily Reminders & Notes */}
+          <div className="bg-yellow-50 rounded-xl border-2 border-yellow-300 p-3 flex-1 overflow-hidden flex flex-col">
+            <h3 className="text-sm font-black text-slate-800 mb-2 shrink-0">תזכורת יומית</h3>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="space-y-2">
+                {/* Reminders from Tasks */}
+                {tasks.filter(t => !t.isCompleted && t.reminderDate).slice(0, 3).map(task => (
+                  <div key={task.id} className="bg-white rounded-lg p-2 border-r-4 border-orange-400 shadow-sm">
+                    <div className="flex items-start gap-2">
+                      <Bell size={12} className="text-orange-600 shrink-0"/>
+                      <p className="text-[10px] font-bold text-slate-800">{task.title}</p>
                     </div>
-                    {selectedDate && (clickersTypes.clickers > 0 || clickersTypes.clickaorim > 0) && (
-                        <div className="flex gap-2 text-[10px] font-bold">
-                            <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">קליקרים: {clickersTypes.clickers}</span>
-                            <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded-lg">קליקאורים: {clickersTypes.clickaorim}</span>
-                        </div>
-                    )}
-                </div>
+                  </div>
+                ))}
 
-                <div className="flex-1 overflow-y-auto p-3 relative custom-scrollbar scroll-smooth">
-                    {selectedDayEvents.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-2 py-10 text-center">
-                            <CalendarIcon size={48} opacity={0.3} />
-                            <p className="text-sm font-bold">אין אירועים רשומים</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-0 min-h-[800px]">
-                            <div className="relative pl-2">
-                                {hours.map(hour => (
-                                    <div key={hour} className="flex items-start gap-3 border-b border-slate-50 py-3 h-[50px] relative group">
-                                        <div className="w-10 text-[10px] font-black text-slate-400 group-hover:text-purple-500 transition-colors">{hour}</div>
-                                        <div className="flex-1"></div>
-                                    </div>
-                                ))}
-                                <div className="absolute top-0 right-[3rem] left-0 bottom-0 pointer-events-none">
-                                    {selectedDayEvents.map(event => {
-                                        const startHour = parseInt(event.startTime.split(':')[0]);
-                                        const startMin = parseInt(event.startTime.split(':')[1]);
-                                        const endHour = parseInt(event.endTime.split(':')[0]);
-                                        const endMin = parseInt(event.endTime.split(':')[1]);
-                                        const hourH = 50;
-                                        const startPos = ((startHour - 8) * hourH) + (startMin * (hourH / 60));
-                                        const durationMin = (endHour * 60 + endMin) - (startHour * 60 + startMin);
-                                        const height = durationMin * (hourH / 60);
-                                        return (
-                                            <div 
-                                                key={event.id}
-                                                className={`absolute left-0 right-0 p-2 rounded-xl border-r-4 shadow-lg pointer-events-auto transition-all hover:scale-[1.01] cursor-pointer z-10 ${
-                                                    event.status === EventStatus.Paid ? 'bg-green-50 border-green-500 text-green-900' :
-                                                    event.status === EventStatus.Booked ? 'bg-blue-50 border-blue-500 text-blue-900' : 'bg-slate-50 border-slate-400 text-slate-900'
-                                                }`}
-                                                style={{ top: `${startPos}px`, height: `${height}px`, minHeight: '45px' }}
-                                            >
-                                                <div className="flex justify-between items-start h-full flex-col">
-                                                    <div>
-                                                        <h4 className="font-black text-xs truncate">{event.title}</h4>
-                                                        <div className="flex items-center gap-1.5 mt-0.5 opacity-80 text-[9px] font-bold">
-                                                            <Clock size={10}/> {event.startTime}-{event.endTime} | <MapPin size={10}/> {event.location}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 text-[9px] font-black bg-white/50 px-2 py-0.5 rounded-lg mt-auto">
-                                                       <Users size={10}/> {event.clickersNeeded}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                {/* Private Notes Section */}
+                <div className="bg-white rounded-lg p-3 border border-yellow-300 mt-3">
+                  <h4 className="text-xs font-black text-slate-700 mb-2 flex items-center gap-1">
+                    <StickyNote size={12} className="text-yellow-600"/> פתקים
+                  </h4>
+                  <ul className="space-y-1 text-[10px] text-slate-600">
+                    <li>• Check new camera equipment prices</li>
+                    <li>• Draft agenda for next week's team meeting</li>
+                    <li>• Approve budget for new event space</li>
+                  </ul>
                 </div>
-            </div>
-        </div>
-      </div>
-
-      {/* Activities Log Section - Bottom */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-        <h3 className="text-sm font-black mb-3 flex items-center gap-2 text-slate-700">
-          <RefreshCw size={14} className="text-purple-500"/> 📊 פעילות אחרונה (מייל, יומן)
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 max-h-[150px] overflow-y-auto custom-scrollbar">
-          {activities.slice(0, 20).map(act => (
-            <div key={act.id} className="flex gap-2 p-2 rounded-lg bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-all">
-              <div className={`p-1.5 rounded-md ${act.type === 'email' ? 'bg-blue-100 text-blue-600' : act.type === 'sync' ? 'bg-green-100 text-green-600' : 'bg-purple-100 text-purple-600'}`}>
-                {act.type === 'email' ? <Mail size={12}/> : act.type === 'sync' ? <RefreshCw size={12}/> : <CheckCircle2 size={12}/>}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[9px] font-bold text-slate-700 leading-tight truncate">{act.message}</p>
-                <span className="text-[8px] text-slate-400 font-medium">{act.timestamp.toLocaleString('he-IL', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'})}</span>
               </div>
             </div>
-          ))}
-          {activities.length === 0 && <p className="text-xs text-slate-400 text-center py-4 col-span-full">טרם נרשמו פעולות</p>}
+          </div>
         </div>
+
       </div>
     </div>
   );
