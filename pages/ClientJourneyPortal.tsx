@@ -136,40 +136,33 @@ const ClientJourneyPortal: React.FC = () => {
       </header>
 
       <div className="max-w-5xl mx-auto -mt-12 px-4 space-y-10 relative z-20">
-        <div className="bg-white rounded-[2.5rem] shadow-xl p-8 border border-slate-100 overflow-x-auto">
-          <div className="flex justify-between items-center min-w-[600px]">
+        <div className="bg-gradient-to-br from-slate-50 to-purple-50 rounded-[2.5rem] shadow-2xl p-10 border-2 border-purple-100 overflow-x-auto">
+          <h3 className="text-2xl font-black text-slate-800 text-center mb-8">🗺️ מסלול ההכנה שלכם</h3>
+          <div className="flex justify-between items-center min-w-[700px] relative">
+            {/* Connection lines */}
+            <div className="absolute top-8 left-0 right-0 h-1 bg-gradient-to-l from-green-300 via-purple-300 to-blue-300 rounded-full -z-10" style={{ width: '90%', margin: '0 5%' }}></div>
+            
             {steps.map((step, idx) => (
-              <button key={idx} onClick={() => setCurrentStep(idx)} className={`flex flex-col items-center gap-3 transition-all ${currentStep === idx ? 'scale-110' : 'opacity-60 hover:opacity-100'}`}>
-                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-xl bg-gradient-to-br ${step.color} ${currentStep === idx ? 'ring-4 ring-offset-2 ring-purple-300' : 'opacity-70'} text-white transition-all relative`}>
-                  <div className="absolute -top-2 -right-2 w-7 h-7 bg-white rounded-full flex items-center justify-center text-sm font-black text-slate-800 shadow-lg border-2 border-slate-100">{idx + 1}</div>
-                  <step.icon size={28} />
+              <button key={idx} onClick={() => setCurrentStep(idx)} className={`flex flex-col items-center gap-4 transition-all relative z-10 ${currentStep === idx ? 'scale-110' : 'opacity-70 hover:opacity-100 hover:scale-105'}`}>
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center shadow-2xl bg-gradient-to-br ${step.color} ${currentStep === idx ? 'ring-4 ring-offset-4 ring-purple-400 animate-pulse' : ''} text-white transition-all relative`}>
+                  <div className="absolute -top-3 -right-3 w-9 h-9 bg-white rounded-full flex items-center justify-center text-base font-black text-slate-800 shadow-xl border-3 border-purple-200">{idx + 1}</div>
+                  <step.icon size={32} strokeWidth={2.5} />
+                  {idx < currentStep && (
+                    <div className="absolute -bottom-1 -left-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                      <span className="text-white text-xs font-black">✓</span>
+                    </div>
+                  )}
                 </div>
-                <span className={`text-sm font-black ${currentStep === idx ? 'text-slate-800' : 'text-slate-500'}`}>{step.label}</span>
+                <span className={`text-sm font-black text-center leading-tight max-w-[120px] ${currentStep === idx ? 'text-slate-800' : 'text-slate-500'}`}>{step.label}</span>
               </button>
             ))}
           </div>
-          <div className="h-2 bg-slate-100 mt-6 rounded-full relative overflow-hidden">
-            <div className="absolute h-full bg-gradient-to-l from-purple-500 to-blue-500 rounded-full transition-all duration-700" style={{ width: `${(currentStep / (steps.length - 1)) * 100}%`, right: 0 }}></div>
+          <div className="h-3 bg-slate-100 mt-8 rounded-full relative overflow-hidden shadow-inner">
+            <div className="absolute h-full bg-gradient-to-l from-green-500 via-purple-500 to-blue-500 rounded-full transition-all duration-700 shadow-lg" style={{ width: `${(currentStep / (steps.length - 1)) * 100}%`, right: 0 }}></div>
           </div>
+          <p className="text-center text-xs text-slate-500 mt-4 font-bold">שלב {currentStep + 1} מתוך {steps.length}</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="lg:col-span-1 bg-white rounded-[2rem] shadow-lg p-4 border border-slate-100">
-            <div className="aspect-video rounded-xl overflow-hidden bg-slate-100 shadow-inner relative group">
-              <iframe
-                className="w-full h-full"
-                src={videoUrl}
-                title="סרטון הדמיה"
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-              <div className="absolute top-3 left-3 bg-purple-600 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2">
-                <Sparkles size={12} /> סרטון הדרכה
-              </div>
-            </div>
-          </div>
-        </div>
 
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           {currentStep === 0 && (
@@ -210,23 +203,71 @@ const ClientJourneyPortal: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-4 border-blue-500 flex flex-col">
                   <div className="flex items-center gap-4 mb-6"><div className="bg-blue-50 p-4 rounded-2xl text-blue-600"><BookOpen size={32} /></div><h4 className="text-xl font-black text-slate-800">איך מכינים חידון?</h4></div>
-                  <p className="text-sm text-slate-500 mb-6 font-medium">הכניסו שאלות, תמונות וסרטונים באתר הכנת החידונים האישי שלכם.</p>
-                  <a href="https://app.funclickgames.com/account/?ps=clickkef" target="_blank" rel="noopener noreferrer" className="mt-auto bg-blue-600 text-white px-6 py-4 rounded-2xl font-bold flex items-center justify-center gap-2">כניסה לאתר ההכנה <ExternalLink size={18} /></a>
+                  <p className="text-sm text-slate-600 mb-4 font-medium leading-relaxed">בשביל להכין חידון עליכם להכנס לקישור הזה בו תוכלו להכין את החידון שלכם.</p>
+                  <div className="bg-amber-50 border-r-4 border-amber-400 rounded-xl p-4 mb-6">
+                    <p className="text-xs text-amber-900 font-bold leading-relaxed"><strong className="text-amber-700">⚠️ שימו לב!</strong> בפעם הראשונה עליכם לבצע הרשמה לאתר בכפתור הוורוד, ולא על "התחבר". יש גם אפשרות להתחבר דרך חשבון גוגל.</p>
+                  </div>
+                  <a href="https://app.funclickgames.com/account/?ps=clickkef" target="_blank" rel="noopener noreferrer" className="mt-auto bg-blue-600 text-white px-6 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-all">כניסה לאתר ההכנה <ExternalLink size={18} /></a>
                 </div>
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border-t-4 border-pink-500 flex flex-col">
-                  <div className="flex items-center gap-4 mb-4"><div className="bg-pink-50 p-4 rounded-2xl text-pink-600"><Download size={28} /></div><h4 className="text-xl font-black text-slate-800">חומרי עזר</h4></div>
-                  <div className="space-y-3 flex-1">
-                    <a href={GUIDE_PDF_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl bg-pink-50 hover:bg-pink-100 border border-pink-100 text-pink-800 font-bold text-sm">
-                      <Download size={20} /> הורדת קובץ הדרכה – איך מכינים חידון
-                    </a>
-                    <a href={EXCEL_BLANK_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl bg-green-50 hover:bg-green-100 border border-green-100 text-green-800 font-bold text-sm">
-                      <FileSpreadsheet size={20} /> קובץ אקסל ריק (פורמט שלנו)
-                    </a>
-                    <a href={EXCEL_QUESTIONS_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 text-emerald-800 font-bold text-sm">
-                      <FileSpreadsheet size={20} /> מאגר שאלות (אקסל)
-                    </a>
+                  <div className="flex items-center gap-4 mb-6"><div className="bg-pink-50 p-4 rounded-2xl text-pink-600"><Download size={32} /></div><h4 className="text-xl font-black text-slate-800">חומרי עזר</h4></div>
+                  <div className="space-y-6 flex-1">
+                    {/* Icon 1: Instruction Booklet */}
+                    <div className="border-2 border-blue-100 rounded-2xl p-5 hover:shadow-lg hover:border-blue-300 transition-all">
+                      <div className="flex items-start gap-4">
+                        <div className="bg-blue-100 p-4 rounded-full text-blue-600 shrink-0">
+                          <BookOpen size={28} />
+                        </div>
+                        <div className="flex-1">
+                          <h5 className="text-base font-black text-slate-800 mb-2">📖 חוברת הדרכה</h5>
+                          <p className="text-xs text-slate-600 leading-relaxed mb-3">בחוברת תמצאו הדרכה מפורטת איך מכינים חידון, בחוברת יש גם מענה לכל השאלות שלכם. אם לא מצאתם מענה הנכם מוזמנים ליצור קשר איתנו.</p>
+                          <a href={GUIDE_PDF_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs font-bold text-blue-600 hover:underline">
+                            <Download size={14} /> הורדת החוברת
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Icon 2: Excel Download */}
+                    <div className="border-2 border-green-100 rounded-2xl p-5 hover:shadow-lg hover:border-green-300 transition-all">
+                      <div className="flex items-start gap-4">
+                        <div className="bg-green-100 p-4 rounded-full text-green-600 shrink-0">
+                          <FileSpreadsheet size={28} />
+                        </div>
+                        <div className="flex-1">
+                          <h5 className="text-base font-black text-slate-800 mb-2">📥 קישור להורדת קובץ אקסל בפורמט ייעודי</h5>
+                          <p className="text-xs text-slate-600 leading-relaxed mb-2">בקישור זה תוכלו להוריד קובץ אקסל ייעודי שבו תוכלו להזין את השאלות שלכם ולהעלות בקלות לחידון שלכם.</p>
+                          <div className="bg-amber-50 border-r-2 border-amber-400 rounded-lg p-2 mb-3">
+                            <p className="text-[11px] text-amber-900 font-semibold">⚠️ שימו לב! עליכם לוודא שהורדתם את הקובץ. אין אפשרות להכין את זה בגוגל דרייב.</p>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mb-3 italic">הוראות העלאת אקסל – עמוד 10 בחוברת ההדרכה</p>
+                          <a href={EXCEL_BLANK_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs font-bold text-green-600 hover:underline">
+                            <Download size={14} /> הורדת קובץ אקסל ייעודי
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Icon 3: Question Database */}
+                    <div className="border-2 border-purple-100 rounded-2xl p-5 hover:shadow-lg hover:border-purple-300 transition-all">
+                      <div className="flex items-start gap-4">
+                        <div className="bg-purple-100 p-4 rounded-full text-purple-600 shrink-0">
+                          <List size={28} />
+                        </div>
+                        <div className="flex-1">
+                          <h5 className="text-base font-black text-slate-800 mb-2">📚 מאגר שאלות</h5>
+                          <p className="text-xs text-slate-600 leading-relaxed mb-2">מצורף מאגר שאלות בסיסי בקובץ אקסל. אם הנכם מעונינים להוסיף שאלות מתוך קובץ זה, עליכם להעתיק את השורות של השאלה + התשובות לתוך האקסל הייעודי.</p>
+                          <div className="bg-blue-50 border-r-2 border-blue-400 rounded-lg p-2 mb-3">
+                            <p className="text-[11px] text-blue-900 font-semibold">💡 שימו לב: אנו ממליצים להעזר באפשרות הוספת שאלות מתוך המאגר הקיים באתר. יש בו יותר שאלות והוספת השאלות מתבצעת בקלות ובמהירות.</p>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mb-3 italic">הוראות הוספת שאלות מתוך המאגר – עמוד 7 בחוברת ההדרכה</p>
+                          <a href={EXCEL_QUESTIONS_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs font-bold text-purple-600 hover:underline">
+                            <Download size={14} /> הורדת מאגר שאלות
+                          </a>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-xs text-amber-700 mt-3 font-medium">חשוב: אי אפשר לעבוד מתוך הדרייב – חובה להוריד את הקובץ למחשב. הוראות העלאת אקסל – עמוד 10.</p>
                 </div>
               </div>
               <div className="bg-white rounded-3xl p-6 shadow-xl border border-slate-100">
@@ -262,49 +303,93 @@ const ClientJourneyPortal: React.FC = () => {
           )}
 
           {currentStep === 2 && (
-            <div className="space-y-6">
-              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl p-8 text-white shadow-2xl">
-                <div className="flex items-start gap-6">
-                  <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center shrink-0">
-                    <PlayCircle size={32} />
-                  </div>
-                  <div className="flex-1 space-y-4">
-                    <h3 className="text-3xl font-black">סיימתם להכין את החידון שלכם! מה הלאה?</h3>
-                    <div className="space-y-2 text-white/90 text-sm leading-relaxed">
-                      <p><strong>1.</strong> באתר הכנת החידון אתם לוחצים על כפתור <strong>"הורדת משחק"</strong></p>
-                      <p><strong>2.</strong> מוודאים את סידור התשלום</p>
-                      <p><strong>3.</strong> אנו מקבלים את הבקשה שלכם, מאשרים את ההורדה, ואתם תקבלו למייל שלכם מייל עם קישור להורדת המשחק שלכם והוראות הפעלה.</p>
+            <div className="space-y-8">
+              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl p-10 text-white shadow-2xl text-center">
+                <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-full flex items-center justify-center mx-auto mb-6">
+                  <PlayCircle size={40} />
+                </div>
+                <h3 className="text-4xl font-black mb-4">🎉 סיימתם להכין את החידון שלכם!</h3>
+                <h4 className="text-2xl font-bold opacity-90">מה הלאה?</h4>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Option 1 */}
+                <div className="bg-white rounded-3xl p-8 shadow-xl border-2 border-purple-200 hover:border-purple-400 hover:shadow-2xl transition-all">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center text-3xl shrink-0">🎮</div>
+                    <div>
+                      <div className="text-lg font-black text-slate-800">אירוע קליקרים או קליקאורים</div>
+                      <div className="text-xs text-purple-600 font-bold">בהפעלת חברת קליכיף</div>
                     </div>
-                    <a href={ACTIVATION_GUIDE_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-white text-green-600 px-6 py-3 rounded-2xl font-black hover:bg-green-50 transition-all shadow-lg mt-4">
-                      <FileText size={20} /> להורדת חוברת הוראות הפעלת התוכנה לחצו כאן
-                    </a>
+                  </div>
+                  <p className="text-sm text-slate-600 leading-relaxed font-medium">סיימתם את החלק שלכם! מכאן והלאה אנחנו נמשיך את התהליך.</p>
+                  <div className="mt-6 bg-green-50 border-r-4 border-green-400 rounded-xl p-4">
+                    <p className="text-xs text-green-900 font-bold">✅ אין צורך בפעולה נוספת מצדכם</p>
+                  </div>
+                </div>
+
+                {/* Option 2 */}
+                <div className="bg-white rounded-3xl p-8 shadow-xl border-2 border-blue-200 hover:border-blue-400 hover:shadow-2xl transition-all">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-3xl shrink-0">🎯</div>
+                    <div>
+                      <div className="text-lg font-black text-slate-800">קליק פור יו</div>
+                      <div className="text-xs text-blue-600 font-bold">אירוע קליקרים בהפעלה עצמית</div>
+                    </div>
+                  </div>
+                  <div className="space-y-3 text-sm text-slate-700 leading-relaxed">
+                    <p className="font-bold text-slate-800">📋 השלבים:</p>
+                    <p><strong>1.</strong> עליכם לוודא את סידור התשלום</p>
+                    <p><strong>2.</strong> ללחוץ על כפתור <strong>"שליחת בקשה להורדת משחק"</strong> באתר הכנת החידון</p>
+                    <p><strong>3.</strong> אנו מקבלים את הבקשה שלכם, מאשרים את ההורדה, ואתם תקבלו למייל שלכם מייל עם קישור להורדת המשחק שלכם והוראות הפעלה.</p>
+                  </div>
+                </div>
+
+                {/* Option 3 */}
+                <div className="bg-white rounded-3xl p-8 shadow-xl border-2 border-amber-200 hover:border-amber-400 hover:shadow-2xl transition-all">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center text-3xl shrink-0">📞</div>
+                    <div>
+                      <div className="text-lg font-black text-slate-800">פון קליק</div>
+                      <div className="text-xs text-amber-600 font-bold">חידון טלפוני</div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-4 italic">שכל המשתתפים נמצאים באותו אולם</p>
+                  <div className="space-y-3 text-sm text-slate-700 leading-relaxed">
+                    <p className="font-bold text-slate-800">📋 השלבים:</p>
+                    <p><strong>1.</strong> עליכם לוודא את סידור התשלום</p>
+                    <p><strong>2.</strong> ללחוץ על כפתור <strong>"שליחת בקשה להורדת משחק טלפוני בלבד"</strong> באתר הכנת החידון. בחרו את מס׳ המשתתפים, סמנו את אופן התשלום כפי שסוכם איתנו ואשרו את שליחת הבקשה</p>
+                    <p><strong>3.</strong> אנו מקבלים את הבקשה שלכם, מאשרים את ההורדה, ואתם תקבלו למייל שלכם מייל עם קישור להורדת המשחק שלכם והוראות הפעלה.</p>
+                    <p><strong>4.</strong> מספר הטלפון והחדר שדרכו המשתתפים מתחברים יופיע על המסך עם הפעלת המשחק בפעם הראשונה</p>
+                  </div>
+                </div>
+
+                {/* Option 4 */}
+                <div className="bg-white rounded-3xl p-8 shadow-xl border-2 border-teal-200 hover:border-teal-400 hover:shadow-2xl transition-all">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center text-3xl shrink-0">🎥</div>
+                    <div>
+                      <div className="text-lg font-black text-slate-800">טוק קליק</div>
+                      <div className="text-xs text-teal-600 font-bold">חדר ועידה בשידור חי עם חידון קליקרים</div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-4 italic">המשתתפים מחוברים מהבית בשיחת טלפון</p>
+                  <div className="space-y-3 text-sm text-slate-700 leading-relaxed">
+                    <p className="font-bold text-slate-800">📋 השלבים:</p>
+                    <p><strong>1.</strong> עליכם לוודא את סידור התשלום</p>
+                    <p><strong>2.</strong> ללחוץ על כפתור <strong>"שליחת בקשה להורדת משחק טלפוני בלבד"</strong> באתר הכנת החידון. בחרו את מס׳ המשתתפים, סמנו את אופן התשלום כפי שסוכם איתנו ואשרו את שליחת הבקשה</p>
+                    <p><strong>3.</strong> אנו מקבלים את הבקשה שלכם, מאשרים את ההורדה, ואתם תקבלו למייל שלכם מייל עם קישור להורדת המשחק שלכם והוראות הפעלה.</p>
+                    <p><strong>4.</strong> מספר הטלפון והחדר שדרכו המשתתפים מתחברים יופיע על המסך עם הפעלת המשחק בפעם הראשונה. המנחה מפעיל את המשחק מהמחשב שלו ורואה את נתוני ההצבעה וכו׳</p>
                   </div>
                 </div>
               </div>
-              <div className="bg-white rounded-3xl p-6 shadow-xl border border-slate-100">
-                <h4 className="text-lg font-black text-slate-800 mb-4">חוברת ההדרכה להפעלת התוכנה</h4>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  <div className="lg:col-span-2 bg-slate-50 rounded-2xl p-4 overflow-hidden">
-                    <div className="overflow-y-auto max-h-[600px] space-y-4">
-                      {ACTIVATION_TOC.map((item) => (
-                        <img key={item.page} src={activationPagePath(item.page)} alt={item.label} className="w-full rounded-lg shadow-md" />
-                      ))}
-                    </div>
-                  </div>
-                  <div className="lg:col-span-1">
-                    <div className="bg-slate-50 rounded-2xl p-4 sticky top-4">
-                      <h5 className="text-sm font-black text-slate-700 mb-3">ראשי פרקים</h5>
-                      <div className="space-y-2 overflow-y-auto max-h-[560px]">
-                        {ACTIVATION_TOC.map((item, idx) => (
-                          <a key={idx} href={`#activation-page-${item.page}`} className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-white hover:bg-green-50 border border-slate-100 text-right text-xs font-bold text-slate-700 transition-colors">
-                            <span className="flex-1">{item.label}</span>
-                            <span className="text-slate-400 text-[10px]">עמ׳ {item.page}</span>
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+
+              <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-3xl p-8 text-white shadow-2xl text-center">
+                <h4 className="text-2xl font-black mb-4">📚 רוצים עוד מידע?</h4>
+                <p className="text-white/90 mb-6">להורדת חוברת הוראות הפעלת התוכנה:</p>
+                <a href={ACTIVATION_GUIDE_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-3 bg-white text-purple-600 px-8 py-4 rounded-2xl font-black hover:bg-purple-50 transition-all shadow-lg text-lg">
+                  <FileText size={24} /> הורדת חוברת הפעלה
+                </a>
               </div>
             </div>
           )}

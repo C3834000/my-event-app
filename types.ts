@@ -106,6 +106,14 @@ export interface Lead {
   followUpReminder?: string; 
 }
 
+export enum TaskFrequency {
+  OneTime = 'חד פעמית',
+  Daily = 'יומית',
+  Weekly = 'שבועית',
+  Monthly = 'חודשית',
+  Periodic = 'תקופתית'
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -118,6 +126,27 @@ export interface Task {
   completedDate?: string;
   reminderDate?: string;
   mondayId?: string;
+  waitingDays?: number;
+  potentialRevenue?: number;
+  easeOfExecution?: number;
+  requiredResources?: string;
+  frequency?: TaskFrequency;
+  subTasks?: SubTask[];
+}
+
+export interface SubTask {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+  priority: TaskPriority;
+  estimatedTimeMin: number;
+  progress: number;
+  dueDate?: string;
+  completedDate?: string;
+  waitingDays?: number;
+  potentialRevenue?: number;
+  easeOfExecution?: number;
+  requiredResources?: string;
 }
 
 export type FormFieldType = 'text' | 'number' | 'date' | 'time' | 'email' | 'tel' | 'select' | 'textarea' | 'checkbox';

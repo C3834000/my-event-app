@@ -258,7 +258,7 @@ const EditEventModal: React.FC<{ event?: Partial<AppEvent>; onClose: () => void;
       if (!newCustomer.name.trim()) return;
       const c = { id: `c_${Date.now()}`, name: newCustomer.name.trim(), phone: newCustomer.phone.trim() || '-', email: newCustomer.email.trim() };
       addCustomer(c);
-      setFormData((prev: any) => ({ ...prev, customerId: c.id, title: `אירוע – ${c.name}`, phone: c.phone, email: c.email }));
+      setFormData((prev: any) => ({ ...prev, customerId: c.id, phone: c.phone, email: c.email }));
       setNewCustomer({ name: '', phone: '', email: '' });
       setShowAddCustomer(false);
       setShowCustomerList(false);
@@ -282,7 +282,7 @@ const EditEventModal: React.FC<{ event?: Partial<AppEvent>; onClose: () => void;
                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 max-h-48 overflow-y-auto">
                           <button type="button" onClick={() => { setFormData((prev: any) => ({ ...prev, customerId: '', title: prev.title, phone: prev.phone, email: prev.email })); setShowCustomerList(false); setCustomerSearch(''); }} className="w-full p-2 text-right text-slate-500 hover:bg-slate-50 text-sm font-bold">ללא לקוח</button>
                           {filteredCustomers.map(c => (
-                            <button type="button" key={c.id} onClick={() => { setFormData(prev => ({ ...prev, customerId: c.id, title: `אירוע – ${c.name}`, phone: c.phone, email: c.email })); setShowCustomerList(false); setCustomerSearch(''); }} className="w-full p-2 text-right hover:bg-purple-50 text-sm font-bold border-t border-slate-100">{c.name} – {c.phone}</button>
+                            <button type="button" key={c.id} onClick={() => { setFormData(prev => ({ ...prev, customerId: c.id, phone: c.phone, email: c.email })); setShowCustomerList(false); setCustomerSearch(''); }} className="w-full p-2 text-right hover:bg-purple-50 text-sm font-bold border-t border-slate-100">{c.name} – {c.phone}</button>
                           ))}
                         </div>
                       )}

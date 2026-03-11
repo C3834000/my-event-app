@@ -102,7 +102,9 @@ const CustomersBoard: React.FC = () => {
     try {
       await sendPortalEmailForCustomer(c.id);
       alert('פורטל נשלח למייל בהצלחה!');
+      setTimeout(() => window.location.reload(), 500);
     } catch (e) {
+      console.error('❌ שגיאה בשליחת פורטל:', e);
       alert('שגיאה בשליחת המייל או שלא הוגדר אימייל ללקוח.');
     } finally {
       setSendingPortalId(null);
@@ -201,7 +203,7 @@ const CustomersBoard: React.FC = () => {
                     {expandedLetters[letter] && (
                         <div className="divide-y divide-slate-100">
                             {list.map((c: Customer) => {
-                                const cEvents = events.filter(ev => ev.customerId === c.id || ev.phone === c.phone || (ev.email && ev.email === c.email));
+                                const cEvents = events.filter(ev => ev.customerId === c.id);
                                 const totalPaid = cEvents.reduce((sum, ev) => sum + (ev.paidAmount || 0), 0);
                                 const totalDebt = cEvents.reduce((sum, ev) => sum + (ev.amount - (ev.paidAmount || 0)), 0);
                                 const isExpanded = expandedCustomer === c.id;

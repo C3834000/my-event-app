@@ -265,8 +265,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               </div>
 
               ${(leadId || customerId) ? `<div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
-                <p style="color: white; margin: 0 0 16px; font-size: 16px; font-weight: 700;">🚀 המשך לשלב הבא - הכנת החידון!</p>
-                <a href="https://my-app-kappa-beige-46.vercel.app/#/portal/${leadId || customerId}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 900; font-size: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">היכנס לפורטל האישי שלך</a>
+                <p style="color: white; margin: 0 0 16px; font-size: 18px; font-weight: 800; line-height: 1.6;">✨ זה הזמן להתקדם לשלב הכנת החידון שלכם!</p>
+                <p style="color: white; margin: 0 0 20px; font-size: 15px; font-weight: 600; opacity: 0.95;">לחצו על הכפתור להמשך מרגש 🎉</p>
+                <a href="https://my-app-kappa-beige-46.vercel.app/#/portal/${leadId || customerId}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 19px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: all 0.3s;">🎯 כניסה לפורטל האישי שלכם ←</a>
               </div>` : ''}
 
               <div style="background: #fef3c7; border-right: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 24px 0;">
