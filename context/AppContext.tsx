@@ -161,6 +161,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [events, customers, leads, tasks, settings, customForms, isLoaded]);
 
+  useEffect(() => {
+    const checkMidnight = () => {
+      const now = new Date();
+      if (now.getHours() === 23 && now.getMinutes() === 59) {
+        console.log('🌙 איפוס יומי של פעילויות ב-23:59');
+        setActivities([]);
+      }
+    };
+    const interval = setInterval(checkMidnight, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   const addActivity = (type: Activity['type'], message: string) => {
     setActivities(prev => [{ id: Date.now().toString(), type, message, timestamp: new Date() }, ...prev].slice(0, 15));
   };
@@ -379,20 +391,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addEvent = (event: AppEvent) => setEvents(prev => [event, ...prev]);
   const updateEventStatus = (id: string, status: EventStatus) => setEvents(prev => prev.map(e => e.id === id ? { ...e, status } : e));
-  const updateEvent = (id: string, updates: Partial<AppEvent>) => setEvents(prev => prev.map(e => {
-    if (e.id !== id) return e;
-    const updated = { ...e, ...updates };
-    const isPaidStatus = [PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck, PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider].includes(updated.paymentStatus);
-    if (isPaidStatus && updates.paymentStatus && updated.paidAmount < updated.amount) {
-      updated.paidAmount = updated.amount;
+  const updateEvent = (id: string, updates: Partial<AppEvent>) => {
+    const event = events.find(e => e.id === id);
+    if (event && updates.paymentStatus && updates.paymentStatus !== event.paymentStatus) {
+      addActivity('system', `סטטוס אירוע עודכן: ${event.title} - ${updates.paymentStatus}`);
     }
-    return updated;
-  }));
+    setEvents(prev => prev.map(e => {
+      if (e.id !== id) return e;
+      const updated = { ...e, ...updates };
+      const isPaidStatus = [PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck, PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider].includes(updated.paymentStatus);
+      if (isPaidStatus && updates.paymentStatus && updated.paidAmount < updated.amount) {
+        updated.paidAmount = updated.amount;
+      }
+      return updated;
+    }));
+  };
   const deleteEvent = (id: string) => setEvents(prev => prev.filter(e => e.id !== id));
-  const addCustomer = (customer: Customer) => setCustomers(prev => [...prev, customer]);
+  const addCustomer = (customer: Customer) => {
+    setCustomers(prev => [...prev, customer]);
+    addActivity('system', `לקוח חדש נוסף: ${customer.name}`);
+  };
   const updateCustomer = (id: string, updates: Partial<Customer>) => setCustomers(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   const getCustomerById = (id: string) => customers.find(c => c.id === id);
-  const addLead = (lead: Lead) => setLeads(prev => [...prev, lead]);
+  const addLead = (lead: Lead) => {
+    setLeads(prev => [...prev, lead]);
+    addActivity('system', `ליד חדש נוסף: ${lead.name}`);
+  };
   const updateLeadStatus = (id: string, status: LeadStatus) => setLeads(prev => prev.map(l => l.id === id ? { ...l, status } : l));
   const updateLead = (id: string, updates: Partial<Lead>) => setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
   const convertLeadToCustomer = (leadId: string) => {
@@ -403,9 +427,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: LeadStatus.Converted } : l));
     addActivity('system', `ליד ${lead.name} הומר ללקוח בהצלחה`);
   };
-  const addTask = (task: Task) => setTasks(prev => [task, ...prev]);
-  const updateTask = (id: string, updates: Partial<Task>) => setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-  const toggleTask = (id: string) => setTasks(prev => prev.map(t => t.id === id ? { ...t, isCompleted: !t.isCompleted, progress: !t.isCompleted ? 100 : 0 } : t));
+  const addTask = (task: Task) => {
+    setTasks(prev => [task, ...prev]);
+    addActivity('system', `משימה חדשה נוספה: ${task.title}`);
+  };
+  const updateTask = (id: string, updates: Partial<Task>) => {
+    const task = tasks.find(t => t.id === id);
+    if (task && updates.isCompleted !== undefined && updates.isCompleted !== task.isCompleted) {
+      addActivity('system', `משימה ${updates.isCompleted ? 'הושלמה' : 'בוטלה'}: ${task.title}`);
+    }
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  };
+  const toggleTask = (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (task) {
+      addActivity('system', `משימה ${task.isCompleted ? 'בוטלה' : 'הושלמה'}: ${task.title}`);
+    }
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, isCompleted: !t.isCompleted, progress: !t.isCompleted ? 100 : 0 } : t));
+  };
   const updateTaskProgress = (id: string, progress: number) => setTasks(prev => prev.map(t => t.id === id ? { ...t, progress, isCompleted: progress === 100 } : t));
   const deleteTask = (id: string) => setTasks(prev => prev.filter(t => t.id !== id));
   const syncAllEventsWithCustomers = () => {
