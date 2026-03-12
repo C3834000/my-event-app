@@ -4,9 +4,10 @@ import { useApp } from '../context/AppContext';
 import { 
   AlertCircle, Briefcase, Calendar as CalendarIcon, 
   CheckCircle2, Check, Zap, Clock, MapPin, Users, Mail, RefreshCw, ArrowLeft, ArrowRight, TrendingUp,
-  Target, PhoneCall, MessageSquare, Facebook, Instagram, Bell, StickyNote
+  Target, PhoneCall, MessageSquare, Facebook, Instagram, Bell, StickyNote, Download, Upload
 } from 'lucide-react';
 import { EventStatus, EventType } from '../types';
+import { downloadBackupFile, restoreFromAutoBackup } from '../services/autoBackup';
 
 const HOLIDAYS: Record<string, string> = {
   "14-03": "פורים",
@@ -144,6 +145,46 @@ const Dashboard: React.FC = () => {
   const [newNoteText, setNewNoteText] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleRestoreFromFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const backup = JSON.parse(content);
+        
+        if (backup.data && backup.version) {
+          const backupData = typeof backup.data === 'string' ? JSON.parse(backup.data) : backup.data;
+          localStorage.setItem('ME_CFM_STORAGE_V12', JSON.stringify(backupData));
+          alert(`✅ שוחזרו ${backup.summary?.events || 0} אירועים, ${backup.summary?.customers || 0} לקוחות!`);
+          window.location.reload();
+        } else {
+          alert('❌ קובץ גיבוי לא תקין');
+        }
+      } catch (err) {
+        console.error('❌ שגיאה בשחזור:', err);
+        alert('❌ שגיאה בקריאת קובץ הגיבוי');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const loadInitialBackup = async () => {
+    try {
+      const response = await fetch('/initial-backup.json');
+      const backup = await response.json();
+      localStorage.setItem('ME_CFM_STORAGE_V12', JSON.stringify(backup.data));
+      alert(`✅ שוחזרו ${backup.summary.events} אירועים, ${backup.summary.customers} לקוחות, ${backup.summary.tasks} משימות!`);
+      window.location.reload();
+    } catch (err) {
+      console.error('❌ שגיאה בטעינת גיבוי ראשוני:', err);
+      alert('❌ שגיאה בטעינת הגיבוי');
+    }
+  };
 
   useEffect(() => {
     try {
@@ -274,8 +315,27 @@ const Dashboard: React.FC = () => {
   const todayGregorian = new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const todayHebrew = getHebrewDayGematria(new Date());
 
+  const hasNoData = events.length === 0 && customers.length === 0;
+
   return (
     <div className="h-[calc(100vh-2rem)] overflow-hidden dir-rtl flex flex-col gap-3 pb-4">
+      {/* Warning if no data */}
+      {hasNoData && (
+        <div className="shrink-0 bg-red-50 border-2 border-red-300 rounded-xl p-4 flex items-start gap-3">
+          <AlertCircle size={24} className="text-red-600 shrink-0"/>
+          <div className="flex-1">
+            <h3 className="font-black text-red-800 mb-2">⚠️ אין נתונים במערכת!</h3>
+            <p className="text-sm text-red-700 mb-3">נראה שהנתונים נמחקו. לחץ על הכפתור להחזרת כל הנתונים שלך!</p>
+            <button 
+              onClick={loadInitialBackup}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-700 transition-all shadow-md"
+            >
+              🔄 שחזר את כל הנתונים (488 אירועים, 72 לקוחות, 114 משימות)
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Top Header with Date and KPI Cards */}
       <div className="shrink-0">
         <div className="flex justify-between items-center mb-3">
@@ -285,9 +345,35 @@ const Dashboard: React.FC = () => {
               {todayGregorian} <span className="text-purple-600">• {todayHebrew}</span>
             </p>
           </div>
-          <button onClick={() => setRefreshKey(k => k + 1)} className="flex items-center gap-2 bg-purple-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-md hover:bg-purple-700 transition-all text-sm">
-            <RefreshCw size={14} /> רענן
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => {
+                downloadBackupFile();
+                alert('✅ קובץ גיבוי הורד בהצלחה! שמור אותו במקום בטוח!');
+              }} 
+              className="flex items-center gap-2 bg-green-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-md hover:bg-green-700 transition-all text-sm"
+              title="הורד גיבוי של כל הנתונים"
+            >
+              <Download size={14} /> גיבוי
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleRestoreFromFile}
+              className="hidden"
+            />
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-md hover:bg-blue-700 transition-all text-sm"
+              title="שחזר מקובץ גיבוי"
+            >
+              <Upload size={14} /> שחזר
+            </button>
+            <button onClick={() => setRefreshKey(k => k + 1)} className="flex items-center gap-2 bg-purple-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-md hover:bg-purple-700 transition-all text-sm">
+              <RefreshCw size={14} /> רענן
+            </button>
+          </div>
         </div>
         
         {/* KPI Cards Row */}

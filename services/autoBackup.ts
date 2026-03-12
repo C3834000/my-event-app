@@ -92,6 +92,45 @@ export function getBackupInfo(): BackupData | null {
 }
 
 /**
+ * הורדת גיבוי כקובץ אוטומטית
+ */
+export function downloadBackupFile(): void {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (!data) {
+      console.warn('⚠️ אין נתונים לגיבוי');
+      return;
+    }
+
+    const parsed = JSON.parse(data);
+    const backup = {
+      timestamp: new Date().toISOString(),
+      version: 'V12',
+      data: parsed,
+      summary: {
+        events: parsed.events?.length || 0,
+        customers: parsed.customers?.length || 0,
+        leads: parsed.leads?.length || 0,
+        tasks: parsed.tasks?.length || 0
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const dateStr = new Date().toISOString().split('T')[0];
+    a.download = `clickef-backup-${dateStr}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    console.log('✅ קובץ גיבוי הורד:', backup.summary);
+  } catch (err) {
+    console.error('❌ שגיאה בהורדת גיבוי:', err);
+  }
+}
+
+/**
  * הפעלת גיבוי אוטומטי מחזורי
  */
 export function startAutoBackup(): void {
@@ -100,14 +139,25 @@ export function startAutoBackup(): void {
     createAutoBackup();
   }
 
-  // גיבוי כל 24 שעות
+  // גיבוי כל 24 שעות + הורדת קובץ
   setInterval(() => {
     if (shouldBackup()) {
       createAutoBackup();
+      downloadBackupFile();
     }
   }, 60 * 60 * 1000); // בדיקה כל שעה
 
-  console.log('🔄 גיבוי אוטומטי הופעל');
+  // בדיקה יומית ב-23:00 להורדת גיבוי
+  const checkDailyBackup = () => {
+    const now = new Date();
+    if (now.getHours() === 23 && now.getMinutes() === 0) {
+      downloadBackupFile();
+      console.log('💾 גיבוי יומי הורד אוטומטית');
+    }
+  };
+  setInterval(checkDailyBackup, 60000);
+
+  console.log('🔄 גיבוי אוטומטי הופעל - יוריד קובץ כל יום ב-23:00');
 }
 
 /**
@@ -177,6 +227,7 @@ if (typeof window !== 'undefined') {
     create: createAutoBackup,
     restore: restoreFromAutoBackup,
     export: exportToFile,
+    download: downloadBackupFile,
     info: getBackupInfo,
     validate: validateData
   };
