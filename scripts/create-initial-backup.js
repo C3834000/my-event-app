@@ -27,6 +27,19 @@ function parseCSV(csv) {
   return rows;
 }
 
+function convertDateToISO(dateStr) {
+  if (!dateStr || dateStr.trim() === '') return '';
+  
+  const parts = dateStr.split('/');
+  if (parts.length !== 3) return '';
+  
+  const day = parts[0].padStart(2, '0');
+  const month = parts[1].padStart(2, '0');
+  const year = parts[2];
+  
+  return `${year}-${month}-${day}`;
+}
+
 const eventsData = parseCSV(eventsCSV);
 const customersData = parseCSV(customersCSV);
 const tasksData = parseCSV(tasksCSV);
@@ -44,7 +57,7 @@ const backup = {
     events: eventsData.map((e, idx) => ({
       id: `e_${Date.now() + idx}`,
       title: e.Name || 'אירוע',
-      date: e['תאריך קיום האירוע'] || '',
+      date: convertDateToISO(e['תאריך קיום האירוע']),
       startTime: '10:00',
       endTime: '12:00',
       phone: e['מס\' טלפון: (המס\' שיהיה זמין בעת האירוע)'] || '',
@@ -78,10 +91,15 @@ const backup = {
       isCompleted: t['סטטוס']?.includes('בוצע 100') || false,
       progress: t['סטטוס']?.includes('בוצע 25') ? 25 : t['סטטוס']?.includes('בוצע 50') ? 50 : t['סטטוס']?.includes('בוצע 75') ? 75 : t['סטטוס']?.includes('בוצע 100') ? 100 : 0,
       estimatedTimeMin: Number(t['משך זמן משוער בדקות']) || 0,
-      dueDate: t['תאריך יעד'] || '',
+      dueDate: convertDateToISO(t['תאריך יעד']),
       notes: '',
       customerId: '',
-      eventId: ''
+      eventId: '',
+      waitingDays: 0,
+      potentialRevenue: 0,
+      easeOfExecution: 0,
+      requiredResources: '',
+      frequency: 'one-time'
     })),
     leads: [],
     settings: {
