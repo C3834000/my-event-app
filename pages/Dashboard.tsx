@@ -146,18 +146,28 @@ const Dashboard: React.FC = () => {
   const [editingNoteText, setEditingNoteText] = useState('');
 
   useEffect(() => {
-    const saved = localStorage.getItem('dailyNotes');
-    if (saved) {
-      try {
-        setDailyNotes(JSON.parse(saved));
-      } catch (e) {
-        console.error('Error loading daily notes:', e);
+    try {
+      const saved = localStorage.getItem('dailyNotes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setDailyNotes(parsed);
+        }
       }
+    } catch (e) {
+      console.error('Error loading daily notes:', e);
+      setDailyNotes([]);
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('dailyNotes', JSON.stringify(dailyNotes));
+    if (dailyNotes.length > 0 || dailyNotes.length === 0) {
+      try {
+        localStorage.setItem('dailyNotes', JSON.stringify(dailyNotes));
+      } catch (e) {
+        console.error('Error saving daily notes:', e);
+      }
+    }
   }, [dailyNotes]);
 
   const currentYear = currentDate.getFullYear();

@@ -242,12 +242,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return newEvents;
     });
     addActivity('system', `הזמנה חדשה התקבלה מהפורטל - ${data.name}`);
-    
-    setTimeout(() => {
-      const dataToSave = { events: [event, ...events], customers, leads, tasks, settings, customForms };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
-      console.log('💾 שמירה מאולצת של האירוע החדש ל-localStorage');
-    }, 100);
 
     const toEmail = (data.email || '').trim();
     if (toEmail) {
