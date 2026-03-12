@@ -37,25 +37,25 @@ interface AppContextType {
   settings: AppSettings;
   updateSettings: (newSettings: Partial<AppSettings>) => void;
   sendPortalEmailForCustomer: (customerId: string) => Promise<{ success: boolean; email: string; url: string }>;
-  addEvent: (event: AppEvent) => void;
+  addEvent: (event: AppEvent) => Promise<void>;
   updateEventStatus: (id: string, status: EventStatus) => void;
-  updateEvent: (id: string, updates: Partial<AppEvent>) => void;
-  deleteEvent: (id: string) => void;
-  addCustomer: (customer: Customer) => void;
-  updateCustomer: (id: string, updates: Partial<Customer>) => void;
-  addLead: (lead: Lead) => void;
+  updateEvent: (id: string, updates: Partial<AppEvent>) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
+  addCustomer: (customer: Customer) => Promise<void>;
+  updateCustomer: (id: string, updates: Partial<Customer>) => Promise<void>;
+  addLead: (lead: Lead) => Promise<void>;
   updateLeadStatus: (id: string, status: LeadStatus) => void;
-  updateLead: (id: string, updates: Partial<Lead>) => void;
+  updateLead: (id: string, updates: Partial<Lead>) => Promise<void>;
   convertLeadToCustomer: (leadId: string) => void;
   handlePublicBookingSubmit: (data: any, leadId?: string) => Promise<{ eventId: string }>;
   sendBookingEmail: (leadId: string) => Promise<{ success: boolean; email: string; url: string }>;
   sendPortalEmail: (leadId: string) => Promise<{ success: boolean; email: string; url: string }>;
   sendEventUpdateEmail: (event: AppEvent) => Promise<void>;
-  addTask: (task: Task) => void;
-  updateTask: (id: string, updates: Partial<Task>) => void;
+  addTask: (task: Task) => Promise<void>;
+  updateTask: (id: string, updates: Partial<Task>) => Promise<void>;
   toggleTask: (id: string) => void;
   updateTaskProgress: (id: string, progress: number) => void;
-  deleteTask: (id: string) => void;
+  deleteTask: (id: string) => Promise<void>;
   importEvents: (data: any[]) => void;
   importCustomers: (data: any[]) => void;
   importTasks: (data: any[]) => void;
@@ -125,22 +125,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [integrations, setIntegrations] = useState({ googleCalendar: true, outlookCalendar: false });
   const [kpis, setKpis] = useState({ openDebt: 0, projectedIncome: 0, totalRevenue: 0, availableClickers: 500 });
 
-  const loadFromStorage = () => {
-    const savedData = localStorage.getItem(STORAGE_KEY);
-    if (savedData) {
-      const parsed = JSON.parse(savedData);
-      setEvents(parsed.events || []);
-      setCustomers(parsed.customers || []);
-      setLeads(parsed.leads || []);
-      setTasks(parsed.tasks || []);
-      if (parsed.settings) setSettings(parsed.settings);
-      if (parsed.customForms?.length) setCustomForms(parsed.customForms);
-    } else {
-      setEvents(mockEvents);
-      setCustomers(mockCustomers);
-      setLeads(mockLeads);
-      setTasks(mockTasks);
+  const loadFromStorage = async () => {
+    try {
+      console.log('☁️ טוען נתונים מהענן...');
+      
+      const [cloudEvents, cloudCustomers, cloudLeads, cloudTasks] = await Promise.all([
+        eventsService.getAll().catch(() => []),
+        customersService.getAll().catch(() => []),
+        leadsService.getAll().catch(() => []),
+        tasksService.getAll().catch(() => [])
+      ]);
+      
+      if (cloudEvents.length > 0 || cloudCustomers.length > 0 || cloudLeads.length > 0 || cloudTasks.length > 0) {
+        console.log('☁️ נתונים נטענו מהענן:', {
+          events: cloudEvents.length,
+          customers: cloudCustomers.length,
+          leads: cloudLeads.length,
+          tasks: cloudTasks.length
+        });
+        
+        setEvents(cloudEvents);
+        setCustomers(cloudCustomers);
+        setLeads(cloudLeads);
+        setTasks(cloudTasks);
+      } else {
+        console.log('💾 נתונים לא נמצאו בענן, טוען מ-localStorage...');
+        const savedData = localStorage.getItem(STORAGE_KEY);
+        if (savedData) {
+          const parsed = JSON.parse(savedData);
+          setEvents(parsed.events || []);
+          setCustomers(parsed.customers || []);
+          setLeads(parsed.leads || []);
+          setTasks(parsed.tasks || []);
+          if (parsed.settings) setSettings(parsed.settings);
+          if (parsed.customForms?.length) setCustomForms(parsed.customForms);
+        } else {
+          setEvents(mockEvents);
+          setCustomers(mockCustomers);
+          setLeads(mockLeads);
+          setTasks(mockTasks);
+        }
+      }
+    } catch (error) {
+      console.error('❌ שגיאה בטעינת נתונים:', error);
+      const savedData = localStorage.getItem(STORAGE_KEY);
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        setEvents(parsed.events || []);
+        setCustomers(parsed.customers || []);
+        setLeads(parsed.leads || []);
+        setTasks(parsed.tasks || []);
+        if (parsed.settings) setSettings(parsed.settings);
+        if (parsed.customForms?.length) setCustomForms(parsed.customForms);
+      }
     }
+    
     setIsLoaded(true);
   };
 
@@ -374,6 +413,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    try {
+      if (finalCustomerId && !customerId && !leadId) {
+        const newCustomer = customers.find(c => c.id === finalCustomerId);
+        if (newCustomer) {
+          await customersService.create(newCustomer);
+          console.log('☁️ לקוח חדש נשמר בענן:', newCustomer.name);
+        }
+      }
+      
+      await eventsService.create(event);
+      console.log('☁️ אירוע חדש נשמר בענן:', event.title);
+    } catch (error) {
+      console.error('❌ שגיאה בשמירת נתונים בענן:', error);
+    }
+
     return Promise.resolve({ eventId: event.id, customerId: finalCustomerId || '' });
   };
 
@@ -402,9 +456,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, email: lead.email || '', url: portalUrl };
   };
 
-  const addEvent = (event: AppEvent) => setEvents(prev => [event, ...prev]);
+  const addEvent = async (event: AppEvent) => {
+    setEvents(prev => [event, ...prev]);
+    try {
+      await eventsService.create(event);
+      console.log('☁️ אירוע נשמר בענן:', event.title);
+    } catch (error) {
+      console.error('❌ שגיאה בשמירת אירוע בענן:', error);
+    }
+  };
   const updateEventStatus = (id: string, status: EventStatus) => setEvents(prev => prev.map(e => e.id === id ? { ...e, status } : e));
-  const updateEvent = (id: string, updates: Partial<AppEvent>) => {
+  const updateEvent = async (id: string, updates: Partial<AppEvent>) => {
     const event = events.find(e => e.id === id);
     if (event && updates.paymentStatus && updates.paymentStatus !== event.paymentStatus) {
       addActivity('system', `סטטוס אירוע עודכן: ${event.title} - ${updates.paymentStatus}`);
@@ -418,20 +480,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return updated;
     }));
+    
+    try {
+      await eventsService.update(id, updates);
+      console.log('☁️ אירוע עודכן בענן');
+    } catch (error) {
+      console.error('❌ שגיאה בעדכון אירוע בענן:', error);
+    }
   };
-  const deleteEvent = (id: string) => setEvents(prev => prev.filter(e => e.id !== id));
-  const addCustomer = (customer: Customer) => {
+  const deleteEvent = async (id: string) => {
+    setEvents(prev => prev.filter(e => e.id !== id));
+    try {
+      await eventsService.delete(id);
+      console.log('☁️ אירוע נמחק מהענן');
+    } catch (error) {
+      console.error('❌ שגיאה במחיקת אירוע מהענן:', error);
+    }
+  };
+  const addCustomer = async (customer: Customer) => {
     setCustomers(prev => [...prev, customer]);
     addActivity('system', `לקוח חדש נוסף: ${customer.name}`);
+    try {
+      await customersService.create(customer);
+      console.log('☁️ לקוח נשמר בענן:', customer.name);
+    } catch (error) {
+      console.error('❌ שגיאה בשמירת לקוח בענן:', error);
+    }
   };
-  const updateCustomer = (id: string, updates: Partial<Customer>) => setCustomers(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  const updateCustomer = async (id: string, updates: Partial<Customer>) => {
+    setCustomers(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    try {
+      await customersService.update(id, updates);
+      console.log('☁️ לקוח עודכן בענן');
+    } catch (error) {
+      console.error('❌ שגיאה בעדכון לקוח בענן:', error);
+    }
+  };
   const getCustomerById = (id: string) => customers.find(c => c.id === id);
-  const addLead = (lead: Lead) => {
+  const addLead = async (lead: Lead) => {
     setLeads(prev => [...prev, lead]);
     addActivity('system', `ליד חדש נוסף: ${lead.name}`);
+    try {
+      await leadsService.create(lead);
+      console.log('☁️ ליד נשמר בענן:', lead.name);
+    } catch (error) {
+      console.error('❌ שגיאה בשמירת ליד בענן:', error);
+    }
   };
   const updateLeadStatus = (id: string, status: LeadStatus) => setLeads(prev => prev.map(l => l.id === id ? { ...l, status } : l));
-  const updateLead = (id: string, updates: Partial<Lead>) => setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+  const updateLead = async (id: string, updates: Partial<Lead>) => {
+    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+    try {
+      await leadsService.update(id, updates);
+      console.log('☁️ ליד עודכן בענן');
+    } catch (error) {
+      console.error('❌ שגיאה בעדכון ליד בענן:', error);
+    }
+  };
   const convertLeadToCustomer = (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
@@ -440,16 +545,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: LeadStatus.Converted } : l));
     addActivity('system', `ליד ${lead.name} הומר ללקוח בהצלחה`);
   };
-  const addTask = (task: Task) => {
+  const addTask = async (task: Task) => {
     setTasks(prev => [task, ...prev]);
     addActivity('system', `משימה חדשה נוספה: ${task.title}`);
+    try {
+      await tasksService.create(task);
+      console.log('☁️ משימה נשמרה בענן:', task.title);
+    } catch (error) {
+      console.error('❌ שגיאה בשמירת משימה בענן:', error);
+    }
   };
-  const updateTask = (id: string, updates: Partial<Task>) => {
+  const updateTask = async (id: string, updates: Partial<Task>) => {
     const task = tasks.find(t => t.id === id);
     if (task && updates.isCompleted !== undefined && updates.isCompleted !== task.isCompleted) {
       addActivity('system', `משימה ${updates.isCompleted ? 'הושלמה' : 'בוטלה'}: ${task.title}`);
     }
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    
+    try {
+      await tasksService.update(id, updates);
+      console.log('☁️ משימה עודכנה בענן');
+    } catch (error) {
+      console.error('❌ שגיאה בעדכון משימה בענן:', error);
+    }
   };
   const toggleTask = (id: string) => {
     const task = tasks.find(t => t.id === id);
@@ -459,7 +577,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTasks(prev => prev.map(t => t.id === id ? { ...t, isCompleted: !t.isCompleted, progress: !t.isCompleted ? 100 : 0 } : t));
   };
   const updateTaskProgress = (id: string, progress: number) => setTasks(prev => prev.map(t => t.id === id ? { ...t, progress, isCompleted: progress === 100 } : t));
-  const deleteTask = (id: string) => setTasks(prev => prev.filter(t => t.id !== id));
+  const deleteTask = async (id: string) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+    try {
+      await tasksService.delete(id);
+      console.log('☁️ משימה נמחקה מהענן');
+    } catch (error) {
+      console.error('❌ שגיאה במחיקת משימה מהענן:', error);
+    }
+  };
   const syncAllEventsWithCustomers = () => {
     addActivity('sync', 'סנכרון גלובלי של לקוחות ואירועים בוצע');
   };
@@ -498,6 +624,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const importLeads = (data: Lead[]) => {
     const withIds = data.map(l => (l.id ? l : { ...l, id: `l_${Date.now()}_${Math.random().toString(36).slice(2, 9)}` }));
     setLeads(prev => [...withIds, ...prev]);
+    
+    if (withIds.length) {
+      leadsService.bulkInsert(withIds).then(() => console.log('☁️ לידים נשמרו בענן')).catch(console.error);
+    }
   };
 
   const sendPortalEmailForCustomer = async (customerId: string) => {
@@ -626,13 +756,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         termsAccepted: /כן|אני מאשר|true|1/i.test(pick(row, 'אישור תנאי הזמנה', 'termsAccepted')),
       });
     });
-    if (newCusts.length) setCustomers(prev => [...newCusts, ...prev]);
+    if (newCusts.length) {
+      setCustomers(prev => [...newCusts, ...prev]);
+      customersService.bulkInsert(newCusts).then(() => console.log('☁️ לקוחות חדשים נשמרו בענן')).catch(console.error);
+    }
     
     setEvents(prev => {
       const existingIds = new Set(prev.map(e => e.externalId).filter(Boolean));
       const uniqueNew = toAdd.filter(e => !e.externalId || !existingIds.has(e.externalId));
       return [...uniqueNew, ...prev];
     });
+    
+    if (toAdd.length) {
+      eventsService.bulkInsert(toAdd).then(() => console.log('☁️ אירועים נשמרו בענן')).catch(console.error);
+    }
     
     addActivity('system', `יובאו ${toAdd.length} אירועים${newCusts.length ? ` ו-${newCusts.length} לקוחות חדשים` : ''} וסונכרנו עם לקוחות`);
   };
@@ -658,6 +795,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     })).filter((c: Customer) => c.name !== 'ללא שם' || c.phone !== '-');
     setCustomers(prev => [...toAdd, ...prev]);
     addActivity('system', `יובאו ${toAdd.length} לקוחות`);
+    
+    if (toAdd.length) {
+      customersService.bulkInsert(toAdd).then(() => console.log('☁️ לקוחות נשמרו בענן')).catch(console.error);
+    }
   };
 
   const importTasks = (data: any[]) => {
@@ -678,6 +819,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     setTasks(prev => [...toAdd, ...prev]);
     addActivity('system', `יובאו ${toAdd.length} משימות`);
+    
+    if (toAdd.length) {
+      tasksService.bulkInsert(toAdd).then(() => console.log('☁️ משימות נשמרו בענן')).catch(console.error);
+    }
   };
 
   useEffect(() => {

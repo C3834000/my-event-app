@@ -124,6 +124,11 @@ export const tasksService = {
   async delete(id: string): Promise<void> {
     const { error } = await supabase.from('tasks').delete().eq('id', id);
     if (error) throw error;
+  },
+
+  async bulkInsert(tasks: Task[]): Promise<void> {
+    const { error } = await supabase.from('tasks').insert(tasks);
+    if (error) throw error;
   }
 };
 
