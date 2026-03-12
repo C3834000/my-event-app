@@ -21,13 +21,23 @@ startAutoBackup();
 console.log('🛡️ מערכת גיבוי אוטומטי הופעלה');
 console.log('💡 טיפ: הקלד window.backup.export() כדי להוריד גיבוי ידני');
 
-// רישום Service Worker למובייל
+// ביטול Service Workers ישנים
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(registration => console.log('✅ Service Worker רשום:', registration.scope))
-      .catch(err => console.log('❌ Service Worker נכשל:', err));
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    registrations.forEach(registration => {
+      registration.unregister();
+      console.log('🧹 Service Worker בוטל:', registration.scope);
+    });
   });
+  
+  if ('caches' in window) {
+    caches.keys().then(cacheNames => {
+      cacheNames.forEach(cacheName => {
+        caches.delete(cacheName);
+        console.log('🧹 Cache נמחק:', cacheName);
+      });
+    });
+  }
 }
 
 const rootElement = document.getElementById('root');
