@@ -18,6 +18,11 @@ const CATEGORY_ICONS: Record<string, any> = {
 };
 
 const CATEGORY_STYLES: Record<string, { badge: string; header: string; border: string }> = {
+  '🎯 משימות להיום': {
+    badge: 'bg-purple-100 border-purple-300 text-purple-900',
+    header: 'bg-gradient-to-r from-purple-600 to-pink-600',
+    border: 'border-purple-300'
+  },
   'קליכיף': { 
     badge: 'bg-indigo-100 border-indigo-200 text-indigo-800',
     header: 'bg-gradient-to-r from-indigo-400 to-blue-400',
@@ -138,8 +143,25 @@ const TasksBoard: React.FC = () => {
   }, [tasks, searchTerm, filterCategory, filterStatus]);
 
   const groupedTasks = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
     const groups: Record<string, Task[]> = {};
+    
+    const todayTasks: Task[] = [];
+    const otherTasks: Task[] = [];
+    
     filteredTasks.forEach(t => {
+      if (t.dueDate === today) {
+        todayTasks.push(t);
+      } else {
+        otherTasks.push(t);
+      }
+    });
+    
+    if (todayTasks.length > 0) {
+      groups['🎯 משימות להיום'] = todayTasks;
+    }
+    
+    otherTasks.forEach(t => {
         const cat = t.category || 'כללי';
         if (!groups[cat]) groups[cat] = [];
         groups[cat].push(t);

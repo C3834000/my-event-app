@@ -142,6 +142,23 @@ const Dashboard: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [dailyNotes, setDailyNotes] = useState<Array<{id: string; text: string; done: boolean}>>([]);
   const [newNoteText, setNewNoteText] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState('');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('dailyNotes');
+    if (saved) {
+      try {
+        setDailyNotes(JSON.parse(saved));
+      } catch (e) {
+        console.error('Error loading daily notes:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('dailyNotes', JSON.stringify(dailyNotes));
+  }, [dailyNotes]);
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
@@ -344,9 +361,35 @@ const Dashboard: React.FC = () => {
           {/* Daily Agenda Timeline - Internal Scroll */}
           <div className="bg-yellow-50 rounded-xl border-2 border-yellow-300 p-3 flex-1 overflow-hidden flex flex-col">
             <div className="mb-2">
-              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                <CalendarIcon size={16} className="text-purple-600"/> תוכנית יומית
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                  <CalendarIcon size={16} className="text-purple-600"/> תוכנית יומית
+                </h3>
+                <div className="flex gap-1">
+                  <button 
+                    onClick={() => {
+                      const current = new Date(selectedDate || new Date());
+                      current.setDate(current.getDate() - 1);
+                      setSelectedDate(current.toISOString().split('T')[0]);
+                    }}
+                    className="p-1 hover:bg-yellow-200 rounded text-slate-600"
+                    title="יום קודם"
+                  >
+                    <ArrowRight size={12}/>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const current = new Date(selectedDate || new Date());
+                      current.setDate(current.getDate() + 1);
+                      setSelectedDate(current.toISOString().split('T')[0]);
+                    }}
+                    className="p-1 hover:bg-yellow-200 rounded text-slate-600"
+                    title="יום הבא"
+                  >
+                    <ArrowLeft size={12}/>
+                  </button>
+                </div>
+              </div>
               {selectedDate && (
                 <p className="text-[9px] text-slate-600 font-bold mt-1">
                   {new Date(selectedDate).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -578,18 +621,70 @@ const Dashboard: React.FC = () => {
                           }}
                           className="mt-0.5 w-3 h-3 accent-purple-600 shrink-0"
                         />
-                        <p className={`text-[10px] font-bold flex-1 ${note.done ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                          {note.text}
-                        </p>
-                        <button
-                          onClick={() => setDailyNotes(prev => prev.filter(n => n.id !== note.id))}
-                          className="opacity-0 group-hover:opacity-100 shrink-0 text-red-500 hover:text-red-700 transition-all"
-                          title="מחק פתק"
-                        >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                        {editingNoteId === note.id ? (
+                          <input
+                            type="text"
+                            value={editingNoteText}
+                            onChange={(e) => setEditingNoteText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && editingNoteText.trim()) {
+                                setDailyNotes(prev => prev.map(n => 
+                                  n.id === note.id ? {...n, text: editingNoteText} : n
+                                ));
+                                setEditingNoteId(null);
+                                setEditingNoteText('');
+                              } else if (e.key === 'Escape') {
+                                setEditingNoteId(null);
+                                setEditingNoteText('');
+                              }
+                            }}
+                            onBlur={() => {
+                              if (editingNoteText.trim()) {
+                                setDailyNotes(prev => prev.map(n => 
+                                  n.id === note.id ? {...n, text: editingNoteText} : n
+                                ));
+                              }
+                              setEditingNoteId(null);
+                              setEditingNoteText('');
+                            }}
+                            autoFocus
+                            className="flex-1 text-[10px] px-2 py-1 border border-purple-400 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 font-bold"
+                          />
+                        ) : (
+                          <>
+                            <p 
+                              className={`text-[10px] font-bold flex-1 cursor-pointer ${note.done ? 'line-through text-slate-400' : 'text-slate-700'}`}
+                              onDoubleClick={() => {
+                                setEditingNoteId(note.id);
+                                setEditingNoteText(note.text);
+                              }}
+                              title="לחץ פעמיים לעריכה"
+                            >
+                              {note.text}
+                            </p>
+                            <button
+                              onClick={() => {
+                                setEditingNoteId(note.id);
+                                setEditingNoteText(note.text);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 shrink-0 text-blue-500 hover:text-blue-700 transition-all"
+                              title="ערוך פתק"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => setDailyNotes(prev => prev.filter(n => n.id !== note.id))}
+                              className="opacity-0 group-hover:opacity-100 shrink-0 text-red-500 hover:text-red-700 transition-all"
+                              title="מחק פתק"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </>
+                        )}
                       </div>
                     ))}
                     <div className="flex gap-1 mt-2">

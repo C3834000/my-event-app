@@ -167,6 +167,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (now.getHours() === 23 && now.getMinutes() === 59) {
         console.log('🌙 איפוס יומי של פעילויות ב-23:59');
         setActivities([]);
+        
+        const today = new Date().toISOString().split('T')[0];
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        
+        setTasks(prev => prev.map(t => {
+          if (t.dueDate === today && !t.isCompleted) {
+            console.log(`📅 משימה "${t.title}" לא הושלמה, נדחית למחר`);
+            return { ...t, dueDate: tomorrowStr };
+          }
+          return t;
+        }));
       }
     };
     const interval = setInterval(checkMidnight, 60000);
@@ -229,6 +242,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return newEvents;
     });
     addActivity('system', `הזמנה חדשה התקבלה מהפורטל - ${data.name}`);
+    
+    setTimeout(() => {
+      const dataToSave = { events: [event, ...events], customers, leads, tasks, settings, customForms };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+      console.log('💾 שמירה מאולצת של האירוע החדש ל-localStorage');
+    }, 100);
 
     const toEmail = (data.email || '').trim();
     if (toEmail) {
