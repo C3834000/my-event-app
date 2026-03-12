@@ -166,6 +166,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setTasks(mockTasks);
         }
       }
+      
+      const savedActivities = localStorage.getItem('ME_CFM_ACTIVITIES_V1');
+      if (savedActivities) {
+        const parsed = JSON.parse(savedActivities);
+        setActivities(parsed.activities || []);
+      }
     } catch (error) {
       console.error('❌ שגיאה בטעינת נתונים:', error);
       const savedData = localStorage.getItem(STORAGE_KEY);
@@ -188,6 +194,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
+    if (!isLoaded) return;
+    
+    const syncFromCloud = async () => {
+      try {
+        const [cloudEvents, cloudCustomers, cloudLeads, cloudTasks] = await Promise.all([
+          eventsService.getAll().catch(() => []),
+          customersService.getAll().catch(() => []),
+          leadsService.getAll().catch(() => []),
+          tasksService.getAll().catch(() => [])
+        ]);
+        
+        if (cloudEvents.length > 0) setEvents(cloudEvents);
+        if (cloudCustomers.length > 0) setCustomers(cloudCustomers);
+        if (cloudLeads.length > 0) setLeads(cloudLeads);
+        if (cloudTasks.length > 0) setTasks(cloudTasks);
+        
+        console.log('🔄 סנכרון אוטומטי מהענן הושלם');
+      } catch (error) {
+        console.error('❌ שגיאה בסנכרון אוטומטי:', error);
+      }
+    };
+    
+    const interval = setInterval(syncFromCloud, 15000);
+    return () => clearInterval(interval);
+  }, [isLoaded]);
+
+  useEffect(() => {
     if (isLoaded) {
       const dataToSave = { events, customers, leads, tasks, settings, customForms };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
@@ -199,6 +232,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
   }, [events, customers, leads, tasks, settings, customForms, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded && activities.length > 0) {
+      localStorage.setItem('ME_CFM_ACTIVITIES_V1', JSON.stringify({ activities }));
+    }
+  }, [activities, isLoaded]);
 
   useEffect(() => {
     const checkMidnight = () => {
