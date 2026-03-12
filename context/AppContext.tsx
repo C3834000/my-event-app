@@ -422,6 +422,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    const adminEmail = userEmail || 'c3834000@gmail.com';
+    const addEventUrl = `https://my-app-kappa-beige-46.vercel.app/#/add-event?data=${encodeURIComponent(JSON.stringify({
+      id: event.id,
+      title: event.title,
+      date: event.date,
+      startTime: event.startTime,
+      endTime: event.endTime,
+      phone: event.phone,
+      email: event.email,
+      location: event.location,
+      amount: event.amount,
+      clickersNeeded: event.clickersNeeded,
+      eventType: event.eventType,
+      hebrewDate: event.hebrewDate,
+      notes: event.notes,
+      customerId: finalCustomerId
+    }))}`;
+
+    await sendEmail({
+      to: adminEmail,
+      subject: `🔔 הזמנה חדשה מהפורטל - ${data.name} - ${new Date(event.date).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}`,
+      html: `
+        <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 30px 20px; border-radius: 20px;">
+          <div style="background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 50%; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-size: 32px;">🔔</div>
+              <h1 style="color: #1a202c; font-size: 24px; margin: 0; font-weight: 800;">הזמנה חדשה מהפורטל!</h1>
+              <p style="color: #ef4444; font-size: 14px; margin: 8px 0 0; font-weight: 700;">מס' הזמנה: #${event.id.substring(2, 15)}</p>
+            </div>
+            
+            <div style="background: #fee2e2; border: 2px solid #ef4444; border-radius: 12px; padding: 20px; margin: 20px 0;">
+              <h2 style="color: #991b1b; font-size: 18px; margin: 0 0 16px; font-weight: 800; text-align: center;">📋 פרטי האירוע</h2>
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700; width: 35%;">👤 שם:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${data.name || '-'}</td></tr>
+                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">📞 טלפון:</td><td style="padding: 8px; color: #1e293b; font-weight: 700;">${data.phone || '-'}</td></tr>
+                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">📧 אימייל:</td><td style="padding: 8px; color: #1e293b; font-weight: 700;">${data.email || '-'}</td></tr>
+                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">📅 תאריך:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${new Date(event.date).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
+                ${event.hebrewDate ? `<tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">🗓️ תאריך עברי:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${event.hebrewDate}</td></tr>` : ''}
+                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">⏰ שעות:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${event.startTime} - ${event.endTime}</td></tr>
+                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">📍 מיקום:</td><td style="padding: 8px; color: #1e293b; font-weight: 700;">${event.location || '-'}</td></tr>
+                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">🎯 סוג אירוע:</td><td style="padding: 8px; color: #1e293b; font-weight: 700;">${event.eventType}</td></tr>
+                ${event.clickersNeeded > 0 ? `<tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">🖱️ קליקרים:</td><td style="padding: 8px; color: #7c3aed; font-weight: 800; font-size: 16px;">${event.clickersNeeded}</td></tr>` : ''}
+                <tr style="background: #dcfce7;"><td style="padding: 12px; color: #166534; font-weight: 700;">💰 סכום:</td><td style="padding: 12px; color: #166534; font-weight: 900; font-size: 20px;">₪${event.amount.toLocaleString()}</td></tr>
+                ${event.notes ? `<tr><td colspan="2" style="padding: 12px; color: #92400e; background: #fef3c7; font-weight: 700;">📝 הערות: ${event.notes}</td></tr>` : ''}
+              </table>
+            </div>
+
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${addEventUrl}" style="display: inline-block; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 18px; box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);">
+                ➕ הוסף ללוח אירועים
+              </a>
+              <p style="color: #64748b; font-size: 12px; margin: 12px 0 0;">לחיצה על הכפתור תוסיף את האירוע אוטומטית למערכת</p>
+            </div>
+            
+            <div style="background: #f1f5f9; border-radius: 8px; padding: 12px; text-align: center; margin-top: 20px;">
+              <p style="color: #475569; margin: 0; font-size: 12px;">הלקוח קיבל אישור למייל שלו</p>
+            </div>
+          </div>
+        </div>
+      `,
+    });
+
     return Promise.resolve({ eventId: event.id, customerId: finalCustomerId || '' });
   };
 
