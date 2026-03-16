@@ -1,187 +1,145 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Customer, AppEvent, Lead, Task, CustomForm } from '../types';
 
-// הגדרות חיבור - תחליף את הערכים האלה עם הערכים שלך מ-Supabase
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// In development, call the local Express server on port 4000.
+// In production (Vercel), call the /api/db serverless function on the same domain.
+const API_BASE = import.meta.env.DEV ? 'http://localhost:4000' : '';
 
-// יצירת לקוח Supabase
-export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+async function dbRequest(
+  action: string,
+  table: string,
+  options: { data?: any; id?: string; orderBy?: string; orderAsc?: boolean } = {}
+): Promise<any> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+  try {
+    const response = await fetch(`${API_BASE}/api/db`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, table, ...options }),
+      signal: controller.signal,
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Database request failed');
+    return result.data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
-// ===== CUSTOMERS (לקוחות) =====
+// ===== CUSTOMERS =====
 export const customersService = {
   async getAll(): Promise<Customer[]> {
-    const { data, error } = await supabase.from('customers').select('*').order('name');
-    if (error) throw error;
-    return data || [];
+    return dbRequest('getAll', 'customers', { orderBy: 'name', orderAsc: true });
   },
-
   async create(customer: Customer): Promise<Customer> {
-    const { data, error } = await supabase.from('customers').insert([customer]).select().single();
-    if (error) throw error;
-    return data;
+    return dbRequest('create', 'customers', { data: customer });
   },
-
   async update(id: string, updates: Partial<Customer>): Promise<Customer> {
-    const { data, error } = await supabase.from('customers').update(updates).eq('id', id).select().single();
-    if (error) throw error;
-    return data;
+    return dbRequest('update', 'customers', { id, data: updates });
   },
-
   async delete(id: string): Promise<void> {
-    const { error } = await supabase.from('customers').delete().eq('id', id);
-    if (error) throw error;
+    return dbRequest('delete', 'customers', { id });
   },
-
   async bulkInsert(customers: Customer[]): Promise<void> {
-    const { error } = await supabase.from('customers').insert(customers);
-    if (error) throw error;
-  }
+    if (!customers.length) return;
+    return dbRequest('bulkInsert', 'customers', { data: customers });
+  },
 };
 
-// ===== EVENTS (אירועים) =====
+// ===== EVENTS =====
 export const eventsService = {
   async getAll(): Promise<AppEvent[]> {
-    const { data, error } = await supabase.from('events').select('*').order('date', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    return dbRequest('getAll', 'events', { orderBy: 'date', orderAsc: false });
   },
-
   async create(event: AppEvent): Promise<AppEvent> {
-    const { data, error } = await supabase.from('events').insert([event]).select().single();
-    if (error) throw error;
-    return data;
+    return dbRequest('create', 'events', { data: event });
   },
-
   async update(id: string, updates: Partial<AppEvent>): Promise<AppEvent> {
-    const { data, error } = await supabase.from('events').update(updates).eq('id', id).select().single();
-    if (error) throw error;
-    return data;
+    return dbRequest('update', 'events', { id, data: updates });
   },
-
   async delete(id: string): Promise<void> {
-    const { error } = await supabase.from('events').delete().eq('id', id);
-    if (error) throw error;
+    return dbRequest('delete', 'events', { id });
   },
-
   async bulkInsert(events: AppEvent[]): Promise<void> {
-    const { error } = await supabase.from('events').insert(events);
-    if (error) throw error;
-  }
+    if (!events.length) return;
+    return dbRequest('bulkInsert', 'events', { data: events });
+  },
 };
 
-// ===== LEADS (לידים) =====
+// ===== LEADS =====
 export const leadsService = {
   async getAll(): Promise<Lead[]> {
-    const { data, error } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    return dbRequest('getAll', 'leads');
   },
-
   async create(lead: Lead): Promise<Lead> {
-    const { data, error } = await supabase.from('leads').insert([lead]).select().single();
-    if (error) throw error;
-    return data;
+    return dbRequest('create', 'leads', { data: lead });
   },
-
   async update(id: string, updates: Partial<Lead>): Promise<Lead> {
-    const { data, error } = await supabase.from('leads').update(updates).eq('id', id).select().single();
-    if (error) throw error;
-    return data;
+    return dbRequest('update', 'leads', { id, data: updates });
   },
-
   async delete(id: string): Promise<void> {
-    const { error } = await supabase.from('leads').delete().eq('id', id);
-    if (error) throw error;
+    return dbRequest('delete', 'leads', { id });
   },
-
   async bulkInsert(leads: Lead[]): Promise<void> {
-    const { error } = await supabase.from('leads').insert(leads);
-    if (error) throw error;
-  }
+    if (!leads.length) return;
+    return dbRequest('bulkInsert', 'leads', { data: leads });
+  },
 };
 
-// ===== TASKS (משימות) =====
+// ===== TASKS =====
 export const tasksService = {
   async getAll(): Promise<Task[]> {
-    const { data, error } = await supabase.from('tasks').select('*').order('priority', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    return dbRequest('getAll', 'tasks');
   },
-
   async create(task: Task): Promise<Task> {
-    const { data, error } = await supabase.from('tasks').insert([task]).select().single();
-    if (error) throw error;
-    return data;
+    return dbRequest('create', 'tasks', { data: task });
   },
-
   async update(id: string, updates: Partial<Task>): Promise<Task> {
-    const { data, error } = await supabase.from('tasks').update(updates).eq('id', id).select().single();
-    if (error) throw error;
-    return data;
+    return dbRequest('update', 'tasks', { id, data: updates });
   },
-
   async delete(id: string): Promise<void> {
-    const { error } = await supabase.from('tasks').delete().eq('id', id);
-    if (error) throw error;
+    return dbRequest('delete', 'tasks', { id });
   },
-
   async bulkInsert(tasks: Task[]): Promise<void> {
-    const { error } = await supabase.from('tasks').insert(tasks);
-    if (error) throw error;
-  }
+    if (!tasks.length) return;
+    return dbRequest('bulkInsert', 'tasks', { data: tasks });
+  },
 };
 
-// ===== CUSTOM FORMS (טפסים מותאמים) =====
+// ===== CUSTOM FORMS =====
 export const formsService = {
   async getAll(): Promise<CustomForm[]> {
-    const { data, error } = await supabase.from('custom_forms').select('*');
-    if (error) throw error;
-    return data || [];
+    return dbRequest('getAll', 'custom_forms');
   },
-
   async create(form: CustomForm): Promise<CustomForm> {
-    const { data, error } = await supabase.from('custom_forms').insert([form]).select().single();
-    if (error) throw error;
-    return data;
+    return dbRequest('create', 'custom_forms', { data: form });
   },
-
   async update(id: string, updates: Partial<CustomForm>): Promise<CustomForm> {
-    const { data, error } = await supabase.from('custom_forms').update(updates).eq('id', id).select().single();
-    if (error) throw error;
-    return data;
+    return dbRequest('update', 'custom_forms', { id, data: updates });
   },
-
   async delete(id: string): Promise<void> {
-    const { error } = await supabase.from('custom_forms').delete().eq('id', id);
-    if (error) throw error;
-  }
+    return dbRequest('delete', 'custom_forms', { id });
+  },
 };
 
-// ===== SETTINGS (הגדרות) =====
+// ===== SETTINGS =====
 export const settingsService = {
   async get(): Promise<any> {
-    const { data, error } = await supabase.from('settings').select('*').single();
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
-    return data || {};
+    try {
+      const rows = await dbRequest('getAll', 'settings');
+      return rows?.[0] || {};
+    } catch {
+      return {};
+    }
   },
-
   async update(settings: any): Promise<any> {
-    // Upsert - עדכון או יצירה
-    const { data, error } = await supabase.from('settings').upsert([{ id: 'main', ...settings }]).select().single();
-    if (error) throw error;
-    return data;
-  }
+    return dbRequest('upsert', 'settings', { data: { id: 'main', ...settings } });
+  },
 };
 
-// ===== פונקציה למיגרציה של נתונים מ-localStorage =====
+// ===== MIGRATION: localStorage → Supabase (via proxy) =====
 export async function migrateFromLocalStorage() {
   try {
-    if (typeof window === 'undefined' || !window.localStorage) {
-      throw new Error('localStorage is not available');
-    }
-
-    // לקוחות
     const localCustomers = localStorage.getItem('customers');
     if (localCustomers) {
       const customers = JSON.parse(localCustomers);
@@ -191,7 +149,6 @@ export async function migrateFromLocalStorage() {
       }
     }
 
-    // אירועים
     const localEvents = localStorage.getItem('events');
     if (localEvents) {
       const events = JSON.parse(localEvents);
@@ -201,7 +158,6 @@ export async function migrateFromLocalStorage() {
       }
     }
 
-    // לידים
     const localLeads = localStorage.getItem('leads');
     if (localLeads) {
       const leads = JSON.parse(localLeads);
@@ -211,7 +167,6 @@ export async function migrateFromLocalStorage() {
       }
     }
 
-    // משימות
     const localTasks = localStorage.getItem('tasks');
     if (localTasks) {
       const tasks = JSON.parse(localTasks);
@@ -219,26 +174,6 @@ export async function migrateFromLocalStorage() {
         await tasksService.bulkInsert(tasks);
         console.log(`✅ ${tasks.length} משימות הועברו`);
       }
-    }
-
-    // טפסים
-    const localForms = localStorage.getItem('customForms');
-    if (localForms) {
-      const forms = JSON.parse(localForms);
-      if (forms.length > 0) {
-        for (const form of forms) {
-          await formsService.create(form);
-        }
-        console.log(`✅ ${forms.length} טפסים הועברו`);
-      }
-    }
-
-    // הגדרות
-    const localSettings = localStorage.getItem('settings');
-    if (localSettings) {
-      const settings = JSON.parse(localSettings);
-      await settingsService.update(settings);
-      console.log('✅ הגדרות הועברו');
     }
 
     console.log('🎉 מיגרציה הושלמה בהצלחה!');

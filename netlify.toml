@@ -1,0 +1,22 @@
+[build]
+  command   = "npm run build"
+  publish   = "dist"
+  functions = "netlify/functions"
+
+# Route /api/send-email → Netlify Function
+[[redirects]]
+  from   = "/api/send-email"
+  to     = "/.netlify/functions/send-email"
+  status = 200
+
+# Route /api/db → Netlify Function (Supabase proxy)
+[[redirects]]
+  from   = "/api/db"
+  to     = "/.netlify/functions/db"
+  status = 200
+
+# SPA fallback – all routes → index.html
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

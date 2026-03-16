@@ -7,6 +7,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
+const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -64,7 +65,100 @@ app.post('/api/send-email', async (req, res) => {
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, emailConfigured: !!getTransporter() });
+  res.json({ ok: true, emailConfigured: !!getTransporter(), dbConfigured: !!getSupabase() });
+});
+
+// ===== DATABASE PROXY (Supabase) =====
+
+// camelCase → snake_case (top-level keys only)
+function toSnake(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  return Object.fromEntries(
+    Object.entries(obj).map(([k, v]) => [k.replace(/[A-Z]/g, c => '_' + c.toLowerCase()), v])
+  );
+}
+
+// snake_case → camelCase (top-level keys only)
+function toCamel(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  return Object.fromEntries(
+    Object.entries(obj).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v])
+  );
+}
+
+function getSupabase() {
+  const url = process.env.VITE_SUPABASE_URL;
+  const key = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+  return createSupabaseClient(url, key);
+}
+
+// POST /api/db
+app.post('/api/db', async (req, res) => {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return res.status(503).json({ error: 'Database not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in server/.env' });
+  }
+
+  const { table, action, data, id, orderBy, orderAsc } = req.body || {};
+
+  if (!table || !action) {
+    return res.status(400).json({ error: 'Missing required fields: table, action' });
+  }
+
+  try {
+    let result;
+
+    switch (action) {
+      case 'getAll': {
+        const orderCol = orderBy ? orderBy.replace(/[A-Z]/g, c => '_' + c.toLowerCase()) : null;
+        let q = supabase.from(table).select('*');
+        if (orderCol) q = q.order(orderCol, { ascending: orderAsc !== false });
+        const { data: rows, error } = await q;
+        if (error) throw error;
+        result = (rows || []).map(toCamel);
+        break;
+      }
+      case 'create': {
+        const { data: row, error } = await supabase.from(table).insert([toSnake(data)]).select().single();
+        if (error) throw error;
+        result = toCamel(row);
+        break;
+      }
+      case 'update': {
+        const { data: row, error } = await supabase.from(table).update(toSnake(data)).eq('id', id).select().single();
+        if (error) throw error;
+        result = toCamel(row);
+        break;
+      }
+      case 'delete': {
+        const { error } = await supabase.from(table).delete().eq('id', id);
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+      case 'bulkInsert': {
+        if (!Array.isArray(data) || data.length === 0) { result = { success: true }; break; }
+        const { error } = await supabase.from(table).insert(data.map(toSnake));
+        if (error) throw error;
+        result = { success: true };
+        break;
+      }
+      case 'upsert': {
+        const { data: row, error } = await supabase.from(table).upsert([toSnake(data)]).select().single();
+        if (error) throw error;
+        result = toCamel(row);
+        break;
+      }
+      default:
+        return res.status(400).json({ error: `Unknown action: ${action}` });
+    }
+
+    res.json({ data: result });
+  } catch (err) {
+    console.error(`DB [${table}.${action}]:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(PORT, () => {

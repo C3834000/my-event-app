@@ -125,7 +125,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [integrations, setIntegrations] = useState({ googleCalendar: true, outlookCalendar: false });
   const [kpis, setKpis] = useState({ openDebt: 0, projectedIncome: 0, totalRevenue: 0, availableClickers: 500 });
 
-  const loadFromStorage = () => {
+  // Fire-and-forget cloud sync helper – never blocks the UI
+  const cloudSync = <T,>(fn: () => Promise<T>) => {
+    fn().catch(err => console.warn('☁️ sync:', (err as Error).message));
+  };
+
+  const loadFromStorage = async () => {
     console.log('💾 טוען נתונים מ-localStorage...');
     const savedData = localStorage.getItem(STORAGE_KEY);
     if (savedData) {
@@ -136,7 +141,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setTasks(parsed.tasks || []);
       if (parsed.settings) setSettings(parsed.settings);
       if (parsed.customForms?.length) setCustomForms(parsed.customForms);
-      console.log('✅ נתונים נטענו:', {
+      console.log('✅ נתונים נטענו מ-localStorage:', {
         events: parsed.events?.length || 0,
         customers: parsed.customers?.length || 0,
         leads: parsed.leads?.length || 0,
@@ -148,7 +153,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setLeads(mockLeads);
       setTasks(mockTasks);
     }
-    
+
     const savedActivities = localStorage.getItem('ME_CFM_ACTIVITIES_V1');
     if (savedActivities) {
       try {
@@ -158,12 +163,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.error('שגיאה בטעינת Activities');
       }
     }
-    
+
     setIsLoaded(true);
+
+    // Try to load from cloud (non-blocking); if it has data, prefer it over localStorage
+    try {
+      const [cloudEvents, cloudCustomers, cloudLeads, cloudTasks] = await Promise.all([
+        eventsService.getAll(),
+        customersService.getAll(),
+        leadsService.getAll(),
+        tasksService.getAll(),
+      ]);
+      if (cloudEvents.length > 0 || cloudCustomers.length > 0) {
+        console.log('☁️ נטען מהענן:', { events: cloudEvents.length, customers: cloudCustomers.length, leads: cloudLeads.length, tasks: cloudTasks.length });
+        setEvents(cloudEvents);
+        setCustomers(cloudCustomers);
+        setLeads(cloudLeads);
+        setTasks(cloudTasks);
+      }
+    } catch (err) {
+      console.warn('☁️ שגיאה בטעינה מהענן, ממשיך עם localStorage:', (err as Error).message);
+    }
   };
 
   useEffect(() => {
-    loadFromStorage();
+    void loadFromStorage();
   }, []);
 
   useEffect(() => {
@@ -239,7 +263,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateSettings = (newSettings: Partial<AppSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
+    setSettings(prev => {
+      const next = { ...prev, ...newSettings };
+      cloudSync(() => settingsService.update(next));
+      return next;
+    });
   };
 
   const handlePublicBookingSubmit = async (data: any, leadId?: string, customerId?: string) => {
@@ -257,6 +285,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         totalRevenue: 0
       };
       setCustomers(prev => [newCustomer, ...prev]);
+      cloudSync(() => customersService.create(newCustomer));
       finalCustomerId = newCustomer.id;
       console.log('👤 לקוח חדש נוצר:', newCustomer);
     }
@@ -286,9 +315,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEvents(prev => {
       const newEvents = [event, ...prev];
       console.log('💾 מספר אירועים אחרי הוספה:', newEvents.length);
-      console.log('💾 כל האירועים:', newEvents.map(e => ({ id: e.id, name: e.title, date: e.date })));
       return newEvents;
     });
+    cloudSync(() => eventsService.create(event));
     addActivity('system', `הזמנה חדשה התקבלה מהפורטל - ${data.name}`);
 
     const toEmail = (data.email || '').trim();
@@ -356,7 +385,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               <div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
                 <p style="color: white; margin: 0 0 16px; font-size: 18px; font-weight: 800; line-height: 1.6;">✨ זה הזמן להתקדם לשלב הכנת החידון שלכם!</p>
                 <p style="color: white; margin: 0 0 20px; font-size: 15px; font-weight: 600; opacity: 0.95;">לחצו על הכפתור להמשך מרגש 🎉</p>
-                <a href="https://my-app-kappa-beige-46.vercel.app/#/portal/${leadId || finalCustomerId || event.id}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 19px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: all 0.3s;">🎯 כניסה לפורטל האישי שלכם ←</a>
+                <a href="https://myecrm2026.netlify.app/#/portal/${leadId || finalCustomerId || event.id}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 19px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: all 0.3s;">🎯 כניסה לפורטל האישי שלכם ←</a>
               </div>
 
               <div style="background: #fef3c7; border-right: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 24px 0;">
@@ -423,7 +452,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const adminEmail = userEmail || 'c3834000@gmail.com';
-    const addEventUrl = `https://my-app-kappa-beige-46.vercel.app/#/add-event?data=${encodeURIComponent(JSON.stringify({
+    const addEventUrl = `https://myecrm2026.netlify.app/#/add-event?data=${encodeURIComponent(JSON.stringify({
       id: event.id,
       title: event.title,
       date: event.date,
@@ -491,7 +520,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const lead = leads.find(l => l.id === leadId);
     if (!lead) throw new Error('Lead not found');
 
-    const portalUrl = `https://my-app-kappa-beige-46.vercel.app/#/portal/${leadId}`;
+    const portalUrl = `https://myecrm2026.netlify.app/#/portal/${leadId}`;
     const toEmail = (lead.email || '').trim();
     if (toEmail) {
       const { success, error } = await sendEmail({
@@ -514,9 +543,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addEvent = (event: AppEvent) => {
     setEvents(prev => [event, ...prev]);
+    cloudSync(() => eventsService.create(event));
     console.log('✅ אירוע נוסף:', event.title);
   };
-  const updateEventStatus = (id: string, status: EventStatus) => setEvents(prev => prev.map(e => e.id === id ? { ...e, status } : e));
+  const updateEventStatus = (id: string, status: EventStatus) => {
+    setEvents(prev => prev.map(e => e.id === id ? { ...e, status } : e));
+    cloudSync(() => eventsService.update(id, { status }));
+  };
   const updateEvent = (id: string, updates: Partial<AppEvent>) => {
     const event = events.find(e => e.id === id);
     if (event && updates.paymentStatus && updates.paymentStatus !== event.paymentStatus) {
@@ -531,23 +564,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return updated;
     }));
+    cloudSync(() => eventsService.update(id, updates));
   };
-  const deleteEvent = (id: string) => setEvents(prev => prev.filter(e => e.id !== id));
+  const deleteEvent = (id: string) => {
+    setEvents(prev => prev.filter(e => e.id !== id));
+    cloudSync(() => eventsService.delete(id));
+  };
   const addCustomer = (customer: Customer) => {
     setCustomers(prev => [...prev, customer]);
+    cloudSync(() => customersService.create(customer));
     addActivity('system', `לקוח חדש נוסף: ${customer.name}`);
   };
   const updateCustomer = (id: string, updates: Partial<Customer>) => {
     setCustomers(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    cloudSync(() => customersService.update(id, updates));
   };
   const getCustomerById = (id: string) => customers.find(c => c.id === id);
   const addLead = (lead: Lead) => {
     setLeads(prev => [...prev, lead]);
+    cloudSync(() => leadsService.create(lead));
     addActivity('system', `ליד חדש נוסף: ${lead.name}`);
   };
-  const updateLeadStatus = (id: string, status: LeadStatus) => setLeads(prev => prev.map(l => l.id === id ? { ...l, status } : l));
+  const updateLeadStatus = (id: string, status: LeadStatus) => {
+    setLeads(prev => prev.map(l => l.id === id ? { ...l, status } : l));
+    cloudSync(() => leadsService.update(id, { status }));
+  };
   const updateLead = (id: string, updates: Partial<Lead>) => {
     setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+    cloudSync(() => leadsService.update(id, updates));
   };
   const convertLeadToCustomer = (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
@@ -555,10 +599,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newCustomer: Customer = { id: `c_${Date.now()}`, name: lead.name, phone: lead.phone, email: lead.email || '', notes: `הגיע מליד` };
     setCustomers(prev => [...prev, newCustomer]);
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: LeadStatus.Converted } : l));
+    cloudSync(() => customersService.create(newCustomer));
+    cloudSync(() => leadsService.update(leadId, { status: LeadStatus.Converted }));
     addActivity('system', `ליד ${lead.name} הומר ללקוח בהצלחה`);
   };
   const addTask = (task: Task) => {
     setTasks(prev => [task, ...prev]);
+    cloudSync(() => tasksService.create(task));
     addActivity('system', `משימה חדשה נוספה: ${task.title}`);
   };
   const updateTask = (id: string, updates: Partial<Task>) => {
@@ -566,24 +613,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (task && updates.isCompleted !== undefined && updates.isCompleted !== task.isCompleted) {
       addActivity('system', `משימה ${updates.isCompleted ? 'הושלמה' : 'בוטלה'}: ${task.title}`);
     }
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    cloudSync(() => tasksService.update(id, updates));
   };
   const toggleTask = (id: string) => {
     const task = tasks.find(t => t.id === id);
     if (task) {
-      addActivity('system', `משימה ${task.isCompleted ? 'בוטלה' : 'הושלמה'}: ${task.title}`);
+      const newIsCompleted = !task.isCompleted;
+      addActivity('system', `משימה ${newIsCompleted ? 'הושלמה' : 'בוטלה'}: ${task.title}`);
+      cloudSync(() => tasksService.update(id, { isCompleted: newIsCompleted, progress: newIsCompleted ? 100 : 0 }));
     }
     setTasks(prev => prev.map(t => t.id === id ? { ...t, isCompleted: !t.isCompleted, progress: !t.isCompleted ? 100 : 0 } : t));
   };
-  const updateTaskProgress = (id: string, progress: number) => setTasks(prev => prev.map(t => t.id === id ? { ...t, progress, isCompleted: progress === 100 } : t));
-  const deleteTask = (id: string) => setTasks(prev => prev.filter(t => t.id !== id));
+  const updateTaskProgress = (id: string, progress: number) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, progress, isCompleted: progress === 100 } : t));
+    cloudSync(() => tasksService.update(id, { progress, isCompleted: progress === 100 }));
+  };
+  const deleteTask = (id: string) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+    cloudSync(() => tasksService.delete(id));
+  };
   const syncAllEventsWithCustomers = () => {
     addActivity('sync', 'סנכרון גלובלי של לקוחות ואירועים בוצע');
   };
   const sendBookingEmail = async (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return { success: false, email: '', url: '' };
-    const bookUrl = `https://my-app-kappa-beige-46.vercel.app/#/book?leadId=${leadId}`;
+    const bookUrl = `https://myecrm2026.netlify.app/#/book?leadId=${leadId}`;
     const toEmail = (lead.email || '').trim();
     if (toEmail) {
       const { success, error } = await sendEmail({
@@ -607,20 +663,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIntegrations(prev => ({ ...prev, [service === 'google' ? 'googleCalendar' : 'outlookCalendar']: !prev[service === 'google' ? 'googleCalendar' : 'outlookCalendar'] }));
     return true;
   };
-  const addCustomForm = (f: any) => setCustomForms(prev => [...prev, f]);
-  const updateCustomForm = (id: string, u: any) => setCustomForms(prev => prev.map(f => f.id === id ? { ...f, ...u } : f));
-  const deleteCustomForm = (id: string) => setCustomForms(prev => prev.filter(f => f.id !== id));
+  const addCustomForm = (f: any) => {
+    setCustomForms(prev => [...prev, f]);
+    cloudSync(() => formsService.create(f));
+  };
+  const updateCustomForm = (id: string, u: any) => {
+    setCustomForms(prev => prev.map(f => f.id === id ? { ...f, ...u } : f));
+    cloudSync(() => formsService.update(id, u));
+  };
+  const deleteCustomForm = (id: string) => {
+    setCustomForms(prev => prev.filter(f => f.id !== id));
+    cloudSync(() => formsService.delete(id));
+  };
   const getFormById = (id: string) => customForms.find(f => f.id === id);
 
   const importLeads = (data: Lead[]) => {
     const withIds = data.map(l => (l.id ? l : { ...l, id: `l_${Date.now()}_${Math.random().toString(36).slice(2, 9)}` }));
     setLeads(prev => [...withIds, ...prev]);
+    cloudSync(() => leadsService.bulkInsert(withIds));
   };
 
   const sendPortalEmailForCustomer = async (customerId: string) => {
     const customer = customers.find(c => c.id === customerId);
     if (!customer) throw new Error('Customer not found');
-    const portalUrl = `https://my-app-kappa-beige-46.vercel.app/#/portal/${customerId}`;
+    const portalUrl = `https://myecrm2026.netlify.app/#/portal/${customerId}`;
     const toEmail = (customer.email || '').trim();
     if (toEmail) {
       const { success, error } = await sendEmail({
@@ -638,7 +704,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const toEmail = (event.email || getCustomerById(event.customerId)?.email || '').trim();
     if (!toEmail) return;
     const custName = getCustomerById(event.customerId)?.name || event.title;
-    const portalLink = event.customerId ? `<div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center;"><p style="color: white; margin: 0 0 12px; font-size: 16px; font-weight: 700;">✨ זה הזמן להתקדם לשלב הכנת החידון שלכם!</p><a href="https://my-app-kappa-beige-46.vercel.app/#/portal/${event.customerId}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 900; font-size: 17px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">🎯 כניסה לפורטל האישי שלכם ←</a></div>` : '';
+    const portalLink = event.customerId ? `<div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center;"><p style="color: white; margin: 0 0 12px; font-size: 16px; font-weight: 700;">✨ זה הזמן להתקדם לשלב הכנת החידון שלכם!</p><a href="https://myecrm2026.netlify.app/#/portal/${event.customerId}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 900; font-size: 17px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">🎯 כניסה לפורטל האישי שלכם ←</a></div>` : '';
     await sendEmail({
       to: toEmail,
       subject: `עדכון באירוע - ${settings.companyName}`,
@@ -743,14 +809,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         termsAccepted: /כן|אני מאשר|true|1/i.test(pick(row, 'אישור תנאי הזמנה', 'termsAccepted')),
       });
     });
-    if (newCusts.length) setCustomers(prev => [...newCusts, ...prev]);
-    
-    setEvents(prev => {
-      const existingIds = new Set(prev.map(e => e.externalId).filter(Boolean));
-      const uniqueNew = toAdd.filter(e => !e.externalId || !existingIds.has(e.externalId));
-      return [...uniqueNew, ...prev];
-    });
-    
+    if (newCusts.length) {
+      setCustomers(prev => [...newCusts, ...prev]);
+      cloudSync(() => customersService.bulkInsert(newCusts));
+    }
+
+    const existingIds = new Set(events.map(e => e.externalId).filter(Boolean));
+    const uniqueNew = toAdd.filter(e => !e.externalId || !existingIds.has(e.externalId));
+    setEvents(prev => [...uniqueNew, ...prev]);
+    cloudSync(() => eventsService.bulkInsert(uniqueNew));
+
     addActivity('system', `יובאו ${toAdd.length} אירועים${newCusts.length ? ` ו-${newCusts.length} לקוחות חדשים` : ''} וסונכרנו עם לקוחות`);
   };
 
@@ -774,6 +842,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes: (row.הערות ?? row['איך שמעת עלינו'] ?? row.notes ?? '').toString().trim() || undefined,
     })).filter((c: Customer) => c.name !== 'ללא שם' || c.phone !== '-');
     setCustomers(prev => [...toAdd, ...prev]);
+    cloudSync(() => customersService.bulkInsert(toAdd));
     addActivity('system', `יובאו ${toAdd.length} לקוחות`);
   };
 
@@ -794,6 +863,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
     setTasks(prev => [...toAdd, ...prev]);
+    cloudSync(() => tasksService.bulkInsert(toAdd));
     addActivity('system', `יובאו ${toAdd.length} משימות`);
   };
 

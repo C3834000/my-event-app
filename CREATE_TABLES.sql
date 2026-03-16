@@ -1,6 +1,6 @@
 -- =====================================================
 -- SQL ליצירת כל הטבלאות למערכת CRM של קליכיף
--- העתק והדבק את הכל ב-Supabase SQL Editor
+-- העתק והדבק את הכל ב-Supabase SQL Editor ולחץ Run
 -- =====================================================
 
 -- 1. טבלת לקוחות
@@ -8,30 +8,28 @@ CREATE TABLE IF NOT EXISTS customers (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   phone TEXT NOT NULL,
-  email TEXT NOT NULL,
+  email TEXT NOT NULL DEFAULT '',
   company_name TEXT,
   notes TEXT,
+  task_ids JSONB DEFAULT '[]',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
-CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
-CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 
 -- 2. טבלת אירועים
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
-  customer_id TEXT REFERENCES customers(id) ON DELETE SET NULL,
+  customer_id TEXT,
   title TEXT NOT NULL,
   date DATE NOT NULL,
-  start_time TEXT NOT NULL,
-  end_time TEXT NOT NULL,
+  start_time TEXT NOT NULL DEFAULT '10:00',
+  end_time TEXT NOT NULL DEFAULT '12:00',
   amount NUMERIC(10,2) DEFAULT 0,
   paid_amount NUMERIC(10,2) DEFAULT 0,
-  status TEXT NOT NULL,
-  payment_status TEXT NOT NULL,
-  event_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'שוריין',
+  payment_status TEXT NOT NULL DEFAULT 'טרם שולם',
+  event_type TEXT NOT NULL DEFAULT 'תוכנית קליקרים כולל הנחיה / הפעלה',
   clickers_needed INTEGER DEFAULT 0,
-  location TEXT,
+  location TEXT DEFAULT '',
   reminder_date_time TIMESTAMPTZ,
   tag TEXT NOT NULL DEFAULT 'קליכיף',
   category TEXT,
@@ -45,24 +43,20 @@ CREATE TABLE IF NOT EXISTS events (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_events_date ON events(date DESC);
-CREATE INDEX IF NOT EXISTS idx_events_customer ON events(customer_id);
-CREATE INDEX IF NOT EXISTS idx_events_tag ON events(tag);
-
 -- 3. טבלת לידים
 CREATE TABLE IF NOT EXISTS leads (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  source TEXT NOT NULL,
-  status TEXT NOT NULL,
-  phone TEXT NOT NULL,
-  email TEXT,
+  source TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'חדש',
+  phone TEXT NOT NULL DEFAULT '',
+  email TEXT DEFAULT '',
   notes TEXT,
+  event_details TEXT,
+  follow_up_date TEXT,
+  follow_up_reminder TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
-CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
-CREATE INDEX IF NOT EXISTS idx_leads_created ON leads(created_at DESC);
 
 -- 4. טבלת משימות
 CREATE TABLE IF NOT EXISTS tasks (
@@ -70,19 +64,22 @@ CREATE TABLE IF NOT EXISTS tasks (
   title TEXT NOT NULL,
   is_completed BOOLEAN DEFAULT FALSE,
   priority INTEGER DEFAULT 1,
-  category TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'כללי',
   estimated_time_min INTEGER DEFAULT 0,
   progress INTEGER DEFAULT 0,
   due_date DATE,
   completed_date TIMESTAMPTZ,
   reminder_date TIMESTAMPTZ,
+  monday_id TEXT,
+  waiting_days INTEGER,
+  potential_revenue NUMERIC(10,2),
+  ease_of_execution INTEGER,
+  required_resources TEXT,
+  frequency TEXT,
+  sub_tasks JSONB DEFAULT '[]',
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
-CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority DESC);
-CREATE INDEX IF NOT EXISTS idx_tasks_category ON tasks(category);
-CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(is_completed);
 
 -- 5. טבלת טפסים מותאמים
 CREATE TABLE IF NOT EXISTS custom_forms (
@@ -92,7 +89,7 @@ CREATE TABLE IF NOT EXISTS custom_forms (
   is_active BOOLEAN DEFAULT TRUE,
   auto_confirm BOOLEAN DEFAULT FALSE,
   theme_color TEXT DEFAULT '#4f46e5',
-  fields JSONB NOT NULL,
+  fields JSONB NOT NULL DEFAULT '[]',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -100,18 +97,17 @@ CREATE TABLE IF NOT EXISTS custom_forms (
 CREATE TABLE IF NOT EXISTS settings (
   id TEXT PRIMARY KEY DEFAULT 'main',
   company_name TEXT DEFAULT 'קליכיף',
-  company_phone TEXT DEFAULT '073-383-4000',
-  company_email TEXT DEFAULT 'c3834000@gmail.com',
-  portal_video_url TEXT,
-  data JSONB,
+  contact_phone TEXT DEFAULT '052-9934000',
+  portal_video_url TEXT DEFAULT '',
+  data JSONB DEFAULT '{}',
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- הוסף שורה ראשונית להגדרות
+-- שורה ראשונית להגדרות (אם לא קיימת)
 INSERT INTO settings (id) VALUES ('main') ON CONFLICT (id) DO NOTHING;
 
 -- =====================================================
--- הפעלת Row Level Security (RLS)
+-- הפעלת Row Level Security (RLS) - אבטחה
 -- =====================================================
 
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
@@ -121,7 +117,7 @@ ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE custom_forms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 
--- מדיניות: אפשר הכל (לפיתוח - בהמשך תוסיף אימות)
+-- מדיניות: אפשר הכל (לפיתוח)
 DROP POLICY IF EXISTS "Enable all for anon" ON customers;
 CREATE POLICY "Enable all for anon" ON customers FOR ALL USING (true) WITH CHECK (true);
 
@@ -141,5 +137,5 @@ DROP POLICY IF EXISTS "Enable all for anon" ON settings;
 CREATE POLICY "Enable all for anon" ON settings FOR ALL USING (true) WITH CHECK (true);
 
 -- =====================================================
--- סיימנו! כל הטבלאות נוצרו ומאובטחות
+-- סיימנו! 6 טבלאות נוצרו.
 -- =====================================================
