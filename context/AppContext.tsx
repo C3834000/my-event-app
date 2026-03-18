@@ -218,10 +218,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           leadsService.getAll(),
           tasksService.getAll(),
         ]);
-        if (cloudCustomers.length > 0) setCustomers(cloudCustomers);
-        if (cloudEvents.length > 0) setEvents(cloudEvents);
-        if (cloudLeads.length > 0) setLeads(cloudLeads);
-        if (cloudTasks.length > 0) setTasks(cloudTasks);
+        if (cloudCustomers.length > customers.length) setCustomers(cloudCustomers);
+        if (cloudEvents.length > events.length) setEvents(cloudEvents);
+        if (cloudLeads.length > leads.length) setLeads(cloudLeads);
+        if (cloudTasks.length > tasks.length) setTasks(cloudTasks);
       } catch {
         // silent fail - no network or function error
       }
