@@ -14,8 +14,7 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
   try {
     // ב-Production משתמשים ב-Vercel Function, בפיתוח (אם רץ server מקומי) ניתן להשתמש ב-localhost
     const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
-    const base = isProduction ? '' : 'http://localhost:4000';
-    const url = `${base}/api/send-email`;
+    const url = isProduction ? '/.netlify/functions/send-email' : 'http://localhost:4000/api/send-email';
     
     const res = await fetch(url, {
       method: 'POST',

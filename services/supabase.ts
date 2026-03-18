@@ -1,8 +1,9 @@
 import type { Customer, AppEvent, Lead, Task, CustomForm } from '../types';
 
 // In development, call the local Express server on port 4000.
-// In production (Vercel), call the /api/db serverless function on the same domain.
+// In production (Netlify), call the function directly at /.netlify/functions/db.
 const API_BASE = import.meta.env.DEV ? 'http://localhost:4000' : '';
+const DB_URL = import.meta.env.DEV ? `${API_BASE}/api/db` : '/.netlify/functions/db';
 
 async function dbRequest(
   action: string,
@@ -12,7 +13,7 @@ async function dbRequest(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000); // 5 second timeout
   try {
-    const response = await fetch(`${API_BASE}/api/db`, {
+    const response = await fetch(DB_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, table, ...options }),
