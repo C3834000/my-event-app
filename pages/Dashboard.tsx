@@ -137,7 +137,7 @@ const TaskCard: React.FC<{ task: any; onToggle: (id: string) => void; onUpdate: 
 };
 
 const Dashboard: React.FC = () => {
-  const { kpis, tasks, events, toggleTask, activities, customers, updateTask, leads } = useApp();
+  const { kpis, tasks, events, toggleTask, activities, customers, updateTask, leads, uploadAllToCloud } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -369,6 +369,19 @@ const Dashboard: React.FC = () => {
             </p>
           </div>
           <div className="flex gap-2">
+            <button 
+              onClick={async () => {
+                const btn = document.activeElement as HTMLButtonElement;
+                if (btn) btn.disabled = true;
+                const result = await uploadAllToCloud();
+                if (btn) btn.disabled = false;
+                alert(result.success ? `✅ ${result.message}` : `❌ שגיאה: ${result.message}`);
+              }} 
+              className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-md hover:bg-blue-700 transition-all text-sm"
+              title="העלה את כל הנתונים המקומיים לענן"
+            >
+              <Upload size={14} /> העלה לענן
+            </button>
             <button 
               onClick={() => {
                 downloadBackupFile();

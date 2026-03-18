@@ -78,6 +78,7 @@ interface AppContextType {
     outlookCalendar: boolean;
   };
   toggleIntegration: (service: 'google' | 'outlook') => Promise<boolean>;
+  uploadAllToCloud: () => Promise<{ success: boolean; message: string }>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -950,12 +951,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setKpis({ openDebt: debt, projectedIncome: projected, totalRevenue: total, availableClickers: 500 - reservedClickers });
   }, [events]);
 
+  const uploadAllToCloud = async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const results = { customers: 0, events: 0, leads: 0, tasks: 0 };
+      if (customers.length > 0) { await customersService.bulkInsert(customers); results.customers = customers.length; }
+      if (events.length > 0) { await eventsService.bulkInsert(events); results.events = events.length; }
+      if (leads.length > 0) { await leadsService.bulkInsert(leads); results.leads = leads.length; }
+      if (tasks.length > 0) { await tasksService.bulkInsert(tasks); results.tasks = tasks.length; }
+      return { success: true, message: `הועלו: ${results.customers} לקוחות, ${results.events} אירועים, ${results.leads} לידים, ${results.tasks} משימות` };
+    } catch (err) {
+      return { success: false, message: (err as Error).message };
+    }
+  };
+
   return (
     <AppContext.Provider value={{ 
       userEmail, events, customers, leads, tasks, customForms, activities, settings, updateSettings, sendPortalEmailForCustomer, addEvent, updateEventStatus, updateEvent, deleteEvent,
       addCustomer, updateCustomer, getCustomerById, addLead, updateLeadStatus, updateLead, convertLeadToCustomer, handlePublicBookingSubmit,
       sendBookingEmail, sendPortalEmail, sendEventUpdateEmail, addTask, updateTask, toggleTask, updateTaskProgress, deleteTask, importEvents, importCustomers, importTasks, importLeads, kpis, integrations, toggleIntegration, syncRemoteBookings,
-      addCustomForm, updateCustomForm, deleteCustomForm, getFormById, syncAllEventsWithCustomers
+      addCustomForm, updateCustomForm, deleteCustomForm, getFormById, syncAllEventsWithCustomers, uploadAllToCloud
     }}>
       {children}
     </AppContext.Provider>
