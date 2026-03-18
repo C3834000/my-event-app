@@ -202,6 +202,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     void loadFromStorage();
   }, []);
 
+  // Auto-sync from cloud every 30 seconds
+  useEffect(() => {
+    if (!isLoaded) return;
+    const syncFromCloud = async () => {
+      try {
+        const [cloudEvents, cloudCustomers, cloudLeads, cloudTasks] = await Promise.all([
+          eventsService.getAll(),
+          customersService.getAll(),
+          leadsService.getAll(),
+          tasksService.getAll(),
+        ]);
+        if (cloudCustomers.length > 0) setCustomers(cloudCustomers);
+        if (cloudEvents.length > 0) setEvents(cloudEvents);
+        if (cloudLeads.length > 0) setLeads(cloudLeads);
+        if (cloudTasks.length > 0) setTasks(cloudTasks);
+      } catch {
+        // silent fail - no network or function error
+      }
+    };
+    const interval = setInterval(syncFromCloud, 30000);
+    return () => clearInterval(interval);
+  }, [isLoaded]);
+
   useEffect(() => {
     if (!isLoaded) return;
     
