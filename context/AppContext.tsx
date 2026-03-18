@@ -202,10 +202,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     void loadFromStorage();
   }, []);
 
-  // Auto-sync from cloud every 30 seconds
+  // Auto-sync from cloud every 30 seconds (disabled on public pages like /book and /portal)
   useEffect(() => {
     if (!isLoaded) return;
+    const isPublicPage = window.location.hash.startsWith('#/book') || window.location.hash.startsWith('#/portal') || window.location.hash.startsWith('#/add-event');
+    if (isPublicPage) return;
+
     const syncFromCloud = async () => {
+      const currentHash = window.location.hash;
+      if (currentHash.startsWith('#/book') || currentHash.startsWith('#/portal') || currentHash.startsWith('#/add-event')) return;
       try {
         const [cloudEvents, cloudCustomers, cloudLeads, cloudTasks] = await Promise.all([
           eventsService.getAll(),
