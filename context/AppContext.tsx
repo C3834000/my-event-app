@@ -166,21 +166,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsLoaded(true);
 
-    // Try to load from cloud (non-blocking); if it has data, prefer it over localStorage
+    // Try to load from cloud (non-blocking); only replace local data if cloud has MORE records
     try {
+      const savedData = localStorage.getItem(STORAGE_KEY);
+      const local = savedData ? JSON.parse(savedData) : {};
+      const localCounts = {
+        events: (local.events || []).length,
+        customers: (local.customers || []).length,
+        leads: (local.leads || []).length,
+        tasks: (local.tasks || []).length,
+      };
+
       const [cloudEvents, cloudCustomers, cloudLeads, cloudTasks] = await Promise.all([
         eventsService.getAll(),
         customersService.getAll(),
         leadsService.getAll(),
         tasksService.getAll(),
       ]);
-      if (cloudEvents.length > 0 || cloudCustomers.length > 0) {
-        console.log('☁️ נטען מהענן:', { events: cloudEvents.length, customers: cloudCustomers.length, leads: cloudLeads.length, tasks: cloudTasks.length });
-        setEvents(cloudEvents);
-        setCustomers(cloudCustomers);
-        setLeads(cloudLeads);
-        setTasks(cloudTasks);
-      }
+
+      console.log('☁️ נטען מהענן:', { events: cloudEvents.length, customers: cloudCustomers.length, leads: cloudLeads.length, tasks: cloudTasks.length });
+      console.log('💾 מקומי:', localCounts);
+
+      // Only replace each collection if cloud has equal or more records
+      if (cloudEvents.length >= localCounts.events && cloudEvents.length > 0) setEvents(cloudEvents);
+      if (cloudCustomers.length >= localCounts.customers && cloudCustomers.length > 0) setCustomers(cloudCustomers);
+      if (cloudLeads.length >= localCounts.leads && cloudLeads.length > 0) setLeads(cloudLeads);
+      if (cloudTasks.length >= localCounts.tasks && cloudTasks.length > 0) setTasks(cloudTasks);
+
     } catch (err) {
       console.warn('☁️ שגיאה בטעינה מהענן, ממשיך עם localStorage:', (err as Error).message);
     }
