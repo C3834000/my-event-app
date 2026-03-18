@@ -344,10 +344,12 @@ const EventsBoard: React.FC = () => {
       setCollapsedGroups(initialState);
   }, []);
 
+  const ALL_EVENT_TYPE_VALUES = Object.values(EventType);
+
   const allEventTypes = useMemo(() => {
-    const types = new Set<string>();
+    const types = new Set<string>(ALL_EVENT_TYPE_VALUES);
     events.forEach(e => { if (e.eventType) types.add(e.eventType); });
-    return Array.from(types).sort();
+    return Array.from(types);
   }, [events]);
 
   const toggleEventTypeFilter = (type: string) => {
@@ -526,37 +528,37 @@ const EventsBoard: React.FC = () => {
       </div>
 
       {/* Event Type Filter */}
-      {allEventTypes.length > 0 && (
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-black text-slate-700">🎯 סנן לפי סוג אירוע:</h3>
-            <div className="flex gap-2">
-              <button onClick={() => setSelectedEventTypes(new Set(allEventTypes))} className="text-xs font-bold text-green-600 hover:underline">בחר הכל</button>
-              <button onClick={() => setSelectedEventTypes(new Set())} className="text-xs font-bold text-slate-500 hover:underline">נקה הכל</button>
-            </div>
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-black text-slate-700">🎯 סנן לפי סוג אירוע:</h3>
+          <div className="flex gap-2">
+            <button onClick={() => setSelectedEventTypes(new Set(allEventTypes))} className="text-xs font-bold text-green-600 hover:underline">בחר הכל</button>
+            <button onClick={() => setSelectedEventTypes(new Set())} className="text-xs font-bold text-slate-500 hover:underline">נקה הכל</button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {allEventTypes.map(type => (
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {allEventTypes.map(type => {
+            const count = events.filter(e => e.eventType === type).length;
+            const isActive = selectedEventTypes.size === 0 || selectedEventTypes.has(type);
+            return (
               <button
                 key={type}
                 onClick={() => toggleEventTypeFilter(type)}
                 className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
-                  selectedEventTypes.size === 0 || selectedEventTypes.has(type)
+                  isActive
                     ? 'bg-green-100 text-green-800 border-2 border-green-300'
                     : 'bg-slate-100 text-slate-400 border-2 border-transparent'
                 }`}
               >
                 {type}
-                {(selectedEventTypes.size === 0 || selectedEventTypes.has(type)) && (
-                  <span className="mr-1 text-green-600 font-black">
-                    ({events.filter(e => e.eventType === type).length})
-                  </span>
-                )}
+                <span className={`mr-1 font-black ${isActive ? 'text-green-600' : 'text-slate-400'}`}>
+                  ({count})
+                </span>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       <div className="space-y-4">
         {Object.entries(groupedEvents).map(([group, list]: [string, any]) => {
