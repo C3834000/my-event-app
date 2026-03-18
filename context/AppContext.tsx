@@ -226,11 +226,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           leadsService.getAll(),
           tasksService.getAll(),
         ]);
-        // Always replace with cloud data if cloud has any records
-        if (cloudCustomers.length > 0) setCustomers(cloudCustomers);
-        if (cloudEvents.length > 0) setEvents(cloudEvents);
-        if (cloudLeads.length > 0) setLeads(cloudLeads);
-        if (cloudTasks.length > 0) setTasks(cloudTasks);
+        // Replace with cloud data only if cloud has same or more records (prevents overwriting fresh imports)
+        if (cloudCustomers.length > 0 && cloudCustomers.length >= customers.length) setCustomers(cloudCustomers);
+        if (cloudEvents.length > 0 && cloudEvents.length >= events.length) setEvents(cloudEvents);
+        if (cloudLeads.length > 0 && cloudLeads.length >= leads.length) setLeads(cloudLeads);
+        if (cloudTasks.length > 0 && cloudTasks.length >= tasks.length) setTasks(cloudTasks);
 
         // Sync activities from cloud settings
         const cloudSettings = await settingsService.get();
@@ -916,7 +916,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         category: (row.קטגוריה ?? row.category ?? 'כללי') as TaskCategory,
         estimatedTimeMin: Number(row['משך זמן משוער בדקות'] ?? row.estimatedTimeMin ?? row.זמן ?? 0) || 0,
         progress: isDone ? 100 : progressNum,
-        dueDate: (row['תאריך יעד'] ?? row.dueDate ?? row.תאריך_יעד ?? '').toString() || undefined,
+        dueDate: (row['תאריך יעד'] ?? row.dueDate ?? row.תאריך_יעד ?? '').toString().trim() || undefined,
       };
     });
     setTasks(prev => [...toAdd, ...prev]);

@@ -1,10 +1,27 @@
 import { createClient } from '@supabase/supabase-js';
 
+const DATE_FIELDS = new Set(['due_date', 'completed_date', 'reminder_date', 'reminder_date_time', 'follow_up_date', 'follow_up_reminder']);
+const NUM_FIELDS = new Set(['amount', 'paid_amount', 'potential_revenue', 'estimated_time_min', 'progress', 'priority', 'clickers_needed', 'waiting_days', 'ease_of_execution']);
+
+function cleanRecord(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const result = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === '' || v === undefined) {
+      result[k] = (DATE_FIELDS.has(k) || NUM_FIELDS.has(k)) ? null : null;
+    } else {
+      result[k] = v;
+    }
+  }
+  return result;
+}
+
 function toSnake(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
-  return Object.fromEntries(
+  const snaked = Object.fromEntries(
     Object.entries(obj).map(([k, v]) => [k.replace(/[A-Z]/g, c => '_' + c.toLowerCase()), v])
   );
+  return cleanRecord(snaked);
 }
 
 function toCamel(obj) {

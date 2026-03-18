@@ -333,6 +333,7 @@ const EventsBoard: React.FC = () => {
   const [viewMode, setViewMode] = useState<'all' | 'unpaid'>('all');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const [selectedEventTypes, setSelectedEventTypes] = useState<Set<string>>(new Set());
   const [newTask, setNewTask] = useState({ title: '', category: 'כללי' as any, priority: 3 });
   
   React.useEffect(() => {
@@ -343,14 +344,30 @@ const EventsBoard: React.FC = () => {
       setCollapsedGroups(initialState);
   }, []);
 
+  const allEventTypes = useMemo(() => {
+    const types = new Set<string>();
+    events.forEach(e => { if (e.eventType) types.add(e.eventType); });
+    return Array.from(types).sort();
+  }, [events]);
+
+  const toggleEventTypeFilter = (type: string) => {
+    setSelectedEventTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  };
+
   const filtered = useMemo(() => {
       return events.filter(e => {
         const cust = getCustomerById(e.customerId);
         const s = searchTerm.toLowerCase();
         const match = e.title.toLowerCase().includes(s) || cust?.name.toLowerCase().includes(s) || (e.externalId || '').toLowerCase().includes(s);
-        return viewMode === 'all' ? match : (match && e.paymentStatus !== PaymentStatus.Paid);
+        const typeMatch = selectedEventTypes.size === 0 || selectedEventTypes.has(e.eventType || '');
+        return typeMatch && (viewMode === 'all' ? match : (match && e.paymentStatus !== PaymentStatus.Paid));
       });
-  }, [events, searchTerm, getCustomerById, viewMode]);
+  }, [events, searchTerm, getCustomerById, viewMode, selectedEventTypes]);
 
   const groupedEvents = useMemo(() => {
       const groups: Record<string, AppEvent[]> = {};
@@ -507,6 +524,39 @@ const EventsBoard: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Event Type Filter */}
+      {allEventTypes.length > 0 && (
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-black text-slate-700">🎯 סנן לפי סוג אירוע:</h3>
+            <div className="flex gap-2">
+              <button onClick={() => setSelectedEventTypes(new Set(allEventTypes))} className="text-xs font-bold text-green-600 hover:underline">בחר הכל</button>
+              <button onClick={() => setSelectedEventTypes(new Set())} className="text-xs font-bold text-slate-500 hover:underline">נקה הכל</button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {allEventTypes.map(type => (
+              <button
+                key={type}
+                onClick={() => toggleEventTypeFilter(type)}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                  selectedEventTypes.size === 0 || selectedEventTypes.has(type)
+                    ? 'bg-green-100 text-green-800 border-2 border-green-300'
+                    : 'bg-slate-100 text-slate-400 border-2 border-transparent'
+                }`}
+              >
+                {type}
+                {(selectedEventTypes.size === 0 || selectedEventTypes.has(type)) && (
+                  <span className="mr-1 text-green-600 font-black">
+                    ({events.filter(e => e.eventType === type).length})
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-4">
         {Object.entries(groupedEvents).map(([group, list]: [string, any]) => {
