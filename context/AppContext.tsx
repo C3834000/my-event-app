@@ -10,7 +10,7 @@ import {
   tasksService, 
   formsService, 
   settingsService,
-  migrateFromLocalStorage 
+  migrateFromLocalStorage
 } from '../services/supabase';
 
 interface Activity {
@@ -166,6 +166,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsLoaded(true);
 
+    // Load activities from cloud
+    settingsService.get().then(s => {
+      if (s?.data?.activities && Array.isArray(s.data.activities) && s.data.activities.length > 0) {
+        setActivities(s.data.activities.map((a: any) => ({ ...a, timestamp: new Date(a.timestamp) })));
+      }
+    }).catch(() => {});
+
     // Try to load from cloud (non-blocking); only replace local data if cloud has MORE records
     try {
       const savedData = localStorage.getItem(STORAGE_KEY);
@@ -270,6 +277,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (isLoaded && activities.length > 0) {
       localStorage.setItem('ME_CFM_ACTIVITIES_V1', JSON.stringify({ activities }));
+      // Sync activities to cloud settings
+      settingsService.get().then(s => {
+        const currentData = s?.data || {};
+        settingsService.update({ data: { ...currentData, activities } }).catch(() => {});
+      }).catch(() => {});
     }
   }, [activities, isLoaded]);
 
@@ -315,14 +327,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     let finalCustomerId = customerId;
     if (!customerId && !leadId && data.name && data.phone) {
-      const newCustomer = {
+      const newCustomer: Customer = {
         id: `c_${Date.now()}`,
         name: data.name,
         phone: data.phone,
         email: data.email || '',
-        nextEvent: data.date || '',
-        totalEvents: 0,
-        totalRevenue: 0
       };
       setCustomers(prev => [newCustomer, ...prev]);
       cloudSync(() => customersService.create(newCustomer));

@@ -1,6 +1,7 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
+import { settingsService } from '../services/supabase';
 import { 
   AlertCircle, Briefcase, Calendar as CalendarIcon, 
   CheckCircle2, Check, Zap, Clock, MapPin, Users, Mail, RefreshCw, ArrowLeft, ArrowRight, TrendingUp,
@@ -186,30 +187,52 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const notesInitialized = useRef(false);
+
+  // Load notes: first from localStorage, then from cloud
   useEffect(() => {
     try {
       const saved = localStorage.getItem('dailyNotes');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          setDailyNotes(parsed);
-        }
+        if (Array.isArray(parsed)) setDailyNotes(parsed);
       }
-    } catch (e) {
-      console.error('Error loading daily notes:', e);
-      setDailyNotes([]);
-    }
+    } catch (e) { setDailyNotes([]); }
+
+    // Try loading from cloud
+    settingsService.get().then(s => {
+      if (s?.data?.dailyNotes && Array.isArray(s.data.dailyNotes)) {
+        setDailyNotes(s.data.dailyNotes);
+        localStorage.setItem('dailyNotes', JSON.stringify(s.data.dailyNotes));
+      }
+      notesInitialized.current = true;
+    }).catch(() => { notesInitialized.current = true; });
   }, []);
 
+  // Save notes to localStorage + cloud on change
   useEffect(() => {
-    if (dailyNotes.length > 0 || dailyNotes.length === 0) {
-      try {
-        localStorage.setItem('dailyNotes', JSON.stringify(dailyNotes));
-      } catch (e) {
-        console.error('Error saving daily notes:', e);
-      }
-    }
+    if (!notesInitialized.current) return;
+    try {
+      localStorage.setItem('dailyNotes', JSON.stringify(dailyNotes));
+      settingsService.get().then(s => {
+        const currentData = s?.data || {};
+        settingsService.update({ data: { ...currentData, dailyNotes } }).catch(() => {});
+      }).catch(() => {});
+    } catch (e) { console.error('Error saving daily notes:', e); }
   }, [dailyNotes]);
+
+  // Auto-sync notes from cloud every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      settingsService.get().then(s => {
+        if (s?.data?.dailyNotes && Array.isArray(s.data.dailyNotes)) {
+          setDailyNotes(s.data.dailyNotes);
+          localStorage.setItem('dailyNotes', JSON.stringify(s.data.dailyNotes));
+        }
+      }).catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
