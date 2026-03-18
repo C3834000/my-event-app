@@ -78,7 +78,7 @@ export const handler = async (event) => {
       }
       case 'bulkInsert': {
         if (!Array.isArray(data) || data.length === 0) { result = { success: true }; break; }
-        const { error } = await supabase.from(table).insert(data.map(toSnake));
+        const { error } = await supabase.from(table).upsert(data.map(toSnake), { onConflict: 'id' });
         if (error) throw error;
         result = { success: true };
         break;
