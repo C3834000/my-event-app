@@ -1,4 +1,4 @@
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
 function toSnake(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
@@ -14,7 +14,7 @@ function toCamel(obj) {
   );
 }
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
