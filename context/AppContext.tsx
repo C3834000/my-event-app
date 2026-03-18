@@ -903,20 +903,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addActivity('system', `יובאו ${toAdd.length} לקוחות`);
   };
 
+  const parseDateField = (val: any): string | undefined => {
+    if (!val) return undefined;
+    const s = val.toString().trim();
+    if (!s) return undefined;
+    // Unix timestamp (seconds) - numbers like 1873644759
+    if (/^\d{9,10}$/.test(s)) {
+      const d = new Date(Number(s) * 1000);
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    }
+    // Unix timestamp (milliseconds) - 13 digits
+    if (/^\d{13}$/.test(s)) {
+      const d = new Date(Number(s));
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    }
+    // Already a date string like 2025-01-14 or 2025-01-26 18:00
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    return undefined;
+  };
+
   const importTasks = (data: any[]) => {
     const toAdd: Task[] = data.map((row: any, i: number) => {
       const statusStr = (row.סטטוס ?? row.status ?? row.progress ?? '').toString();
       const progressNum = (() => { const m = statusStr.match(/(\d+)/); return m ? Number(m[1]) : 0; })();
       const isDone = /בוצע\s*100|הושלם|completed|כן/i.test(statusStr);
+      const rawId = (row['Item ID (auto generated)'] ?? row['Item ID'] ?? row.id ?? '').toString().trim();
       return {
-        id: (row['Item ID (auto generated)'] ?? row['Item ID'] ?? row.id ?? `t_${Date.now()}_${i}`).toString(),
+        id: rawId || `t_${Date.now()}_${i}`,
         title: (row.תיאור ?? row.title ?? row.Title ?? row.כותרת ?? '').toString().trim() || 'משימה',
         isCompleted: isDone,
         priority: [TaskPriority.Low, TaskPriority.Medium, TaskPriority.High][Number(row.עדיפות ?? row.priority ?? 1) - 1] ?? TaskPriority.Medium,
         category: (row.קטגוריה ?? row.category ?? 'כללי') as TaskCategory,
         estimatedTimeMin: Number(row['משך זמן משוער בדקות'] ?? row.estimatedTimeMin ?? row.זמן ?? 0) || 0,
         progress: isDone ? 100 : progressNum,
-        dueDate: (row['תאריך יעד'] ?? row.dueDate ?? row.תאריך_יעד ?? '').toString().trim() || undefined,
+        dueDate: parseDateField(row['תאריך יעד'] ?? row.dueDate ?? row.תאריך_יעד),
       };
     });
     setTasks(prev => [...toAdd, ...prev]);
