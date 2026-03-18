@@ -226,10 +226,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           leadsService.getAll(),
           tasksService.getAll(),
         ]);
-        if (cloudCustomers.length > customers.length) setCustomers(cloudCustomers);
-        if (cloudEvents.length > events.length) setEvents(cloudEvents);
-        if (cloudLeads.length > leads.length) setLeads(cloudLeads);
-        if (cloudTasks.length > tasks.length) setTasks(cloudTasks);
+        // Always replace with cloud data if cloud has any records
+        if (cloudCustomers.length > 0) setCustomers(cloudCustomers);
+        if (cloudEvents.length > 0) setEvents(cloudEvents);
+        if (cloudLeads.length > 0) setLeads(cloudLeads);
+        if (cloudTasks.length > 0) setTasks(cloudTasks);
+
+        // Sync activities from cloud settings
+        const cloudSettings = await settingsService.get();
+        if (cloudSettings?.data?.activities?.length > 0) {
+          setActivities(cloudSettings.data.activities.map((a: any) => ({ ...a, timestamp: new Date(a.timestamp) })));
+        }
       } catch {
         // silent fail - no network or function error
       }
