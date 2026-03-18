@@ -59,8 +59,15 @@ export const handler = async (event) => {
       }
       case 'update': {
         const { data: row, error } = await supabase.from(table).update(toSnake(data)).eq('id', id).select().single();
-        if (error) throw error;
-        result = toCamel(row);
+        if (error) {
+          // Row might not exist yet - try upsert instead
+          const merged = id ? { ...toSnake(data), id } : toSnake(data);
+          const { data: upserted, error: upsertError } = await supabase.from(table).upsert([merged]).select().single();
+          if (upsertError) throw upsertError;
+          result = toCamel(upserted);
+        } else {
+          result = toCamel(row);
+        }
         break;
       }
       case 'delete': {
