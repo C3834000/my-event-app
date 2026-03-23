@@ -42,6 +42,9 @@ const BookingForm: React.FC = () => {
   const leadId = searchParams.get('leadId');
   const customerId = searchParams.get('customerId');
   const skipPortal = searchParams.get('skipPortal') === 'true';
+  const prefDate = searchParams.get('prefDate');
+  const prefTime = searchParams.get('prefTime');
+  const prefParticipants = searchParams.get('prefParticipants');
   const formConfig = customForms[0]; 
 
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -62,9 +65,34 @@ const BookingForm: React.FC = () => {
             if (f.mapping === 'email') initial[f.id] = source.email || '';
         });
       }
+      if (prefDate) {
+        const df = formConfig.fields.find(f => f.mapping === 'date');
+        if (df) initial[df.id] = prefDate;
+      }
+      if (prefTime) {
+        const tf = formConfig.fields.find(f => f.mapping === 'startTime');
+        if (tf) {
+          initial[tf.id] = prefTime;
+          const [h, m] = prefTime.split(':').map(Number);
+          let totalMinutes = (h * 60) + m + 90;
+          if (totalMinutes >= 24 * 60) totalMinutes = (23 * 60) + 59;
+          const endH = Math.floor(totalMinutes / 60);
+          const endM = totalMinutes % 60;
+          const roundedM = Math.round(endM / 15) * 15;
+          const finalM = roundedM === 60 ? 0 : roundedM;
+          const finalH = roundedM === 60 ? endH + 1 : endH;
+          const endTimeStr = `${String(Math.min(finalH, 23)).padStart(2, '0')}:${String(finalM).padStart(2, '0')}`;
+          const endField = formConfig.fields.find(f => f.mapping === 'endTime');
+          if (endField) initial[endField.id] = endTimeStr;
+        }
+      }
+      if (prefParticipants) {
+        const nf = formConfig.fields.find(f => f.mapping === 'clickersNeeded');
+        if (nf) initial[nf.id] = prefParticipants;
+      }
       setFormData(initial);
     }
-  }, [formConfig, leads, customers, leadId, customerId]);
+  }, [formConfig, leads, customers, leadId, customerId, prefDate, prefTime, prefParticipants]);
 
   const handleInputChange = (fieldId: string, mapping: string | undefined, value: any) => {
     setFormData(prev => {

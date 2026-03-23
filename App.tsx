@@ -14,6 +14,7 @@ import BookingForm from './pages/BookingForm';
 import FormsManagement from './pages/FormsManagement';
 import ClientJourneyPortal from './pages/ClientJourneyPortal';
 import AddEventFromEmail from './pages/AddEventFromEmail';
+import AvailabilityChecker from './pages/AvailabilityChecker';
 
 const App: React.FC = () => {
   return (
@@ -32,6 +33,7 @@ const App: React.FC = () => {
           </Route>
           {/* Public Routes */}
           <Route path="/book" element={<BookingForm />} />
+          <Route path="/check-availability" element={<AvailabilityChecker />} />
           <Route path="/portal/:id" element={<ClientJourneyPortal />} />
           <Route path="/add-event" element={<AddEventFromEmail />} />
         </Routes>

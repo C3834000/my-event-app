@@ -175,9 +175,17 @@ const ClientJourneyPortal: React.FC = () => {
                   <div className="flex-1 space-y-4">
                     <h3 className="text-3xl font-black text-slate-800">הדבר הכי חשוב והראשון!</h3>
                     <p className="text-slate-500 text-lg">כדי לשריין רשמית את האירוע ולהבטיח שהתאריך שלכם שמור אצלנו, עליכם למלא את טופס ההזמנה. הנתונים נשמרים במערכת.</p>
-                    <Link to={`/book?leadId=${id}`} className="inline-flex items-center gap-2 bg-purple-600 text-white px-10 py-5 rounded-[1.5rem] font-black text-xl shadow-xl hover:bg-purple-500 transition-all">
-                      למילוי טופס הזמנה עכשיו <span className="rotate-180">←</span>
-                    </Link>
+                    <div className="flex flex-col sm:flex-row gap-4 flex-wrap justify-center md:justify-start">
+                      <Link to={`/book?leadId=${id}`} className="inline-flex items-center gap-2 bg-purple-600 text-white px-10 py-5 rounded-[1.5rem] font-black text-xl shadow-xl hover:bg-purple-500 transition-all">
+                        למילוי טופס הזמנה עכשיו <span className="rotate-180">←</span>
+                      </Link>
+                      <Link
+                        to={`/check-availability?leadId=${id}`}
+                        className="inline-flex items-center gap-2 bg-white/15 border-2 border-white/40 text-white px-8 py-5 rounded-[1.5rem] font-black text-lg shadow-xl hover:bg-white/25 transition-all"
+                      >
+                        בדיקת זמינות לפני הזמנה
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </div>
