@@ -22,6 +22,7 @@ const EXCEL_QUESTIONS_URL = 'https://docs.google.com/spreadsheets/d/1MHrb6_9L_sp
 const handbookPagePath = (page: number) => `/1234/${String(page).padStart(2, '0')}.pdf`;
 
 const FAQ_ITEMS = [
+  { q: 'איך בודקים אם התאריך והשעה פנויים?', a: 'בלחיצה על "בדיקת זמינות לפני הזמנה" תוכלו להזין תאריך, שעה ומספר משתתפים. המערכת בודקת מול היומן שלנו (עד 120 משתתפים במקביל, פעילות של שעה וחצי). אם יש מקום – תקבלו קישור ישר לטופס ההזמנה. השריון הרשמי נוצר רק אחרי שליחת הטופס.' },
   { q: 'האם אפשר להכין לבד שאלות?', a: 'ודאי שאפשר, וזה אפילו מאוד מומלץ.' },
   { q: 'האם יש לכם מאגר שאלות?', a: 'כן! יש לנו מאגר של אלפי שאלות מחולקות לקטגוריות: ידע עולם, ידע כללי, יהדות, שאלות משפחתיות, שאלות לבת מצווה, מעגל השנה, זה"ב, משנה, חומש, גמרא ועוד ועוד.' },
   { q: 'האפשר להכניס תמונות וסרטונים?', a: 'לא רק שאפשר – זה מאוד מומלץ ומוסיף המון לחוויה.' },
@@ -106,6 +107,14 @@ const ClientJourneyPortal: React.FC = () => {
     return 'לקוח יקר';
   }, [id, leads, customers]);
 
+  /** קישורי הזמנה ובדיקת זמינות – leadId או customerId לפי מה שקיים במערכת */
+  const portalIdQuery = useMemo(() => {
+    if (!id) return '';
+    if (leads.some(l => l.id === id)) return `leadId=${encodeURIComponent(id)}`;
+    if (customers.some(c => c.id === id)) return `customerId=${encodeURIComponent(id)}`;
+    return `leadId=${encodeURIComponent(id)}`;
+  }, [id, leads, customers]);
+
   const steps = [
     { label: 'הזמנת אירוע', icon: CalendarCheck, color: 'from-blue-400 to-blue-600' },
     { label: 'הכנת חידון', icon: BookOpen, color: 'from-purple-400 to-purple-600' },
@@ -126,6 +135,15 @@ const ClientJourneyPortal: React.FC = () => {
         <div className="max-w-4xl mx-auto relative z-10">
           <h1 className="text-4xl font-black mb-4">שלום {displayName}! הפקת האירוע שלך מתחילה כאן</h1>
           <p className="text-slate-400">אנחנו איתך בכל שלב, מההזמנה ועד להצלחה בערב עצמו.</p>
+          <div className="mt-6 flex flex-wrap gap-3 justify-center sm:justify-start">
+            <Link
+              to={`/check-availability?${portalIdQuery}`}
+              className="inline-flex items-center gap-2 bg-emerald-500/90 hover:bg-emerald-400 text-white font-black px-5 py-3 rounded-2xl shadow-lg border border-emerald-300/50 transition-all text-sm sm:text-base"
+            >
+              <CalendarCheck size={20} />
+              בדיקת זמינות (תאריך ושעה)
+            </Link>
+          </div>
         </div>
         <div className="absolute top-0 left-0 w-96 h-96 bg-purple-600/20 rounded-full blur-[100px] -ml-48 -mt-48"></div>
         {mascotVisible && (
@@ -174,18 +192,22 @@ const ClientJourneyPortal: React.FC = () => {
                   </div>
                   <div className="flex-1 space-y-4">
                     <h3 className="text-3xl font-black text-slate-800">הדבר הכי חשוב והראשון!</h3>
-                    <p className="text-slate-500 text-lg">כדי לשריין רשמית את האירוע ולהבטיח שהתאריך שלכם שמור אצלנו, עליכם למלא את טופס ההזמנה. הנתונים נשמרים במערכת.</p>
+                    <p className="text-slate-500 text-lg">
+                      מומלץ <strong className="text-slate-700">קודם</strong> לבדוק ביומן שלנו אם התאריך והשעה שמתאימים לכם <strong className="text-slate-700">פנויים</strong> – ולקבל הערכת מחיר. אחרי שמצאתם חלון מתאים, מלאו את טופס ההזמנה כדי <strong className="text-slate-700">לשריין רשמית</strong> – רק מה שמוזן בטופס נכנס למערכת.
+                    </p>
                     <div className="flex flex-col sm:flex-row gap-4 flex-wrap justify-center md:justify-start">
-                      <Link to={`/book?leadId=${id}`} className="inline-flex items-center gap-2 bg-purple-600 text-white px-10 py-5 rounded-[1.5rem] font-black text-xl shadow-xl hover:bg-purple-500 transition-all">
-                        למילוי טופס הזמנה עכשיו <span className="rotate-180">←</span>
-                      </Link>
                       <Link
-                        to={`/check-availability?leadId=${id}`}
-                        className="inline-flex items-center gap-2 bg-white/15 border-2 border-white/40 text-white px-8 py-5 rounded-[1.5rem] font-black text-lg shadow-xl hover:bg-white/25 transition-all"
+                        to={`/check-availability?${portalIdQuery}`}
+                        className="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-8 py-5 rounded-[1.5rem] font-black text-lg shadow-xl hover:bg-emerald-500 transition-all border-2 border-emerald-700/20"
                       >
+                        <CalendarCheck size={22} />
                         בדיקת זמינות לפני הזמנה
                       </Link>
+                      <Link to={`/book?${portalIdQuery}`} className="inline-flex items-center justify-center gap-2 bg-purple-600 text-white px-10 py-5 rounded-[1.5rem] font-black text-xl shadow-xl hover:bg-purple-500 transition-all">
+                        למילוי טופס הזמנה עכשיו <span className="rotate-180">←</span>
+                      </Link>
                     </div>
+                    <p className="text-sm text-slate-400 font-bold">הסדר המומלץ: בדיקת זמינות ← ואז טופס הזמנה.</p>
                   </div>
                 </div>
               </div>
