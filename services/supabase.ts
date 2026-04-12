@@ -1,9 +1,25 @@
 import type { Customer, AppEvent, Lead, Task, CustomForm } from '../types';
 
 // In development, call the local Express server on port 4000.
-// In production (Netlify), call the function directly at /.netlify/functions/db.
+// In production (Netlify), use /api/db (redirect in netlify.toml → function).
 const API_BASE = import.meta.env.DEV ? 'http://localhost:4000' : '';
-const DB_URL = import.meta.env.DEV ? `${API_BASE}/api/db` : '/.netlify/functions/db';
+const DB_URL = import.meta.env.DEV ? `${API_BASE}/api/db` : '/api/db';
+
+const DB_FETCH_MS = 25000;
+
+function mapDbNetworkError(err: unknown): Error {
+  const e = err as { name?: string; message?: string };
+  if (e?.name === 'AbortError') {
+    return new Error('השרת לא הגיב בזמן — נסה שוב בעוד רגע.');
+  }
+  const m = (e?.message || '').toLowerCase();
+  if (m.includes('fetch') || m.includes('network') || m.includes('failed to load')) {
+    return new Error(
+      'לא ניתן להתחבר למסד הנתונים מהדפדפן. בדוק חיבור לאינטרנט, נסה רענון, או כבה חוסם פרסומות/פרטיות לדף הזה.'
+    );
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
 
 async function dbRequest(
   action: string,
@@ -11,7 +27,7 @@ async function dbRequest(
   options: { data?: any; id?: string; orderBy?: string; orderAsc?: boolean } = {}
 ): Promise<any> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+  const timeout = setTimeout(() => controller.abort(), DB_FETCH_MS);
   try {
     const response = await fetch(DB_URL, {
       method: 'POST',
@@ -19,9 +35,17 @@ async function dbRequest(
       body: JSON.stringify({ action, table, ...options }),
       signal: controller.signal,
     });
-    const result = await response.json();
+    const raw = await response.text();
+    let result: { data?: any; error?: string } = {};
+    try {
+      result = raw ? JSON.parse(raw) : {};
+    } catch {
+      throw new Error(response.ok ? 'תשובה לא תקינה מהשרת' : `שגיאת שרת (${response.status})`);
+    }
     if (!response.ok) throw new Error(result.error || 'Database request failed');
     return result.data;
+  } catch (err) {
+    throw mapDbNetworkError(err);
   } finally {
     clearTimeout(timeout);
   }
