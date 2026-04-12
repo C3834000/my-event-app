@@ -1,9 +1,9 @@
 import type { Customer, AppEvent, Lead, Task, CustomForm } from '../types';
 
 // In development, call the local Express server on port 4000.
-// In production (Netlify), use /api/db (redirect in netlify.toml → function).
+// In production (Netlify), call the function directly (avoids _redirects / SPA ordering issues).
 const API_BASE = import.meta.env.DEV ? 'http://localhost:4000' : '';
-const DB_URL = import.meta.env.DEV ? `${API_BASE}/api/db` : '/api/db';
+const DB_URL = import.meta.env.DEV ? `${API_BASE}/api/db` : '/.netlify/functions/db';
 
 const DB_FETCH_MS = 25000;
 
