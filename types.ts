@@ -91,6 +91,8 @@ export interface AppEvent {
   email?: string;
   termsAccepted?: boolean;
   taskId?: string;
+  /** תאריך תשלום בפועל (YYYY-MM-DD) */
+  paymentDate?: string;
 }
 
 export interface Lead {
@@ -103,7 +105,13 @@ export interface Lead {
   notes?: string;
   eventDetails?: string;
   followUpDate?: string;
-  followUpReminder?: string; 
+  followUpReminder?: string;
+  /** סיכום שיחה – מה דיברנו */
+  conversationNotes?: string;
+  /** למה הליד מחכה */
+  waitingOn?: string;
+  /** עדכון אחרון (ISO) */
+  lastUpdatedAt?: string;
 }
 
 export enum TaskFrequency {
@@ -123,6 +131,8 @@ export interface Task {
   estimatedTimeMin: number;
   progress: number; 
   dueDate?: string;
+  /** שעת יעד ביום היעד (HH:mm) */
+  dueTime?: string;
   completedDate?: string;
   reminderDate?: string;
   mondayId?: string;

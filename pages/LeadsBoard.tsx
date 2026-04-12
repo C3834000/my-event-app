@@ -103,7 +103,8 @@ const LeadsBoard: React.FC = () => {
   };
 
   const [newLead, setNewLead] = useState({
-    name: '', phone: '', email: '', source: 'Facebook', notes: '', eventDetails: '', followUpDate: ''
+    name: '', phone: '', email: '', source: 'Facebook', notes: '', eventDetails: '',
+    conversationNotes: '', waitingOn: '', followUpDate: '', followUpReminder: '',
   });
 
   const handleSendPortalEmail = async (leadId: string) => {
@@ -125,10 +126,19 @@ const LeadsBoard: React.FC = () => {
     addLead({
       id: `l_${Date.now()}`,
       status: LeadStatus.New,
-      ...newLead
+      name: newLead.name,
+      phone: newLead.phone,
+      email: newLead.email || undefined,
+      source: newLead.source,
+      notes: newLead.notes || undefined,
+      eventDetails: newLead.eventDetails || undefined,
+      conversationNotes: newLead.conversationNotes || undefined,
+      waitingOn: newLead.waitingOn || undefined,
+      followUpDate: newLead.followUpDate || undefined,
+      followUpReminder: newLead.followUpReminder || undefined,
     });
     setIsModalOpen(false);
-    setNewLead({ name: '', phone: '', email: '', source: 'Facebook', notes: '', eventDetails: '', followUpDate: '' });
+    setNewLead({ name: '', phone: '', email: '', source: 'Facebook', notes: '', eventDetails: '', conversationNotes: '', waitingOn: '', followUpDate: '', followUpReminder: '' });
   };
 
   const handleWhatsAppShare = (lead: Lead) => {
@@ -222,16 +232,25 @@ const LeadsBoard: React.FC = () => {
 
         {/* Modal */}
         {(isModalOpen || editingLead) && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                <form onSubmit={editingLead ? (e) => { e.preventDefault(); updateLead(editingLead.id, editingLead); setEditingLead(null); } : handleSubmit} className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-6">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
+                <form onSubmit={editingLead ? (e) => { e.preventDefault(); const { id, ...patch } = editingLead; updateLead(id, patch); setEditingLead(null); } : handleSubmit} className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8 space-y-5 my-8">
                     <div className="flex justify-between items-center">
                         <h3 className="text-xl font-bold">{editingLead ? 'עריכת ליד' : 'ליד חדש'}</h3>
                         <button type="button" onClick={() => { setIsModalOpen(false); setEditingLead(null); }}><X size={24}/></button>
                     </div>
-                    <div className="space-y-4 text-right">
+                    <div className="space-y-4 text-right max-h-[70vh] overflow-y-auto pl-1">
                         <div className="space-y-1"><label className="text-xs font-bold text-slate-400">שם מלא</label><input required className="w-full p-2 border rounded-xl font-bold" value={editingLead ? editingLead.name : newLead.name} onChange={e => editingLead ? setEditingLead({...editingLead, name: e.target.value}) : setNewLead({...newLead, name: e.target.value})}/></div>
                         <div className="space-y-1"><label className="text-xs font-bold text-slate-400">טלפון</label><input className="w-full p-2 border rounded-xl font-bold" value={editingLead ? editingLead.phone : newLead.phone} onChange={e => editingLead ? setEditingLead({...editingLead, phone: e.target.value}) : setNewLead({...newLead, phone: e.target.value})}/></div>
-                        <div className="space-y-1"><label className="text-xs font-bold text-slate-400">אימייל</label><input className="w-full p-2 border rounded-xl font-bold" value={editingLead ? editingLead.email : newLead.email} onChange={e => editingLead ? setEditingLead({...editingLead, email: e.target.value}) : setNewLead({...newLead, email: e.target.value})}/></div>
+                        <div className="space-y-1"><label className="text-xs font-bold text-slate-400">אימייל</label><input className="w-full p-2 border rounded-xl font-bold" value={editingLead ? (editingLead.email || '') : newLead.email} onChange={e => editingLead ? setEditingLead({...editingLead, email: e.target.value}) : setNewLead({...newLead, email: e.target.value})}/></div>
+                        {editingLead && (
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-400">סטטוס במשפך</label>
+                            <select className="w-full p-2 border rounded-xl font-bold" value={editingLead.status} onChange={e => setEditingLead({ ...editingLead, status: e.target.value as LeadStatus })}>
+                              {Object.values(LeadStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </div>
+                        )}
+                        <div className="space-y-1"><label className="text-xs font-bold text-slate-400">מקור</label><input className="w-full p-2 border rounded-xl font-bold" value={editingLead ? editingLead.source : newLead.source} onChange={e => editingLead ? setEditingLead({...editingLead, source: e.target.value}) : setNewLead({...newLead, source: e.target.value})}/></div>
                         <div className="space-y-1">
                             <label className="text-xs font-bold text-slate-400">פרטי האירוע שהלקוח מתעניין בו</label>
                             <textarea 
@@ -242,9 +261,44 @@ const LeadsBoard: React.FC = () => {
                                 onChange={e => editingLead ? setEditingLead({...editingLead, eventDetails: e.target.value}) : setNewLead({...newLead, eventDetails: e.target.value})}
                             />
                         </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-400">מה דיברנו</label>
+                          <textarea className="w-full p-2 border rounded-xl font-bold resize-none" rows={2} placeholder="סיכום שיחה..."
+                            value={editingLead ? (editingLead.conversationNotes || '') : newLead.conversationNotes}
+                            onChange={e => editingLead ? setEditingLead({ ...editingLead, conversationNotes: e.target.value }) : setNewLead({ ...newLead, conversationNotes: e.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-400">למה הוא מחכה / סטטוס טיפול</label>
+                          <textarea className="w-full p-2 border rounded-xl font-bold resize-none" rows={2} placeholder="למשל: מחכה להצעת מחיר..."
+                            value={editingLead ? (editingLead.waitingOn || '') : newLead.waitingOn}
+                            onChange={e => editingLead ? setEditingLead({ ...editingLead, waitingOn: e.target.value }) : setNewLead({ ...newLead, waitingOn: e.target.value })} />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-400">מועד מטופל / יעד</label>
+                            <input type="date" className="w-full p-2 border rounded-xl font-bold"
+                              value={editingLead ? (editingLead.followUpDate || '') : newLead.followUpDate}
+                              onChange={e => editingLead ? setEditingLead({ ...editingLead, followUpDate: e.target.value }) : setNewLead({ ...newLead, followUpDate: e.target.value })} />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-400">תזכורת לטיפול (תאריך ושעה)</label>
+                            <input type="datetime-local" className="w-full p-2 border rounded-xl font-bold"
+                              value={editingLead ? (editingLead.followUpReminder || '') : newLead.followUpReminder}
+                              onChange={e => editingLead ? setEditingLead({ ...editingLead, followUpReminder: e.target.value }) : setNewLead({ ...newLead, followUpReminder: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-400">הערות כלליות</label>
+                          <textarea className="w-full p-2 border rounded-xl font-bold resize-none" rows={2}
+                            value={editingLead ? (editingLead.notes || '') : newLead.notes}
+                            onChange={e => editingLead ? setEditingLead({ ...editingLead, notes: e.target.value }) : setNewLead({ ...newLead, notes: e.target.value })} />
+                        </div>
+                        {editingLead?.lastUpdatedAt && (
+                          <p className="text-[10px] text-slate-400">עודכן לאחרונה: {new Date(editingLead.lastUpdatedAt).toLocaleString('he-IL')}</p>
+                        )}
                     </div>
-                    <div className="flex justify-end gap-3 pt-4">
-                        <button type="submit" className="w-full bg-purple-600 text-white py-4 rounded-xl font-black text-lg shadow-xl">שמור שינויים</button>
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button type="submit" className="w-full bg-purple-600 text-white py-4 rounded-xl font-black text-lg shadow-xl">שמור</button>
                     </div>
                 </form>
             </div>

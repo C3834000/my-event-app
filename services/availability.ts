@@ -1,8 +1,8 @@
 import type { AppEvent } from '../types';
 import { EventStatus } from '../types';
 
-/** מקסימום משתתפים במקביל בכל רגע */
-export const MAX_SIMULTANEOUS_PARTICIPANTS = 120;
+/** מקסימום משתתפים במקביל בכל רגע (עודכן לפי דרישה) */
+export const MAX_SIMULTANEOUS_PARTICIPANTS = 500;
 /** משך פעילות לבדיקה (דקות) */
 export const SLOT_DURATION_MIN = 90;
 
@@ -159,9 +159,9 @@ export function suggestNearestSlots(
   return uniq;
 }
 
-/** אפשרויות מספר משתתפים לטופס (10–120) */
+/** אפשרויות מספר משתתפים לטופס (50–500 בצעדי 50) */
 export function participantStepOptions(): number[] {
   const out: number[] = [];
-  for (let n = 10; n <= 120; n += 10) out.push(n);
+  for (let n = 50; n <= MAX_SIMULTANEOUS_PARTICIPANTS; n += 50) out.push(n);
   return out;
 }

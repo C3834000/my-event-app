@@ -230,7 +230,7 @@ const CustomersBoard: React.FC = () => {
                                                             <div className="space-y-2">
                                                                 <h5 className="text-xs font-bold text-slate-600 uppercase">📅 אירועים ({cEvents.length})</h5>
                                                                 {cEvents.map(ev => (
-                                                                    <Link key={ev.id} to="/events" className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-purple-50 transition-colors border border-slate-100 group">
+                                                                    <Link key={ev.id} to={`/events?eventId=${ev.id}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-purple-50 transition-colors border border-slate-100 group">
                                                                         <div className="flex-1">
                                                                             <div className="font-bold text-sm text-slate-800">{ev.title}</div>
                                                                             <div className="text-xs text-slate-500">{new Date(ev.date).toLocaleDateString('he-IL')} • ₪{ev.amount.toLocaleString()}</div>

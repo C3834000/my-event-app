@@ -55,9 +55,16 @@ export function allBillingTiers(): number[] {
   return a;
 }
 
+/** מחיר ייחוס לפי המדרג הישן (לפני קנה מידה) — 100 משתתפים, שעה וחצי */
+function unscaledPrice100_1_5h(): number {
+  return roundPriceToTens(oldBasePrice(100, 2) * (1.5 / 2) * 1.3);
+}
+
+/** 300 ₪ ל־100 משתתפים לשעה וחצי — כל המדרג מוקנה בהתאם */
+const ANCHOR_PRICE_100_PARTICIPANTS_1_5H = 300;
+
 /**
- * מחיר אחרי +30% ועיגול לעשרות, לפי משך (שעות).
- * 1.5 שעה = יחס לעמודת 2 שעות (לא מינימום 2 שעות מלאות).
+ * מחיר אחרי +30%, עיגול לעשרות, וקנה מידה כך ש־100 משתתפים × 1.5 שעה = 300 ₪.
  */
 export function priceForParticipantsAndDuration(
   rawParticipants: number,
@@ -70,7 +77,10 @@ export function priceForParticipantsAndDuration(
   } else {
     baseOld = oldBasePrice(tier, durationHours);
   }
-  return roundPriceToTens(baseOld * 1.3);
+  const unscaled = roundPriceToTens(baseOld * 1.3);
+  const ref = unscaledPrice100_1_5h();
+  if (ref <= 0) return unscaled;
+  return roundPriceToTens(unscaled * (ANCHOR_PRICE_100_PARTICIPANTS_1_5H / ref));
 }
 
 /** שורה בטבלה (לתצוגה) */

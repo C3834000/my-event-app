@@ -101,7 +101,10 @@ const TasksBoard: React.FC = () => {
         easeOfExecution: newTask.easeOfExecution || 3,
         requiredResources: newTask.requiredResources || '',
         frequency: newTask.frequency || TaskFrequency.OneTime,
-        subTasks: []
+        subTasks: [],
+        dueDate: newTask.dueDate || undefined,
+        dueTime: newTask.dueTime || undefined,
+        reminderDate: newTask.reminderDate || undefined,
     });
     setNewTask({
       title: '',
@@ -113,7 +116,10 @@ const TasksBoard: React.FC = () => {
       potentialRevenue: 0,
       easeOfExecution: 3,
       requiredResources: '',
-      frequency: TaskFrequency.OneTime
+      frequency: TaskFrequency.OneTime,
+      dueDate: undefined,
+      dueTime: undefined,
+      reminderDate: undefined,
     });
     setIsFormOpen(false);
   };
@@ -519,6 +525,14 @@ const TasksBoard: React.FC = () => {
                             <label className="text-xs font-black text-slate-500 mr-2">תאריך יעד</label>
                             <input type="date" className="w-full p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" value={newTask.dueDate || ''} onChange={e => setNewTask({...newTask, dueDate: e.target.value})} />
                         </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-black text-slate-500 mr-2">שעת יעד</label>
+                            <input type="time" step={300} className="w-full p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" value={newTask.dueTime || ''} onChange={e => setNewTask({...newTask, dueTime: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-black text-slate-500 mr-2">תזכורת (תאריך ושעה)</label>
+                            <input type="datetime-local" className="w-full p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" value={newTask.reminderDate || ''} onChange={e => setNewTask({...newTask, reminderDate: e.target.value})} />
+                        </div>
                         <div className="md:col-span-2 space-y-1">
                             <label className="text-xs font-black text-slate-500 mr-2">משאבים נדרשים</label>
                             <textarea className="w-full p-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" rows={3} value={newTask.requiredResources || ''} onChange={e => setNewTask({...newTask, requiredResources: e.target.value})} placeholder="למשל: מחשב, זמן צוות, תקציב פרסום..." />
@@ -606,6 +620,16 @@ const TasksBoard: React.FC = () => {
                                 className="w-full p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm" 
                                 value={editingTask.dueDate || ''} 
                                 onChange={e => setEditingTask({...editingTask, dueDate: e.target.value})}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-black text-slate-500 mr-2">שעת יעד</label>
+                            <input
+                                type="time"
+                                step={300}
+                                className="w-full p-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-purple-200 font-bold text-sm"
+                                value={editingTask.dueTime || ''}
+                                onChange={e => setEditingTask({ ...editingTask, dueTime: e.target.value })}
                             />
                         </div>
                         <div className="space-y-1">

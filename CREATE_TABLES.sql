@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS customers (
   email TEXT NOT NULL DEFAULT '',
   company_name TEXT,
   notes TEXT,
-  task_ids JSONB DEFAULT '[]',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

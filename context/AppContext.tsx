@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { AppEvent, Customer, Lead, Task, EventStatus, PaymentStatus, EventType, TaskPriority, LeadStatus, CustomForm, FormField, TaskCategory, PaymentMethod } from '../types';
 import { mockCustomers, mockEvents, mockLeads, mockTasks } from '../services/mockData';
-import { sendEmail } from '../services/emailService';
+import { sendEmail, formatSendEmailError } from '../services/emailService';
 import { 
   customersService, 
   eventsService, 
@@ -12,6 +12,7 @@ import {
   settingsService,
   migrateFromLocalStorage
 } from '../services/supabase';
+import { buildPaymentDateUpdates } from '../services/paymentDateImport';
 
 interface Activity {
   id: string;
@@ -57,6 +58,8 @@ interface AppContextType {
   updateTaskProgress: (id: string, progress: number) => void;
   deleteTask: (id: string) => void;
   importEvents: (data: any[]) => void;
+  /** שורות CSV עם Item ID + תאריך תשלום — מעדכן אירועים לפי externalId */
+  applyPaymentDatesFromImport: (rows: Record<string, unknown>[]) => number;
   importCustomers: (data: any[]) => void;
   importTasks: (data: any[]) => void;
   importLeads: (data: Lead[]) => void;
@@ -282,6 +285,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [events, customers, leads, tasks, settings, customForms, isLoaded]);
 
+  /** גיבוי JSON מלא לשדה settings בענן (מוגבל ~750KB) — שחזור בדשבורד: "שחזר מענן" */
+  useEffect(() => {
+    if (!isLoaded) return;
+    const CLOUD_BACKUP_MAX = 750_000;
+    const t = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw || raw.length > CLOUD_BACKUP_MAX) {
+            if (raw && raw.length > CLOUD_BACKUP_MAX) {
+              console.warn('גיבוי מלא לענן דולג: הקובץ גדול מדי. הורידו גיבוי ידני.');
+            }
+            return;
+          }
+          const s = await settingsService.get();
+          const currentData = { ...(s?.data || {}) };
+          currentData.fullStorageBackup = raw;
+          currentData.fullStorageBackupAt = new Date().toISOString();
+          await settingsService.update({ data: currentData });
+        } catch (e) {
+          console.warn('גיבוי לענן (הגדרות):', (e as Error).message);
+        }
+      })();
+    }, 120_000);
+    return () => clearTimeout(t);
+  }, [events, customers, leads, tasks, settings, customForms, isLoaded]);
+
   useEffect(() => {
     if (isLoaded && activities.length > 0) {
       localStorage.setItem('ME_CFM_ACTIVITIES_V1', JSON.stringify({ activities }));
@@ -390,7 +420,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // יומן עברי - הבריכה (Hebcal)
       const hebcalUrl = `https://www.hebcal.com/converter?gd=${event.date.split('-')[2]}&gm=${event.date.split('-')[1]}&gy=${event.date.split('-')[0]}&g2h=1`;
-      const { success, error } = await sendEmail({
+      const { success, error, hint } = await sendEmail({
         to: toEmail,
         subject: `✅ אישור הזמנה #${event.id.substring(2, 15)} - ${data.name} - ${new Date(event.date).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}`,
         html: `
@@ -459,7 +489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         `,
       });
       if (success) addActivity('email', `מייל אישור הזמנה נשלח ללקוח: ${toEmail}`);
-      else addActivity('email', `שליחת מייל נכשלה: ${error || 'לא מוגדר'}`);
+      else addActivity('email', `שליחת מייל נכשלה: ${formatSendEmailError(error, hint)}`);
     }
 
     // שליחת מייל למנהל המערכת
@@ -580,7 +610,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const portalUrl = `https://myecrm2026.netlify.app/#/portal/${leadId}`;
     const toEmail = (lead.email || '').trim();
     if (toEmail) {
-      const { success, error } = await sendEmail({
+      const { success, error, hint } = await sendEmail({
         to: toEmail,
         subject: `פורטל הלקוח האישי שלך - ${settings.companyName}`,
         html: `
@@ -592,7 +622,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
         `,
       });
-      if (!success) throw new Error(error || 'שליחת המייל נכשלה');
+      if (!success) throw new Error(formatSendEmailError(error, hint));
     }
     addActivity('email', `מייל עם קישור לפורטל נשלח ל-${lead.name} (${lead.email})`);
     return { success: true, email: lead.email || '', url: portalUrl };
@@ -638,17 +668,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
   const getCustomerById = (id: string) => customers.find(c => c.id === id);
   const addLead = (lead: Lead) => {
-    setLeads(prev => [...prev, lead]);
-    cloudSync(() => leadsService.create(lead));
+    const stamped: Lead = { ...lead, lastUpdatedAt: lead.lastUpdatedAt || new Date().toISOString() };
+    setLeads(prev => [...prev, stamped]);
+    cloudSync(() => leadsService.create(stamped));
     addActivity('system', `ליד חדש נוסף: ${lead.name}`);
   };
   const updateLeadStatus = (id: string, status: LeadStatus) => {
-    setLeads(prev => prev.map(l => l.id === id ? { ...l, status } : l));
-    cloudSync(() => leadsService.update(id, { status }));
+    const patch = { status, lastUpdatedAt: new Date().toISOString() };
+    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+    cloudSync(() => leadsService.update(id, patch));
   };
   const updateLead = (id: string, updates: Partial<Lead>) => {
-    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
-    cloudSync(() => leadsService.update(id, updates));
+    const patch = { ...updates, lastUpdatedAt: new Date().toISOString() };
+    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+    cloudSync(() => leadsService.update(id, patch));
   };
   const convertLeadToCustomer = (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
@@ -699,7 +732,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const bookUrl = `https://myecrm2026.netlify.app/#/book?leadId=${leadId}`;
     const toEmail = (lead.email || '').trim();
     if (toEmail) {
-      const { success, error } = await sendEmail({
+      const { success, error, hint } = await sendEmail({
         to: toEmail,
         subject: `טופס הזמנת אירוע - ${settings.companyName}`,
         html: `
@@ -711,7 +744,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
         `,
       });
-      if (!success) throw new Error(error || 'שליחת המייל נכשלה');
+      if (!success) throw new Error(formatSendEmailError(error, hint));
     }
     return { success: true, email: toEmail, url: bookUrl };
   };
@@ -746,12 +779,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const portalUrl = `https://myecrm2026.netlify.app/#/portal/${customerId}`;
     const toEmail = (customer.email || '').trim();
     if (toEmail) {
-      const { success, error } = await sendEmail({
+      const { success, error, hint } = await sendEmail({
         to: toEmail,
         subject: `פורטל הלקוח האישי שלך - ${settings.companyName}`,
         html: `<div dir="rtl" style="font-family: Heebo, sans-serif;"><p>שלום ${customer.name},</p><p>הנה הקישור לפורטל האישי שלך:</p><p><a href="${portalUrl}">${portalUrl}</a></p><p>בברכה,<br/>${settings.companyName}</p></div>`,
       });
-      if (!success) throw new Error(error || 'שליחת המייל נכשלה');
+      if (!success) throw new Error(formatSendEmailError(error, hint));
     }
     addActivity('email', `מייל פורטל נשלח ללקוח ${customer.name}`);
     return { success: true, email: customer.email || '', url: portalUrl };
@@ -773,8 +806,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const norm = (s: string) => (s || '').trim().toLowerCase();
 
   const pick = (row: any, ...keys: string[]) => { for (const k of keys) { const v = row[k]; if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim(); } return ''; };
-    const parseDate = (s: string) => { if (!s) return new Date().toISOString().split('T')[0]; const d = String(s).trim(); const m = d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; if (d.match(/^\d{4}-\d{2}-\d{2}/)) return d.slice(0,10); return new Date().toISOString().split('T')[0]; };
-    const importEvents = (data: any[]) => {
+  const parseDate = (s: string) => { if (!s) return new Date().toISOString().split('T')[0]; const d = String(s).trim(); const m = d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; if (d.match(/^\d{4}-\d{2}-\d{2}/)) return d.slice(0,10); return new Date().toISOString().split('T')[0]; };
+
+  const applyPaymentDatesFromImport = (rows: Record<string, unknown>[]): number => {
+    const updates = buildPaymentDateUpdates(events, rows as Record<string, string>[]);
+    if (updates.length === 0) return 0;
+    const map = new Map(updates.map(u => [u.id, u.paymentDate]));
+    setEvents(prev => prev.map(e => {
+      const pd = map.get(e.id);
+      return pd ? { ...e, paymentDate: pd } : e;
+    }));
+    updates.forEach(u => cloudSync(() => eventsService.update(u.id, { paymentDate: u.paymentDate })));
+    addActivity('system', `עודכנו תאריכי תשלום ל-${updates.length} אירועים מקובץ`);
+    return updates.length;
+  };
+
+  const importEvents = (data: any[]) => {
     const fixPhone = (val: any): string => {
       if (!val) return '';
       let str = String(val).trim();
@@ -949,33 +996,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let debt = 0, projected = 0, total = 0, reservedClickers = 0;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
+    const num = (v: unknown): number => {
+      const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim());
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const paidStatuses: PaymentStatus[] = [
+      PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck,
+      PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider,
+    ];
+
     events.forEach(ev => {
       const eventDate = new Date(ev.date);
       eventDate.setHours(0, 0, 0, 0);
       const isPastEvent = eventDate < today;
       const isFutureEvent = eventDate >= today;
-      
-      // סה"כ הכנסות - כל מה ששולם
-      total += ev.paidAmount || 0;
-      
-      // חוב פתוח - אירועים שבוצעו ולא שולמו במלואם
-      const isPaid = [PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck, PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider].includes(ev.paymentStatus);
-      if (!isPaid && (ev.amount - (ev.paidAmount || 0)) > 0) {
-        debt += (ev.amount - (ev.paidAmount || 0));
+
+      const amt = num(ev.amount);
+      const paidAmt = num(ev.paidAmount);
+      const balance = Math.max(0, amt - paidAmt);
+
+      total += paidAmt;
+
+      const isPaid = paidStatuses.includes(ev.paymentStatus);
+
+      // יתרת גבייה: רק אירועים שכבר עבר תאריכם (לא עתידיים) ועדיין יש יתרה לגבייה
+      if (isPastEvent && !isPaid && balance > 0) {
+        debt += balance;
       }
-      
-      // צפי הכנסות - אירועים עתידיים שעדיין לא שולמו
-      if (isFutureEvent && !isPaid) {
-        projected += (ev.amount - (ev.paidAmount || 0));
+
+      if (isFutureEvent && !isPaid && balance > 0) {
+        projected += balance;
       }
-      
-      // קליקרים תפוסים - אירועים עתידיים
+
       if (isFutureEvent) {
-        reservedClickers += ev.clickersNeeded || 0;
+        reservedClickers += num(ev.clickersNeeded);
       }
     });
-    
+
     setKpis({ openDebt: debt, projectedIncome: projected, totalRevenue: total, availableClickers: 500 - reservedClickers });
   }, [events]);
 
@@ -996,7 +1055,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{ 
       userEmail, events, customers, leads, tasks, customForms, activities, settings, updateSettings, sendPortalEmailForCustomer, addEvent, updateEventStatus, updateEvent, deleteEvent,
       addCustomer, updateCustomer, getCustomerById, addLead, updateLeadStatus, updateLead, convertLeadToCustomer, handlePublicBookingSubmit,
-      sendBookingEmail, sendPortalEmail, sendEventUpdateEmail, addTask, updateTask, toggleTask, updateTaskProgress, deleteTask, importEvents, importCustomers, importTasks, importLeads, kpis, integrations, toggleIntegration, syncRemoteBookings,
+      sendBookingEmail, sendPortalEmail, sendEventUpdateEmail, addTask, updateTask, toggleTask, updateTaskProgress, deleteTask, importEvents, applyPaymentDatesFromImport, importCustomers, importTasks, importLeads, kpis, integrations, toggleIntegration, syncRemoteBookings,
       addCustomForm, updateCustomForm, deleteCustomForm, getFormById, syncAllEventsWithCustomers, uploadAllToCloud
     }}>
       {children}

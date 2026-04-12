@@ -44,6 +44,19 @@ export const handler = async (event) => {
     });
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   } catch (err) {
-    return { statusCode: 500, headers, body: JSON.stringify({ success: false, error: err.message }) };
+    const message = err.message || String(err);
+    const authFailed =
+      /Invalid login|535|Authentication failed|EAUTH|bad credentials|Username and Password not accepted/i.test(
+        message
+      );
+    const payload = {
+      success: false,
+      error: message,
+      ...(authFailed && {
+        hint:
+          'אימות SMTP נכשל. ב-Gmail צריך "סיסמת אפליקציה" (לא סיסמת הגוגל הרגילה), ולעדכן ב-Netlify: Site settings → Environment variables → SMTP_PASS. אחרי שינוי סיסמת Gmail יש ליצור סיסמת אפליקציה חדשה ולעדכן שם בלבד.',
+      }),
+    };
+    return { statusCode: 500, headers, body: JSON.stringify(payload) };
   }
 };

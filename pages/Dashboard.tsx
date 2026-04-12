@@ -7,7 +7,8 @@ import {
   CheckCircle2, Check, Zap, Clock, MapPin, Users, Mail, RefreshCw, ArrowLeft, ArrowRight, TrendingUp,
   Target, PhoneCall, MessageSquare, Facebook, Instagram, Bell, StickyNote, Download, Upload
 } from 'lucide-react';
-import { EventStatus, EventType } from '../types';
+import { EventStatus, EventType, PaymentStatus, AppEvent } from '../types';
+import { Link } from 'react-router-dom';
 import { downloadBackupFile, restoreFromAutoBackup } from '../services/autoBackup';
 
 const HOLIDAYS: Record<string, string> = {
@@ -136,8 +137,30 @@ const TaskCard: React.FC<{ task: any; onToggle: (id: string) => void; onUpdate: 
   );
 };
 
+const PAID_PAYMENT_STATUSES: PaymentStatus[] = [
+  PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck,
+  PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider,
+];
+
+const numMoney = (v: unknown): number => {
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim());
+  return Number.isFinite(n) ? n : 0;
+};
+
+const eventHasOpenDebt = (ev: AppEvent) => {
+  if (PAID_PAYMENT_STATUSES.includes(ev.paymentStatus)) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const eventDate = new Date(ev.date);
+  eventDate.setHours(0, 0, 0, 0);
+  if (eventDate >= today) return false;
+  const balance = Math.max(0, numMoney(ev.amount) - numMoney(ev.paidAmount));
+  return balance > 0;
+};
+
 const Dashboard: React.FC = () => {
   const { kpis, tasks, events, toggleTask, activities, customers, updateTask, leads, uploadAllToCloud } = useApp();
+  const [debtModalOpen, setDebtModalOpen] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -172,6 +195,25 @@ const Dashboard: React.FC = () => {
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleRestoreFromCloud = async () => {
+    if (!confirm('לשחזר מהענן את העותק האחרון שנשמר בהגדרות? (רק אם הופעל גיבוי אוטומטי לענן)')) return;
+    try {
+      const s = await settingsService.get();
+      const raw = s?.data?.fullStorageBackup as string | undefined;
+      if (!raw || typeof raw !== 'string') {
+        alert('אין גיבוי מלא שמור בענן. נסו קובץ JSON או לחצו קודם "העלה לענן" ואז חכו כשתי דקות.');
+        return;
+      }
+      localStorage.setItem('ME_CFM_STORAGE_V12', raw);
+      const parsed = JSON.parse(raw);
+      alert(`שוחזר מענן: ${parsed.events?.length || 0} אירועים, ${parsed.customers?.length || 0} לקוחות, ${parsed.tasks?.length || 0} משימות, ${parsed.leads?.length || 0} לידים`);
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+      alert('שגיאה בשחזור מענן');
+    }
   };
 
   const loadInitialBackup = async () => {
@@ -264,8 +306,58 @@ const Dashboard: React.FC = () => {
   }, [events, currentDate, currentYear, currentMonth]);
 
   const selectedDayEvents = useMemo(() => events.filter(e => e.date === selectedDate).sort((a, b) => a.startTime.localeCompare(b.startTime)), [events, selectedDate]);
-  const displayTasks = useMemo(() => [...tasks].sort((a,b) => (a.isCompleted === b.isCompleted ? 0 : a.isCompleted ? 1 : -1)).slice(0, 5), [tasks]);
-  const hours = Array.from({ length: 16 }, (_, i) => `${String(i + 8).padStart(2, '0')}:00`);
+  const debtEventRows = useMemo(() => {
+    return events
+      .filter(eventHasOpenDebt)
+      .map(ev => ({
+        ev,
+        debt: Math.max(0, numMoney(ev.amount) - numMoney(ev.paidAmount)),
+        customer: customers.find(c => c.id === ev.customerId),
+      }))
+      .sort((a, b) => b.debt - a.debt);
+  }, [events, customers]);
+
+  const dayPlanSlots = useMemo(() => {
+    const d = selectedDate;
+    if (!d) return [];
+    const slots: { hour: number; items: { type: 'event' | 'task'; label: string; id: string; sub?: string }[] }[] = Array.from({ length: 24 }, (_, hour) => ({ hour, items: [] }));
+    const parseHm = (t: string) => {
+      const [hh, mm] = (t || '0:00').split(':').map(x => parseInt(x, 10) || 0);
+      return hh + mm / 60;
+    };
+    const startHour = (t: string) => Math.min(23, Math.max(0, Math.floor(parseHm(t))));
+
+    selectedDayEvents.forEach(ev => {
+      const sh = startHour(ev.startTime);
+      const endH = Math.min(23, Math.max(sh, Math.ceil(parseHm(ev.endTime || ev.startTime)) - 1));
+      for (let h = sh; h <= endH; h++) {
+        slots[h].items.push({ type: 'event', label: ev.title, id: ev.id, sub: `${ev.startTime}–${ev.endTime}` });
+      }
+    });
+
+    tasks.forEach(t => {
+      if (t.isCompleted || !t.dueDate || t.dueDate !== d) return;
+      if (t.dueTime) {
+        const h = startHour(t.dueTime);
+        slots[h].items.push({ type: 'task', label: t.title, id: t.id, sub: 'משימה' });
+      }
+    });
+
+    tasks.forEach(t => {
+      if (t.isCompleted || !t.reminderDate) return;
+      const rd = new Date(t.reminderDate);
+      if (isNaN(rd.getTime())) return;
+      const y = rd.getFullYear();
+      const m = String(rd.getMonth() + 1).padStart(2, '0');
+      const day = String(rd.getDate()).padStart(2, '0');
+      const ds = `${y}-${m}-${day}`;
+      if (ds !== d) return;
+      const h = rd.getHours();
+      slots[h].items.push({ type: 'task', label: t.title, id: t.id, sub: 'תזכורת' });
+    });
+
+    return slots;
+  }, [selectedDate, selectedDayEvents, tasks]);
   
   const calculateTaskScore = (task: any): number => {
     const today = new Date();
@@ -302,7 +394,7 @@ const Dashboard: React.FC = () => {
   const debtCustomers = useMemo(() => {
     return customers.map(c => {
       const cEvents = events.filter(ev => ev.customerId === c.id);
-      const totalDebt = cEvents.reduce((sum, ev) => sum + (ev.amount - (ev.paidAmount || 0)), 0);
+      const totalDebt = cEvents.reduce((sum, ev) => sum + (eventHasOpenDebt(ev) ? Math.max(0, numMoney(ev.amount) - numMoney(ev.paidAmount)) : 0), 0);
       return { customer: c, debt: totalDebt, eventsCount: cEvents.length };
     }).filter(item => item.debt > 0)
       .sort((a, b) => b.debt - a.debt)
@@ -406,6 +498,14 @@ const Dashboard: React.FC = () => {
             >
               <Upload size={14} /> שחזר
             </button>
+            <button
+              type="button"
+              onClick={() => void handleRestoreFromCloud()}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-md hover:bg-indigo-700 transition-all text-sm"
+              title="שחזור מ-Supabase (גיבוי אוטומטי לענן אחרי שינוי נתונים)"
+            >
+              <Upload size={14} /> שחזר מענן
+            </button>
             <button onClick={() => setRefreshKey(k => k + 1)} className="flex items-center gap-2 bg-purple-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-md hover:bg-purple-700 transition-all text-sm">
               <RefreshCw size={14} /> רענן
             </button>
@@ -414,13 +514,18 @@ const Dashboard: React.FC = () => {
         
         {/* KPI Cards Row */}
         <div className="grid grid-cols-4 gap-3" key={refreshKey}>
-          <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setDebtModalOpen(true)}
+            className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex items-center justify-between text-right hover:border-red-200 hover:bg-red-50/40 transition-all cursor-pointer"
+          >
             <div>
               <p className="text-[10px] font-bold text-slate-500">יתרת גבייה</p>
               <h3 className="text-xl font-black text-red-600">₪{kpis.openDebt.toLocaleString()}</h3>
+              <p className="text-[9px] text-slate-400 mt-0.5">לחץ לרשימת לקוחות לגבייה</p>
             </div>
             <div className="p-2 bg-red-50 rounded-lg text-red-500"><AlertCircle size={18} /></div>
-          </div>
+          </button>
           <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-bold text-slate-500">סה״כ הכנסות</p>
@@ -490,78 +595,76 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Daily Agenda Timeline - Internal Scroll */}
-          <div className="bg-yellow-50 rounded-xl border-2 border-yellow-300 p-3 flex-1 overflow-hidden flex flex-col">
-            <div className="mb-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                  <CalendarIcon size={16} className="text-purple-600"/> תוכנית יומית
-                </h3>
-                <div className="flex gap-1">
-                  <button 
-                    onClick={() => {
-                      const current = new Date(selectedDate || new Date());
-                      current.setDate(current.getDate() - 1);
-                      setSelectedDate(current.toISOString().split('T')[0]);
-                    }}
-                    className="p-1 hover:bg-yellow-200 rounded text-slate-600"
-                    title="יום קודם"
-                  >
-                    <ArrowRight size={12}/>
-                  </button>
-                  <button 
-                    onClick={() => {
-                      const current = new Date(selectedDate || new Date());
-                      current.setDate(current.getDate() + 1);
-                      setSelectedDate(current.toISOString().split('T')[0]);
-                    }}
-                    className="p-1 hover:bg-yellow-200 rounded text-slate-600"
-                    title="יום הבא"
-                  >
-                    <ArrowLeft size={12}/>
-                  </button>
-                </div>
-              </div>
-              {selectedDate && (
-                <p className="text-[9px] text-slate-600 font-bold mt-1">
-                  {new Date(selectedDate).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  <span className="text-purple-600 mr-1">• {getHebrewDayGematria(new Date(selectedDate))}</span>
-                </p>
-              )}
+          {/* עדכונים שוטפים (החלפת התצוגה הקודמת של תוכנית יומית) */}
+          <div className="bg-yellow-50 rounded-xl border-2 border-yellow-300 p-3 flex-1 overflow-hidden flex flex-col min-h-0">
+            <div className="mb-2 shrink-0">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <MessageSquare size={16} className="text-purple-600"/> עדכונים אחרונים שוטפים
+              </h3>
             </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-              {selectedDayEvents.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-300 py-8">
-                  <CalendarIcon size={32} opacity={0.3} />
-                  <p className="text-xs font-bold mt-2">אין אירועים רשומים</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {selectedDayEvents.map(event => (
-                    <button 
-                      key={event.id} 
-                      onClick={() => setSelectedEvent(event)}
-                      className="w-full bg-white rounded-lg p-3 border-r-4 border-purple-500 shadow-sm hover:shadow-md transition-all text-right"
-                    >
-                      <h4 className="font-bold text-xs text-slate-800 mb-1">{event.title}</h4>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-600">
-                        <Clock size={10}/> {event.startTime}-{event.endTime}
-                      </div>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-600 mt-1">
-                        <MapPin size={10}/> {event.location || 'לא צוין'}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
+              <div className="space-y-2">
+                {activities.slice(0, 20).map(act => (
+                  <div key={act.id} className="flex gap-2 p-2 rounded-lg bg-white/80 border border-yellow-200/80 hover:bg-white transition-all">
+                    <div className={`p-1.5 rounded shrink-0 ${act.type === 'email' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>
+                      {act.type === 'email' ? <Mail size={12}/> : <CheckCircle2 size={12}/>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold text-slate-700 leading-tight break-words">{act.message}</p>
+                      <span className="text-[8px] text-slate-400">{act.timestamp.toLocaleString('he-IL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
+                ))}
+                {activities.length === 0 && <p className="text-xs text-slate-400 text-center py-6">אין פעילות עדיין</p>}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* COLUMN 2 (Center) - Smart Tasks + Activity Stream */}
-        <div className="flex flex-col gap-3 overflow-hidden">
+        {/* COLUMN 2 (Center) - תוכנית יומית 24 שעות + משימות חכמות */}
+        <div className="flex flex-col gap-3 overflow-hidden min-h-0">
+          {/* לוח 24 שעות — היום הנבחר בלוח שנה */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 flex-[0.85] overflow-hidden flex flex-col min-h-0">
+            <div className="flex items-center justify-between mb-2 shrink-0">
+              <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                <CalendarIcon size={16} className="text-purple-600"/> תוכנית יומית (24 שעות)
+              </h3>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => goAdjacentDay(-1)} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="יום קודם"><ArrowRight size={12}/></button>
+                <button type="button" onClick={() => goAdjacentDay(1)} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="יום הבא"><ArrowLeft size={12}/></button>
+              </div>
+            </div>
+            {selectedDate && (
+              <p className="text-[9px] text-slate-600 font-bold mb-2 shrink-0">
+                {new Date(selectedDate).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
+                <span className="text-purple-600 mr-1">• {getHebrewDayGematria(new Date(selectedDate))}</span>
+              </p>
+            )}
+            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 space-y-0.5 pr-1">
+              {dayPlanSlots.map(slot => (
+                <div key={slot.hour} className="flex gap-2 text-[9px] border-b border-slate-100/80 py-1">
+                  <div className="w-10 shrink-0 font-mono font-bold text-slate-500 tabular-nums">
+                    {String(slot.hour).padStart(2, '0')}:00
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    {slot.items.length === 0 ? (
+                      <span className="text-slate-300">—</span>
+                    ) : (
+                      slot.items.map((it, idx) => (
+                        <div key={`${it.type}-${it.id}-${idx}`} className={`rounded px-2 py-1 ${it.type === 'event' ? 'bg-purple-50 border border-purple-100' : 'bg-amber-50 border border-amber-100'}`}>
+                          <div className="font-bold text-slate-800 truncate">{it.label}</div>
+                          {it.sub && <div className="text-[8px] text-slate-500">{it.sub}</div>}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Smart Task Board with 6 Categories */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 flex-1 overflow-hidden flex flex-col">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 flex-1 overflow-hidden flex flex-col min-h-0">
             <div className="flex items-center justify-between mb-2 shrink-0">
               <h3 className="text-sm font-black text-slate-800">לוח משימות</h3>
               <div className="flex items-center gap-1 bg-purple-100 text-purple-700 px-2 py-1 rounded-lg">
@@ -646,26 +749,6 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Activity Stream / Newsfeed */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 flex-1 overflow-hidden flex flex-col">
-            <h3 className="text-sm font-black text-slate-800 mb-2 shrink-0">עדכונים אחרונים שוטפים</h3>
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <div className="space-y-2">
-                {activities.slice(0, 15).map(act => (
-                  <div key={act.id} className="flex gap-2 p-2 rounded-lg bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-all">
-                    <div className={`p-1.5 rounded ${act.type === 'email' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>
-                      {act.type === 'email' ? <Mail size={12}/> : <CheckCircle2 size={12}/>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-bold text-slate-700 leading-tight truncate">{act.message}</p>
-                      <span className="text-[8px] text-slate-400">{act.timestamp.toLocaleString('he-IL', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'})}</span>
-                    </div>
-                  </div>
-                ))}
-                {activities.length === 0 && <p className="text-xs text-slate-400 text-center py-4">אין פעילות</p>}
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* COLUMN 3 (Left) - Marketing Hub + Daily Reminders */}
@@ -854,6 +937,47 @@ const Dashboard: React.FC = () => {
         </div>
 
       </div>
+
+      {debtModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDebtModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="text-lg font-black text-slate-800">גבייה פתוחה</h3>
+                <p className="text-xs text-slate-500">לפי אירועים — מעבר לכרטיס האירוע, מייל או חיוג</p>
+              </div>
+              <button type="button" onClick={() => setDebtModalOpen(false)} className="text-slate-400 hover:text-slate-800 text-sm font-bold">סגור</button>
+            </div>
+            <div className="overflow-y-auto p-4 space-y-3">
+              {debtEventRows.length === 0 ? (
+                <p className="text-center text-slate-500 text-sm py-8">אין חובות פתוחים 🎉</p>
+              ) : (
+                debtEventRows.map(({ ev, debt, customer }) => {
+                  const email = (customer?.email || ev.email || '').trim();
+                  const phone = (customer?.phone || ev.phone || '').replace(/\D/g, '');
+                  const telHref = phone ? `tel:${phone.startsWith('0') ? phone : phone}` : '';
+                  return (
+                    <div key={ev.id} className="border border-slate-200 rounded-xl p-3 space-y-2">
+                      <div className="flex justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-800 truncate">{ev.title}</p>
+                          <p className="text-xs text-slate-500">{customer?.name || 'ללא שם לקוח'}</p>
+                        </div>
+                        <span className="text-red-600 font-black shrink-0">₪{debt.toLocaleString()}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Link to={`/events?eventId=${ev.id}`} onClick={() => setDebtModalOpen(false)} className="text-xs font-bold bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700">פרטי האירוע</Link>
+                        {email && <a href={`mailto:${email}`} className="text-xs font-bold bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-200">מייל</a>}
+                        {telHref && <a href={telHref} className="text-xs font-bold bg-green-50 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100">התקשר</a>}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Event Details Modal */}
       {selectedEvent && (

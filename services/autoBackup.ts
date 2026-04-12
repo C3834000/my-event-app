@@ -103,16 +103,27 @@ export function downloadBackupFile(): void {
     }
 
     const parsed = JSON.parse(data);
+    const full = {
+      events: Array.isArray(parsed.events) ? parsed.events : [],
+      customers: Array.isArray(parsed.customers) ? parsed.customers : [],
+      leads: Array.isArray(parsed.leads) ? parsed.leads : [],
+      tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+      settings: parsed.settings ?? {},
+      customForms: Array.isArray(parsed.customForms) ? parsed.customForms : [],
+    };
+    if (!Array.isArray(parsed.tasks) || !Array.isArray(parsed.leads)) {
+      console.warn('בגיבוי חסרים tasks/leads במקור — בקובץ יש מערכים תקינים (אולי ריקים).');
+    }
     const backup = {
       timestamp: new Date().toISOString(),
       version: 'V12',
-      data: parsed,
+      data: full,
       summary: {
-        events: parsed.events?.length || 0,
-        customers: parsed.customers?.length || 0,
-        leads: parsed.leads?.length || 0,
-        tasks: parsed.tasks?.length || 0
-      }
+        events: full.events.length,
+        customers: full.customers.length,
+        leads: full.leads.length,
+        tasks: full.tasks.length,
+      },
     };
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -157,7 +168,7 @@ export function startAutoBackup(): void {
   };
   setInterval(checkDailyBackup, 60000);
 
-  console.log('🔄 גיבוי אוטומטי הופעל - יוריד קובץ כל יום ב-23:00');
+  console.log('גיבוי אוטומטי: הורדה ב-23:00 רק כשהדפדפן פתוח. כשהמחשב כבוי - העלה לענן או גיבוי מלא בהגדרות.');
 }
 
 /**

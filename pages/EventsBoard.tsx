@@ -1,10 +1,10 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { EventStatus, PaymentStatus, EventType, AppEvent, PaymentMethod } from '../types';
 import { Plus, Search, FileText, Calendar as CalendarIcon, Download, X, Save, MapPin, Users, Clock, ChevronDown, ChevronUp, MousePointer2, Info, Upload, Edit, Trash2 } from 'lucide-react';
 import { exportToCSV, parseCSV } from '../services/utils';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 const EVENT_TAGS: Record<string, string> = {
   'קליכיף': 'bg-blue-500 text-white',
@@ -86,14 +86,15 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
   const showDebt = !isPaid && debt > 0;
 
   return (
-      <div className="bg-white border-b border-slate-100 p-5 hover:bg-slate-50 transition-colors group">
-          <div className="flex flex-col lg:flex-row gap-6">
-              <div className="flex-1 space-y-3">
-                  <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                              <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{event.externalId || 'ID לא זמין'}</span>
-                              <h4 className="text-lg font-bold text-slate-800">{event.title}</h4>
+      <div id={`event-row-${event.id}`} className="bg-white border-b border-slate-100 p-4 sm:p-5 hover:bg-slate-50 transition-colors group rounded-lg sm:rounded-none">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col xl:flex-row xl:items-start gap-4 xl:gap-6">
+              <div className="flex-1 min-w-0 space-y-3">
+                  <div className="flex items-start justify-between gap-3 min-w-0">
+                      <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                              <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded shrink-0">{event.externalId || 'ID לא זמין'}</span>
+                              <h4 className="text-base sm:text-lg font-bold text-slate-800 break-words">{event.title}</h4>
                           </div>
                           <div className="flex flex-wrap gap-2">
                             <span className={`text-xs font-bold px-3 py-1 rounded-lg ${EVENT_TAGS[event.tag] || 'bg-slate-400 text-white'}`}>{event.tag}</span>
@@ -105,60 +106,65 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
                              )}
                           </div>
                       </div>
-                      <button onClick={() => onEdit(event)} className="p-2.5 hover:bg-purple-100 text-slate-400 hover:text-purple-600 rounded-xl transition-colors"><Edit size={20} /></button>
+                      <button type="button" onClick={() => onEdit(event)} className="p-2.5 hover:bg-purple-100 text-slate-400 hover:text-purple-600 rounded-xl transition-colors shrink-0"><Edit size={20} /></button>
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
-                      <div className="flex items-center gap-2 text-slate-600">
-                         <Users size={16} className="text-purple-500" />
-                         <span className="font-medium">{customer?.name || event.title || 'לא משויך ללקוח'}</span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                      <div className="flex items-center gap-2 text-slate-600 min-w-0">
+                         <Users size={16} className="text-purple-500 shrink-0" />
+                         <span className="font-medium truncate">{customer?.name || event.title || 'לא משויך ללקוח'}</span>
                       </div>
                       {event.phone && (
-                          <div className="flex items-center gap-2 text-slate-600">
-                             <span className="text-purple-500">📞</span>
-                             <span className="font-medium">{event.phone}</span>
+                          <div className="flex items-center gap-2 text-slate-600 min-w-0">
+                             <span className="text-purple-500 shrink-0">📞</span>
+                             <a href={`tel:${event.phone}`} className="font-medium truncate hover:text-purple-600">{event.phone}</a>
                           </div>
                       )}
                       {event.email && (
-                          <div className="flex items-center gap-2 text-slate-600">
-                             <span className="text-purple-500">📧</span>
-                             <span className="font-medium text-xs">{event.email}</span>
+                          <div className="sm:col-span-2 flex items-start gap-2 text-slate-600 min-w-0">
+                             <span className="text-purple-500 shrink-0 mt-0.5">📧</span>
+                             <a href={`mailto:${event.email}`} className="font-medium text-xs break-all min-w-0 leading-relaxed">{event.email}</a>
                           </div>
                       )}
                       {event.location && (
-                          <div className="flex items-center gap-2 text-slate-600">
-                             <MapPin size={16} className="text-purple-500" />
-                             <span className="font-medium">{event.location}</span>
+                          <div className="sm:col-span-2 flex items-center gap-2 text-slate-600 min-w-0">
+                             <MapPin size={16} className="text-purple-500 shrink-0" />
+                             <span className="font-medium break-words">{event.location}</span>
+                          </div>
+                      )}
+                      {event.paymentDate && (
+                          <div className="sm:col-span-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 w-fit">
+                            תאריך תשלום: {new Date(event.paymentDate + 'T12:00:00').toLocaleDateString('he-IL')}
                           </div>
                       )}
                       {event.notes && (
-                          <div className="md:col-span-2 lg:col-span-3 flex items-start gap-2 text-slate-600 bg-amber-50 p-2 rounded-lg border border-amber-100">
+                          <div className="sm:col-span-2 flex items-start gap-2 text-slate-600 bg-amber-50 p-2 rounded-lg border border-amber-100">
                              <Info size={14} className="text-amber-600 mt-0.5 shrink-0" />
-                             <span className="text-xs font-medium">{event.notes}</span>
+                             <span className="text-xs font-medium break-words">{event.notes}</span>
                           </div>
                       )}
                   </div>
               </div>
 
-              <div className="flex flex-col lg:flex-row gap-4 lg:items-center">
-                  <div className="space-y-1.5 lg:w-48">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-4 xl:flex-nowrap xl:shrink-0 xl:border-s xl:border-slate-200 xl:ps-6 pt-2 xl:pt-0 border-t xl:border-t-0 border-slate-100">
+                  <div className="space-y-1.5 min-w-[9rem]">
                       <div className="flex items-center gap-2 font-bold text-slate-800 text-base">
-                          <CalendarIcon size={16} className="text-blue-500" />
+                          <CalendarIcon size={16} className="text-blue-500 shrink-0" />
                           {new Date(event.date).toLocaleDateString('he-IL')}
                       </div>
-                      {event.hebrewDate && <div className="text-xs text-slate-500 italic pr-6">{event.hebrewDate}</div>}
-                      <div className="text-sm text-slate-600 flex items-center gap-1.5 pr-6">
-                          <Clock size={14} className="text-green-500" />
+                      {event.hebrewDate && <div className="text-xs text-slate-500 italic">{event.hebrewDate}</div>}
+                      <div className="text-sm text-slate-600 flex items-center gap-1.5">
+                          <Clock size={14} className="text-green-500 shrink-0" />
                           {event.startTime} - {event.endTime}
                       </div>
                   </div>
 
-                  <div className="space-y-1.5 lg:w-32">
+                  <div className="space-y-1.5 min-w-[5rem]">
                      <div className="text-lg font-bold text-slate-800">₪{event.amount.toLocaleString()}</div>
-                     {showDebt && <div className="text-xs text-red-600 font-bold bg-red-50 px-2 py-1 rounded">חוב: ₪{debt.toLocaleString()}</div>}
+                     {showDebt && <div className="text-xs text-red-600 font-bold bg-red-50 px-2 py-1 rounded w-fit">חוב: ₪{debt.toLocaleString()}</div>}
                   </div>
 
-                  <div className="lg:w-56">
+                  <div className="w-full sm:w-auto sm:min-w-[12rem] xl:w-56">
                       <select 
                         value={event.paymentStatus}
                         onChange={(e) => updateEvent(event.id, { paymentStatus: e.target.value as PaymentStatus })}
@@ -168,16 +174,16 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
                       </select>
                   </div>
               </div>
+            </div>
 
-              {/* Linked Task */}
-              <div className="border-t border-slate-100 pt-3 mt-3">
+              <div className="border-t border-slate-100 pt-3">
                 {linkedTask ? (
-                  <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-lg p-3">
-                    <div className="flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                    <div className="flex-1 min-w-0">
                       <div className="text-xs font-bold text-purple-600 mb-1">📋 משימה מקושרת:</div>
-                      <div className="text-sm font-bold text-slate-800">{linkedTask.title}</div>
+                      <div className="text-sm font-bold text-slate-800 break-words">{linkedTask.title}</div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       {linkedTask.isCompleted ? (
                         <span className="text-xs font-bold bg-green-500 text-white px-3 py-1 rounded-lg">✓ הושלמה</span>
                       ) : linkedTask.progress > 0 ? (
@@ -186,6 +192,7 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
                         <span className="text-xs font-bold bg-slate-300 text-slate-700 px-3 py-1 rounded-lg">⏸️ ממתינה</span>
                       )}
                       <button 
+                        type="button"
                         onClick={() => updateEvent(event.id, { taskId: undefined })}
                         className="text-red-500 hover:bg-red-50 p-1 rounded transition-all"
                         title="נתק משימה"
@@ -197,6 +204,7 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
                 ) : (
                   <div className="flex items-center gap-2">
                     <button
+                      type="button"
                       onClick={() => onCreateTask?.(event)}
                       className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-3 py-2 rounded-lg border-2 border-purple-300 transition-all flex items-center gap-1"
                     >
@@ -233,7 +241,8 @@ const EditEventModal: React.FC<{ event?: Partial<AppEvent>; onClose: () => void;
       notes: event?.notes || '',
       phone: event?.phone || initialCust?.phone || '',
       email: event?.email || initialCust?.email || '',
-      hebrewDate: event?.hebrewDate || ''
+      hebrewDate: event?.hebrewDate || '',
+      paymentDate: event?.paymentDate || ''
     });
     const [customerSearch, setCustomerSearch] = useState('');
     const [showCustomerList, setShowCustomerList] = useState(false);
@@ -303,6 +312,7 @@ const EditEventModal: React.FC<{ event?: Partial<AppEvent>; onClose: () => void;
                     <div className="space-y-1"><label className="text-xs font-bold text-slate-400">אימייל</label><input className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})}/></div>
                     <div className="space-y-1"><label className="text-xs font-bold text-slate-400">סכום (₪)</label><input type="number" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})}/></div>
                     <div className="space-y-1"><label className="text-xs font-bold text-slate-400">תאריך</label><input type="date" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})}/></div>
+                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">תאריך תשלום בפועל</label><input type="date" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.paymentDate || ''} onChange={e => setFormData({...formData, paymentDate: e.target.value || undefined})}/></div>
                     <div className="space-y-1"><label className="text-xs font-bold text-slate-400">תאריך עברי</label><input className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.hebrewDate} onChange={e => setFormData({...formData, hebrewDate: e.target.value})}/></div>
                     <div className="space-y-1"><label className="text-xs font-bold text-slate-400">סוג אירוע</label><select className="w-full p-2 border rounded-lg" value={formData.eventType} onChange={e => setFormData({...formData, eventType: e.target.value as any})}>{Object.values(EventType).map(v => <option key={v} value={v}>{v}</option>)}</select></div>
                     <div className="space-y-1"><label className="text-xs font-bold text-slate-400">תג אירוע</label><select className="w-full p-2 border rounded-lg" value={formData.tag} onChange={e => setFormData({...formData, tag: e.target.value})}>{Object.keys(EVENT_TAGS).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
@@ -325,25 +335,20 @@ const EditEventModal: React.FC<{ event?: Partial<AppEvent>; onClose: () => void;
 };
 
 const EventsBoard: React.FC = () => {
-  const { events, getCustomerById, importEvents, addTask, updateEvent } = useApp();
+  const { events, getCustomerById, importEvents, addTask, updateEvent, applyPaymentDatesFromImport } = useApp();
+  const [searchParams] = useSearchParams();
+  const highlightEventId = searchParams.get('eventId');
   const [searchTerm, setSearchTerm] = useState('');
   const [editingEvent, setEditingEvent] = useState<AppEvent | null>(null);
   const [creatingTaskForEvent, setCreatingTaskForEvent] = useState<AppEvent | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const paymentCsvRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<'all' | 'unpaid'>('all');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [selectedEventTypes, setSelectedEventTypes] = useState<Set<string>>(new Set());
   const [newTask, setNewTask] = useState({ title: '', category: 'כללי' as any, priority: 3 });
   
-  React.useEffect(() => {
-      const initialState: Record<string, boolean> = {};
-      Object.keys(groupedEvents).forEach(key => {
-          initialState[key] = key !== '🆕 אירועים חדשים';
-      });
-      setCollapsedGroups(initialState);
-  }, []);
-
   const ALL_EVENT_TYPE_VALUES = Object.values(EventType);
 
   const allEventTypes = useMemo(() => {
@@ -405,6 +410,31 @@ const EventsBoard: React.FC = () => {
           return obj;
       }, {});
   }, [filtered, selectedCategories]);
+
+  useEffect(() => {
+    setCollapsedGroups(prev => {
+      const next = { ...prev };
+      let changed = false;
+      Object.keys(groupedEvents).forEach(key => {
+        if (next[key] === undefined) {
+          next[key] = key !== '🆕 אירועים חדשים';
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [groupedEvents]);
+
+  useEffect(() => {
+    if (!highlightEventId) return;
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(`event-row-${highlightEventId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el?.classList.add('ring-4', 'ring-purple-400', 'ring-offset-2', 'rounded-xl');
+      window.setTimeout(() => el?.classList.remove('ring-4', 'ring-purple-400', 'ring-offset-2', 'rounded-xl'), 2800);
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [highlightEventId, events.length]);
 
   const toggleGroup = (group: string) => {
       setCollapsedGroups(prev => ({...prev, [group]: !prev[group]}));
@@ -480,10 +510,12 @@ const EventsBoard: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <input type="file" ref={fileInputRef} onChange={async (e) => { const file = e.target.files?.[0]; if(file) { importEvents(await parseCSV(file)); alert('ייבוא וסנכרון הושלם!'); } }} className="hidden" accept=".csv" />
+          <input type="file" ref={paymentCsvRef} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { const rows = await parseCSV(file); const n = applyPaymentDatesFromImport(rows as Record<string, unknown>[]); alert(n ? `עודכנו תאריכי תשלום ל-${n} אירועים` : 'לא נמצאו התאמות. וודאו שיש בעמודות Item ID ותאריך תשלום, ושהמזהה תואם לאירוע.'); } finally { e.target.value = ''; } }} className="hidden" accept=".csv" />
           <Link to="/book?skipPortal=true" className="bg-purple-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-lg hover:bg-purple-700 transition-all"><Plus size={18} /> הוסף אירוע</Link>
-          <button onClick={() => fileInputRef.current?.click()} className="bg-white border px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-slate-50 transition-all"><Upload size={18} /> ייבוא</button>
+          <button type="button" onClick={() => fileInputRef.current?.click()} className="bg-white border px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-slate-50 transition-all"><Upload size={18} /> ייבוא</button>
+          <button type="button" title="קובץ נתוני אירועים: Item ID + תאריך תשלום" onClick={() => paymentCsvRef.current?.click()} className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-amber-100 transition-all"><CalendarIcon size={18} /> תאריכי תשלום</button>
           <button onClick={() => setViewMode(v => v === 'all' ? 'unpaid' : 'all')} className={`px-4 py-2 rounded-xl font-bold transition-all shadow-sm ${viewMode === 'unpaid' ? 'bg-red-500 text-white' : 'bg-white text-slate-700 border'}`}>
             {viewMode === 'unpaid' ? 'הצג הכל' : 'הצג חובות'}
           </button>

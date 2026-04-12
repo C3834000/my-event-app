@@ -27,7 +27,7 @@ const AvailabilityChecker: React.FC = () => {
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
   });
   const [time, setTime] = useState('10:00');
-  const [participants, setParticipants] = useState(50);
+  const [participants, setParticipants] = useState(100);
 
   const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -164,7 +164,7 @@ const AvailabilityChecker: React.FC = () => {
               </div>
               <div>
                 <label className="flex items-center gap-2 text-sm font-bold text-purple-100 mb-2">
-                  <Users size={16} /> מספר משתתפים (צעדים של 10)
+                  <Users size={16} /> מספר משתתפים
                 </label>
                 <select
                   value={participants}
@@ -191,7 +191,7 @@ const AvailabilityChecker: React.FC = () => {
             <div className="mt-6 bg-amber-500/15 border border-amber-400/30 rounded-2xl p-5 text-sm">
               <p className="font-black text-amber-100 mb-1">מחיר משוער (שעה וחצי, כולל מע״מ)</p>
               <p className="text-amber-50/90">
-                לפי <strong>{billingTier}</strong> משתתפים (רמת חיוב לפי עיגול כלפי מעלה):{' '}
+                לפי <strong>{billingTier}</strong> משתתפים:{' '}
                 <strong className="text-xl text-white">₪{estimatedPrice.toLocaleString()}</strong>
               </p>
               <p className="text-xs text-amber-100/70 mt-2">
