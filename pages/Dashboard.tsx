@@ -7,9 +7,10 @@ import {
   CheckCircle2, Check, Zap, Clock, MapPin, Users, Mail, RefreshCw, ArrowLeft, ArrowRight, TrendingUp,
   Target, PhoneCall, MessageSquare, Facebook, Instagram, Bell, StickyNote, Download, Upload
 } from 'lucide-react';
-import { EventStatus, EventType, PaymentStatus, AppEvent } from '../types';
+import { EventType, AppEvent } from '../types';
 import { Link } from 'react-router-dom';
 import { downloadBackupFile, restoreFromAutoBackup } from '../services/autoBackup';
+import { numMoney, eventContributesToOpenDebt, todayDateKey } from '../services/eventKpi';
 
 const HOLIDAYS: Record<string, string> = {
   "14-03": "פורים",
@@ -135,27 +136,6 @@ const TaskCard: React.FC<{ task: any; onToggle: (id: string) => void; onUpdate: 
       )}
     </div>
   );
-};
-
-const PAID_PAYMENT_STATUSES: PaymentStatus[] = [
-  PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck,
-  PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider,
-];
-
-const numMoney = (v: unknown): number => {
-  const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim());
-  return Number.isFinite(n) ? n : 0;
-};
-
-const eventHasOpenDebt = (ev: AppEvent) => {
-  if (PAID_PAYMENT_STATUSES.includes(ev.paymentStatus)) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const eventDate = new Date(ev.date);
-  eventDate.setHours(0, 0, 0, 0);
-  if (eventDate >= today) return false;
-  const balance = Math.max(0, numMoney(ev.amount) - numMoney(ev.paidAmount));
-  return balance > 0;
 };
 
 const Dashboard: React.FC = () => {
@@ -307,8 +287,9 @@ const Dashboard: React.FC = () => {
 
   const selectedDayEvents = useMemo(() => events.filter(e => e.date === selectedDate).sort((a, b) => a.startTime.localeCompare(b.startTime)), [events, selectedDate]);
   const debtEventRows = useMemo(() => {
+    const todayKey = todayDateKey();
     return events
-      .filter(eventHasOpenDebt)
+      .filter(ev => eventContributesToOpenDebt(ev, todayKey))
       .map(ev => ({
         ev,
         debt: Math.max(0, numMoney(ev.amount) - numMoney(ev.paidAmount)),
@@ -392,9 +373,10 @@ const Dashboard: React.FC = () => {
   }, [tasks]);
 
   const debtCustomers = useMemo(() => {
+    const todayKey = todayDateKey();
     return customers.map(c => {
       const cEvents = events.filter(ev => ev.customerId === c.id);
-      const totalDebt = cEvents.reduce((sum, ev) => sum + (eventHasOpenDebt(ev) ? Math.max(0, numMoney(ev.amount) - numMoney(ev.paidAmount)) : 0), 0);
+      const totalDebt = cEvents.reduce((sum, ev) => sum + (eventContributesToOpenDebt(ev, todayKey) ? Math.max(0, numMoney(ev.amount) - numMoney(ev.paidAmount)) : 0), 0);
       return { customer: c, debt: totalDebt, eventsCount: cEvents.length };
     }).filter(item => item.debt > 0)
       .sort((a, b) => b.debt - a.debt)

@@ -13,6 +13,7 @@ import {
   migrateFromLocalStorage
 } from '../services/supabase';
 import { buildPaymentDateUpdates } from '../services/paymentDateImport';
+import { parseEventDateKey, todayDateKey, numMoney, isPaidForKpi, excludeEventFromKpis } from '../services/eventKpi';
 
 interface Activity {
   id: string;
@@ -994,44 +995,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     let debt = 0, projected = 0, total = 0, reservedClickers = 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const num = (v: unknown): number => {
-      const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim());
-      return Number.isFinite(n) ? n : 0;
-    };
-
-    const paidStatuses: PaymentStatus[] = [
-      PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck,
-      PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider,
-    ];
+    const todayKey = todayDateKey();
 
     events.forEach(ev => {
-      const eventDate = new Date(ev.date);
-      eventDate.setHours(0, 0, 0, 0);
-      const isPastEvent = eventDate < today;
-      const isFutureEvent = eventDate >= today;
-
-      const amt = num(ev.amount);
-      const paidAmt = num(ev.paidAmount);
-      const balance = Math.max(0, amt - paidAmt);
-
+      const paidAmt = numMoney(ev.paidAmount);
       total += paidAmt;
 
-      const isPaid = paidStatuses.includes(ev.paymentStatus);
+      if (excludeEventFromKpis(ev)) return;
 
-      // יתרת גבייה: רק אירועים שכבר עבר תאריכם (לא עתידיים) ועדיין יש יתרה לגבייה
+      const evKey = parseEventDateKey(ev.date);
+      const isPastEvent = !!evKey && evKey < todayKey;
+      const isFutureOrToday = !!evKey && evKey >= todayKey;
+
+      const amt = numMoney(ev.amount);
+      const balance = Math.max(0, amt - paidAmt);
+
+      const isPaid = isPaidForKpi(ev.paymentStatus);
+
       if (isPastEvent && !isPaid && balance > 0) {
         debt += balance;
       }
 
-      if (isFutureEvent && !isPaid && balance > 0) {
+      if (isFutureOrToday && !isPaid && balance > 0) {
         projected += balance;
       }
 
-      if (isFutureEvent) {
-        reservedClickers += num(ev.clickersNeeded);
+      if (isFutureOrToday) {
+        reservedClickers += numMoney(ev.clickersNeeded);
       }
     });
 
