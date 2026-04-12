@@ -114,7 +114,7 @@ const LeadsBoard: React.FC = () => {
       setSuccessMsg('פורטל הלקוח נשלח בהצלחה למייל!');
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err) {
-      alert('שגיאה בשליחת המייל');
+      alert(err instanceof Error ? err.message : 'שגיאה בשליחת המייל');
     } finally {
       setSendingId(null);
     }

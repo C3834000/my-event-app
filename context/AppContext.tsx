@@ -606,15 +606,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const sendPortalEmail = async (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
-    if (!lead) throw new Error('Lead not found');
+    if (!lead) throw new Error('הליד לא נמצא');
 
     const portalUrl = `https://myecrm2026.netlify.app/#/portal/${leadId}`;
     const toEmail = (lead.email || '').trim();
-    if (toEmail) {
-      const { success, error, hint } = await sendEmail({
-        to: toEmail,
-        subject: `פורטל הלקוח האישי שלך - ${settings.companyName}`,
-        html: `
+    if (!toEmail) throw new Error('לא הוגדר מייל לליד — יש למלא שדה אימייל לפני שליחת הפורטל.');
+    const { success, error, hint } = await sendEmail({
+      to: toEmail,
+      subject: `פורטל הלקוח האישי שלך - ${settings.companyName}`,
+      html: `
           <div dir="rtl" style="font-family: Heebo, sans-serif;">
             <p>שלום ${lead.name},</p>
             <p>הנה הקישור לפורטל האישי שלך להמשך ההכנה לאירוע:</p>
@@ -622,11 +622,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             <p>בברכה,<br/>${settings.companyName}</p>
           </div>
         `,
-      });
-      if (!success) throw new Error(formatSendEmailError(error, hint));
-    }
-    addActivity('email', `מייל עם קישור לפורטל נשלח ל-${lead.name} (${lead.email})`);
-    return { success: true, email: lead.email || '', url: portalUrl };
+    });
+    if (!success) throw new Error(formatSendEmailError(error, hint));
+    addActivity('email', `מייל עם קישור לפורטל נשלח ל-${lead.name} (${toEmail})`);
+    return { success: true, email: toEmail, url: portalUrl };
   };
 
   const addEvent = (event: AppEvent) => {
@@ -776,19 +775,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const sendPortalEmailForCustomer = async (customerId: string) => {
     const customer = customers.find(c => c.id === customerId);
-    if (!customer) throw new Error('Customer not found');
+    if (!customer) throw new Error('הלקוח לא נמצא');
     const portalUrl = `https://myecrm2026.netlify.app/#/portal/${customerId}`;
     const toEmail = (customer.email || '').trim();
-    if (toEmail) {
-      const { success, error, hint } = await sendEmail({
-        to: toEmail,
-        subject: `פורטל הלקוח האישי שלך - ${settings.companyName}`,
-        html: `<div dir="rtl" style="font-family: Heebo, sans-serif;"><p>שלום ${customer.name},</p><p>הנה הקישור לפורטל האישי שלך:</p><p><a href="${portalUrl}">${portalUrl}</a></p><p>בברכה,<br/>${settings.companyName}</p></div>`,
-      });
-      if (!success) throw new Error(formatSendEmailError(error, hint));
-    }
-    addActivity('email', `מייל פורטל נשלח ללקוח ${customer.name}`);
-    return { success: true, email: customer.email || '', url: portalUrl };
+    if (!toEmail) throw new Error('לא הוגדר מייל ללקוח — יש למלא אימייל בכרטיס הלקוח לפני שליחת הפורטל.');
+    const { success, error, hint } = await sendEmail({
+      to: toEmail,
+      subject: `פורטל הלקוח האישי שלך - ${settings.companyName}`,
+      html: `<div dir="rtl" style="font-family: Heebo, sans-serif;"><p>שלום ${customer.name},</p><p>הנה הקישור לפורטל האישי שלך:</p><p><a href="${portalUrl}">${portalUrl}</a></p><p>בברכה,<br/>${settings.companyName}</p></div>`,
+    });
+    if (!success) throw new Error(formatSendEmailError(error, hint));
+    addActivity('email', `מייל פורטל נשלח ללקוח ${customer.name} (${toEmail})`);
+    return { success: true, email: toEmail, url: portalUrl };
   };
 
   const sendEventUpdateEmail = async (event: AppEvent) => {

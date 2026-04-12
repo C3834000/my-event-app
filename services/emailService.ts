@@ -36,7 +36,15 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
     const data = await res.json().catch(() => ({}));
     
     if (!res.ok) {
-      return { success: false, error: data.error || res.statusText, hint: data.hint };
+      const errText = data.error || res.statusText;
+      const notConfigured = res.status === 503 || /not configured/i.test(String(errText));
+      return {
+        success: false,
+        error: errText,
+        hint: data.hint || (notConfigured
+          ? 'ב-Netlify: Site configuration → Environment variables — יש להגדיר SMTP_HOST, SMTP_USER, SMTP_PASS (למשל Gmail: smtp.gmail.com, פורט 587). אחרי שמירה: Trigger deploy מחדש.'
+          : undefined),
+      };
     }
     
     return { success: !!data.success, error: data.error, hint: data.hint };

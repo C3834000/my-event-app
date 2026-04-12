@@ -27,10 +27,12 @@ export const handler = async (event) => {
     return { statusCode: 503, headers, body: JSON.stringify({ error: 'Email not configured on server' }) };
   }
 
+  const port = Number(SMTP_PORT) || 587;
   const transporter = nodemailer.createTransport({
     host: SMTP_HOST,
-    port: Number(SMTP_PORT) || 587,
-    secure: false,
+    port,
+    secure: port === 465,
+    requireTLS: port !== 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
   });
 
@@ -54,7 +56,7 @@ export const handler = async (event) => {
       error: message,
       ...(authFailed && {
         hint:
-          'אימות SMTP נכשל. ב-Gmail צריך "סיסמת אפליקציה" (לא סיסמת הגוגל הרגילה), ולעדכן ב-Netlify: Site settings → Environment variables → SMTP_PASS. אחרי שינוי סיסמת Gmail יש ליצור סיסמת אפליקציה חדשה ולעדכן שם בלבד.',
+          'אימות SMTP נכשל. ב-Gmail צריך "סיסמת אפליקציה" (לא סיסמת הגוגל הרגילה), ולעדכן ב-Netlify: Site configuration -> Environment variables -> SMTP_PASS. SMTP_USER = full Gmail. If FROM_EMAIL is set, use same as SMTP_USER. After env changes: Trigger deploy. Gmail needs App Password, not login password.',
       }),
     };
     return { statusCode: 500, headers, body: JSON.stringify(payload) };

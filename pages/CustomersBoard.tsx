@@ -104,7 +104,7 @@ const CustomersBoard: React.FC = () => {
       alert('פורטל נשלח למייל בהצלחה!');
     } catch (e) {
       console.error('❌ שגיאה בשליחת פורטל:', e);
-      alert('שגיאה בשליחת המייל או שלא הוגדר אימייל ללקוח.');
+      alert(e instanceof Error ? e.message : 'שגיאה בשליחת המייל');
     } finally {
       setSendingPortalId(null);
     }
