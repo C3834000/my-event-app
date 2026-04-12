@@ -15,6 +15,14 @@ import {
 import { buildPaymentDateUpdates } from '../services/paymentDateImport';
 import { parseEventDateKey, todayDateKey, numMoney, isPaidForKpi, excludeEventFromKpis } from '../services/eventKpi';
 
+/** כשמספר הרשומות בענן לא גדול מהמקומי — לא מחליפים רשימה שלמה (הענן עלול להיות ישן ולדרוס עריכה). רק מוסיפים שורות חדשות לפי id (למשל אירוע מהפורטל). */
+function mergeNewRowsFromCloud<T extends { id: string }>(local: T[], cloud: T[]): T[] {
+  const localIds = new Set(local.map((e) => e.id));
+  const newOnes = cloud.filter((e) => !localIds.has(e.id));
+  if (newOnes.length === 0) return local;
+  return [...newOnes, ...local];
+}
+
 interface Activity {
   id: string;
   type: 'email' | 'sync' | 'system';
@@ -199,11 +207,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('☁️ נטען מהענן:', { events: cloudEvents.length, customers: cloudCustomers.length, leads: cloudLeads.length, tasks: cloudTasks.length });
       console.log('💾 מקומי:', localCounts);
 
-      // Only replace each collection if cloud has equal or more records
-      if (cloudEvents.length >= localCounts.events && cloudEvents.length > 0) setEvents(cloudEvents);
-      if (cloudCustomers.length >= localCounts.customers && cloudCustomers.length > 0) setCustomers(cloudCustomers);
-      if (cloudLeads.length >= localCounts.leads && cloudLeads.length > 0) setLeads(cloudLeads);
-      if (cloudTasks.length >= localCounts.tasks && cloudTasks.length > 0) setTasks(cloudTasks);
+      const localEvents = local.events || [];
+      const localCust = local.customers || [];
+      const localLeadsArr = local.leads || [];
+      const localTasksArr = local.tasks || [];
+
+      if (cloudEvents.length > 0) {
+        if (cloudEvents.length > localCounts.events) setEvents(cloudEvents);
+        else setEvents(mergeNewRowsFromCloud(localEvents, cloudEvents));
+      }
+      if (cloudCustomers.length > 0) {
+        if (cloudCustomers.length > localCounts.customers) setCustomers(cloudCustomers);
+        else setCustomers(mergeNewRowsFromCloud(localCust, cloudCustomers));
+      }
+      if (cloudLeads.length > 0) {
+        if (cloudLeads.length > localCounts.leads) setLeads(cloudLeads);
+        else setLeads(mergeNewRowsFromCloud(localLeadsArr, cloudLeads));
+      }
+      if (cloudTasks.length > 0) {
+        if (cloudTasks.length > localCounts.tasks) setTasks(cloudTasks);
+        else setTasks(mergeNewRowsFromCloud(localTasksArr, cloudTasks));
+      }
 
     } catch (err) {
       console.warn('☁️ שגיאה בטעינה מהענן, ממשיך עם localStorage:', (err as Error).message);
@@ -230,11 +254,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           leadsService.getAll(),
           tasksService.getAll(),
         ]);
-        // Replace with cloud data only if cloud has same or more records (prevents overwriting fresh imports)
-        if (cloudCustomers.length > 0 && cloudCustomers.length >= customers.length) setCustomers(cloudCustomers);
-        if (cloudEvents.length > 0 && cloudEvents.length >= events.length) setEvents(cloudEvents);
-        if (cloudLeads.length > 0 && cloudLeads.length >= leads.length) setLeads(cloudLeads);
-        if (cloudTasks.length > 0 && cloudTasks.length >= tasks.length) setTasks(cloudTasks);
+        // אל תדרוס רשימה שלמה כשאותו אורך — הענן עלול להיות לפני commit; רק אם יש יותר שורות בענן או מזג ids חדשים
+        setCustomers((prev) => {
+          if (cloudCustomers.length === 0) return prev;
+          if (cloudCustomers.length > prev.length) return cloudCustomers;
+          return mergeNewRowsFromCloud(prev, cloudCustomers);
+        });
+        setEvents((prev) => {
+          if (cloudEvents.length === 0) return prev;
+          if (cloudEvents.length > prev.length) return cloudEvents;
+          return mergeNewRowsFromCloud(prev, cloudEvents);
+        });
+        setLeads((prev) => {
+          if (cloudLeads.length === 0) return prev;
+          if (cloudLeads.length > prev.length) return cloudLeads;
+          return mergeNewRowsFromCloud(prev, cloudLeads);
+        });
+        setTasks((prev) => {
+          if (cloudTasks.length === 0) return prev;
+          if (cloudTasks.length > prev.length) return cloudTasks;
+          return mergeNewRowsFromCloud(prev, cloudTasks);
+        });
 
         // Sync activities from cloud settings
         const cloudSettings = await settingsService.get();
