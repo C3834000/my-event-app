@@ -8,17 +8,22 @@ const DB_URL = import.meta.env.DEV ? `${API_BASE}/api/db` : '/.netlify/functions
 const DB_FETCH_MS = 25000;
 
 function mapDbNetworkError(err: unknown): Error {
-  const e = err as { name?: string; message?: string };
-  if (e?.name === 'AbortError') {
+  if (!(err instanceof Error)) return new Error(String(err));
+  const name = (err as { name?: string }).name;
+  const m = err.message.toLowerCase();
+  if (name === 'AbortError') {
     return new Error('השרת לא הגיב בזמן — נסה שוב בעוד רגע.');
   }
-  const m = (e?.message || '').toLowerCase();
-  if (m.includes('fetch') || m.includes('network') || m.includes('failed to load')) {
+  // רק כשל רשת אמיתי של fetch — לא למחוק הודעות שגיאה מ-Supabase שמכילות "failed"
+  if (
+    name === 'TypeError' &&
+    (m.includes('failed to fetch') || m.includes('fetch failed') || m.includes('networkerror'))
+  ) {
     return new Error(
       'לא ניתן להתחבר למסד הנתונים מהדפדפן. בדוק חיבור לאינטרנט, נסה רענון, או כבה חוסם פרסומות/פרטיות לדף הזה.'
     );
   }
-  return err instanceof Error ? err : new Error(String(err));
+  return err;
 }
 
 async function dbRequest(
@@ -36,13 +41,16 @@ async function dbRequest(
       signal: controller.signal,
     });
     const raw = await response.text();
-    let result: { data?: any; error?: string } = {};
+    let result: { data?: any; error?: string; hint?: string } = {};
     try {
       result = raw ? JSON.parse(raw) : {};
     } catch {
       throw new Error(response.ok ? 'תשובה לא תקינה מהשרת' : `שגיאת שרת (${response.status})`);
     }
-    if (!response.ok) throw new Error(result.error || 'Database request failed');
+    if (!response.ok) {
+      const msg = result.error || 'Database request failed';
+      throw new Error(result.hint ? `${msg}\n\n${result.hint}` : msg);
+    }
     return result.data;
   } catch (err) {
     throw mapDbNetworkError(err);

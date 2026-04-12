@@ -31,6 +31,14 @@ function toCamel(obj) {
   );
 }
 
+function formatError(err) {
+  if (!err) return 'Unknown error';
+  const msg = err.message || err.error_description || String(err);
+  const extra = [err.details, err.hint].filter(Boolean).join(' | ');
+  const code = err.code ? ` [${err.code}]` : '';
+  return extra ? `${msg}${code} — ${extra}` : `${msg}${code}`;
+}
+
 export const handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -39,21 +47,38 @@ export const handler = async (event) => {
   };
 
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
-  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
-
-  const supabaseUrl = process.env.VITE_SUPABASE_URL;
-  const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    return { statusCode: 503, headers, body: JSON.stringify({ error: 'Database not configured' }) };
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
-  const { table, action, data, id, orderBy, orderAsc } = JSON.parse(event.body || '{}');
+  let body;
+  try {
+    body = JSON.parse(event.body || '{}');
+  } catch {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) };
+  }
+
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const supabaseKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+
+  if (!supabaseUrl || !supabaseKey) {
+    return {
+      statusCode: 503,
+      headers,
+      body: JSON.stringify({
+        error: 'Database not configured',
+        hint: 'ב-Netlify הוסף משתני סביבה (כל ה-deploy contexts): SUPABASE_URL + SUPABASE_ANON_KEY, או VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY — ערכים מ-Supabase → Project Settings → API. אחרי שמירה: Trigger deploy.',
+      }),
+    };
+  }
+
+  const { table, action, data, id, orderBy, orderAsc } = body;
 
   if (!table || !action) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing table or action' }) };
   }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
     let result;
@@ -77,7 +102,6 @@ export const handler = async (event) => {
       case 'update': {
         const { data: row, error } = await supabase.from(table).update(toSnake(data)).eq('id', id).select().single();
         if (error) {
-          // Row might not exist yet - try upsert instead
           const merged = id ? { ...toSnake(data), id } : toSnake(data);
           const { data: upserted, error: upsertError } = await supabase.from(table).upsert([merged]).select().single();
           if (upsertError) throw upsertError;
@@ -112,6 +136,16 @@ export const handler = async (event) => {
 
     return { statusCode: 200, headers, body: JSON.stringify({ data: result }) };
   } catch (err) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    console.error('[db]', action, table, err);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        error: formatError(err),
+        hint: /relation|does not exist|42P01/i.test(formatError(err))
+          ? 'הרץ ב-Supabase את CREATE_TABLES.sql (או המיגרציות) כדי ליצור את הטבלאות.'
+          : undefined,
+      }),
+    };
   }
 };
