@@ -1,6 +1,7 @@
 -- הרץ ב-Supabase SQL Editor
 
 ALTER TABLE events ADD COLUMN IF NOT EXISTS payment_date DATE;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS task_id TEXT;
 
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversation_notes TEXT;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS waiting_on TEXT;

@@ -3,6 +3,19 @@ import { createClient } from '@supabase/supabase-js';
 const DATE_FIELDS = new Set(['due_date', 'completed_date', 'reminder_date', 'reminder_date_time', 'follow_up_date', 'follow_up_reminder', 'payment_date', 'last_updated_at']);
 const NUM_FIELDS = new Set(['amount', 'paid_amount', 'potential_revenue', 'estimated_time_min', 'progress', 'priority', 'clickers_needed', 'waiting_days', 'ease_of_execution']);
 
+/** עמודות שקיימות בטבלת events (camelCase לפני toSnake) — מונע 500 כשה-UI שולח שדות שלא קיימים ב-DB */
+const EVENTS_PAYLOAD_KEYS = new Set([
+  'id', 'customerId', 'title', 'date', 'startTime', 'endTime', 'amount', 'paidAmount',
+  'status', 'paymentStatus', 'eventType', 'clickersNeeded', 'location', 'reminderDateTime',
+  'tag', 'category', 'hebrewDate', 'paymentMethod', 'notes', 'externalId', 'phone', 'email',
+  'termsAccepted', 'taskId', 'paymentDate',
+]);
+
+function filterEventsPayload(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  return Object.fromEntries(Object.entries(data).filter(([k]) => EVENTS_PAYLOAD_KEYS.has(k)));
+}
+
 function cleanRecord(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
   const result = {};
@@ -31,14 +44,6 @@ function toCamel(obj) {
   );
 }
 
-function formatError(err) {
-  if (!err) return 'Unknown error';
-  const msg = err.message || err.error_description || String(err);
-  const extra = [err.details, err.hint].filter(Boolean).join(' | ');
-  const code = err.code ? ` [${err.code}]` : '';
-  return extra ? `${msg}${code} — ${extra}` : `${msg}${code}`;
-}
-
 export const handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -47,38 +52,27 @@ export const handler = async (event) => {
   };
 
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return { statusCode: 503, headers, body: JSON.stringify({ error: 'Database not configured' }) };
   }
 
+  const supabase = createClient(supabaseUrl, supabaseKey);
   let body;
   try {
     body = JSON.parse(event.body || '{}');
   } catch {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
-
-  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
-  const supabaseKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
-
-  if (!supabaseUrl || !supabaseKey) {
-    return {
-      statusCode: 503,
-      headers,
-      body: JSON.stringify({
-        error: 'Database not configured',
-        hint: 'ב-Netlify הוסף משתני סביבה (כל ה-deploy contexts): SUPABASE_URL + SUPABASE_ANON_KEY, או VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY — ערכים מ-Supabase → Project Settings → API. אחרי שמירה: Trigger deploy.',
-      }),
-    };
-  }
-
   const { table, action, data, id, orderBy, orderAsc } = body;
 
   if (!table || !action) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing table or action' }) };
   }
-
-  const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
     let result;
@@ -94,15 +88,18 @@ export const handler = async (event) => {
         break;
       }
       case 'create': {
-        const { data: row, error } = await supabase.from(table).insert([toSnake(data)]).select().single();
+        const payload = table === 'events' ? filterEventsPayload(data) : data;
+        const { data: row, error } = await supabase.from(table).insert([toSnake(payload)]).select().single();
         if (error) throw error;
         result = toCamel(row);
         break;
       }
       case 'update': {
-        const { data: row, error } = await supabase.from(table).update(toSnake(data)).eq('id', id).select().single();
+        const payload = table === 'events' ? filterEventsPayload(data) : data;
+        const { data: row, error } = await supabase.from(table).update(toSnake(payload)).eq('id', id).select().single();
         if (error) {
-          const merged = id ? { ...toSnake(data), id } : toSnake(data);
+          // Row might not exist yet - try upsert instead
+          const merged = id ? { ...toSnake(payload), id } : toSnake(payload);
           const { data: upserted, error: upsertError } = await supabase.from(table).upsert([merged]).select().single();
           if (upsertError) throw upsertError;
           result = toCamel(upserted);
@@ -119,13 +116,15 @@ export const handler = async (event) => {
       }
       case 'bulkInsert': {
         if (!Array.isArray(data) || data.length === 0) { result = { success: true }; break; }
-        const { error } = await supabase.from(table).upsert(data.map(toSnake), { onConflict: 'id' });
+        const rows = table === 'events' ? data.map(filterEventsPayload) : data;
+        const { error } = await supabase.from(table).upsert(rows.map(toSnake), { onConflict: 'id' });
         if (error) throw error;
         result = { success: true };
         break;
       }
       case 'upsert': {
-        const { data: row, error } = await supabase.from(table).upsert([toSnake(data)]).select().single();
+        const payload = table === 'events' ? filterEventsPayload(data) : data;
+        const { data: row, error } = await supabase.from(table).upsert([toSnake(payload)]).select().single();
         if (error) throw error;
         result = toCamel(row);
         break;
@@ -136,16 +135,8 @@ export const handler = async (event) => {
 
     return { statusCode: 200, headers, body: JSON.stringify({ data: result }) };
   } catch (err) {
-    console.error('[db]', action, table, err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        error: formatError(err),
-        hint: /relation|does not exist|42P01/i.test(formatError(err))
-          ? 'הרץ ב-Supabase את CREATE_TABLES.sql (או המיגרציות) כדי ליצור את הטבלאות.'
-          : undefined,
-      }),
-    };
+    const message = err?.message || String(err);
+    const details = err?.details || err?.hint || '';
+    return { statusCode: 500, headers, body: JSON.stringify({ error: message, details }) };
   }
 };

@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS events (
   tag TEXT NOT NULL DEFAULT 'קליכיף',
   category TEXT,
   hebrew_date TEXT,
+  payment_date DATE,
+  task_id TEXT,
   payment_method TEXT,
   notes TEXT,
   external_id TEXT,
