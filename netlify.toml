@@ -6,6 +6,10 @@
 [build.environment]
   NODE_VERSION = "18"
 
+# פעם ביום (UTC): שאילתה קלה ל-Supabase — עוזר למנוע השהיית פרויקט Free מחוסר שימוש
+[functions."supabase-keepalive"]
+  schedule = "@daily"
+
 # Route /api/send-email → Netlify Function
 [[redirects]]
   from   = "/api/send-email"
