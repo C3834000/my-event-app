@@ -135,7 +135,7 @@ const BookingForm: React.FC = () => {
       setIsSubmitted(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
-      alert('שגיאה בשליחת הטופס. נסה שוב או פנה למשרד.');
+      alert(err instanceof Error ? err.message : 'שגיאה בשליחת הטופס. נסה שוב או פנה למשרד.');
     } finally {
       setIsLoading(false);
     }
