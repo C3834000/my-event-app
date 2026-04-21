@@ -22,6 +22,12 @@
   to     = "/.netlify/functions/db"
   status = 200
 
+# Route /api/green-invoice → חשבונית ירוקה (API מול השרת בלבד)
+[[redirects]]
+  from   = "/api/green-invoice"
+  to     = "/.netlify/functions/green-invoice"
+  status = 200
+
 # SPA fallback – all routes → index.html
 [[redirects]]
   from   = "/*"

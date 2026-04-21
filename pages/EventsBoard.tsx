@@ -2,20 +2,11 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { EventStatus, PaymentStatus, EventType, AppEvent, PaymentMethod } from '../types';
-import { Plus, Search, FileText, Calendar as CalendarIcon, Download, X, Save, MapPin, Users, Clock, ChevronDown, ChevronUp, MousePointer2, Info, Upload, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, Calendar as CalendarIcon, Download, X, MapPin, Users, Clock, ChevronDown, ChevronUp, MousePointer2, Info, Upload, Edit, UserPlus } from 'lucide-react';
 import { exportToCSV, parseCSV } from '../services/utils';
-import { Link, useSearchParams } from 'react-router-dom';
-
-const EVENT_TAGS: Record<string, string> = {
-  'קליכיף': 'bg-blue-500 text-white',
-  'יתרון ירושלמי': 'bg-red-300 text-slate-800',
-  'גפן תשפ״ה': 'bg-purple-700 text-white',
-  'גפן תשפ״ד': 'bg-teal-400 text-white',
-  'פידבק': 'bg-gray-400 text-white',
-  'זה״ב - עיריית י-ם': 'bg-orange-400 text-white',
-  'מרכז הבמה': 'bg-purple-500 text-white',
-  'חיות דקדושה': 'bg-green-700 text-white'
-};
+import { useSearchParams } from 'react-router-dom';
+import EditEventModal from '../components/EditEventModal';
+import { EVENT_TAGS } from '../constants/eventBoard';
 
 const CATEGORY_COLORS: string[] = [
   'bg-sky-100 text-sky-800 border border-sky-200',
@@ -219,127 +210,14 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
   );
 };
 
-const EditEventModal: React.FC<{ event?: Partial<AppEvent>; onClose: () => void; isNew?: boolean; preselectedCustomerId?: string }> = ({ event, onClose, isNew, preselectedCustomerId }) => {
-    const { updateEvent, deleteEvent, addEvent, addCustomer, customers, getCustomerById, sendEventUpdateEmail } = useApp();
-    const initialCustomerId = preselectedCustomerId || event?.customerId || '';
-    const initialCust = initialCustomerId ? getCustomerById(initialCustomerId) : null;
-    const [formData, setFormData] = useState<any>({
-      id: event?.id || `e_${Date.now()}`,
-      customerId: initialCustomerId,
-      title: event?.title || (initialCust ? `אירוע – ${initialCust.name}` : ''),
-      date: event?.date || new Date().toISOString().split('T')[0],
-      startTime: event?.startTime || '10:00',
-      endTime: event?.endTime || '12:00',
-      amount: event?.amount || 0,
-      paidAmount: event?.paidAmount || 0,
-      status: event?.status || EventStatus.Booked,
-      paymentStatus: event?.paymentStatus || PaymentStatus.NotPaid,
-      eventType: event?.eventType || EventType.ClickersProgram,
-      clickersNeeded: event?.clickersNeeded || 0,
-      location: event?.location || '',
-      tag: event?.tag || 'קליכיף',
-      notes: event?.notes || '',
-      phone: event?.phone || initialCust?.phone || '',
-      email: event?.email || initialCust?.email || '',
-      hebrewDate: event?.hebrewDate || '',
-      paymentDate: event?.paymentDate || ''
-    });
-    const [customerSearch, setCustomerSearch] = useState('');
-    const [showCustomerList, setShowCustomerList] = useState(false);
-    const [showAddCustomer, setShowAddCustomer] = useState(false);
-    const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '' });
-    const filteredCustomers = useMemo(() => {
-      const q = customerSearch.trim().toLowerCase();
-      if (!q) return customers.slice(0, 20);
-      return customers.filter(c => c.name.toLowerCase().includes(q) || (c.phone || '').includes(q) || c.email.toLowerCase().includes(q)).slice(0, 20);
-    }, [customers, customerSearch]);
-
-    const handleSave = async () => {
-      if (isNew) {
-        addEvent(formData);
-      } else {
-        updateEvent(formData.id, formData);
-        try { await sendEventUpdateEmail(formData); } catch (_) {}
-      }
-      onClose();
-    };
-    const handleAddCustomer = () => {
-      if (!newCustomer.name.trim()) return;
-      const c = { id: `c_${Date.now()}`, name: newCustomer.name.trim(), phone: newCustomer.phone.trim() || '-', email: newCustomer.email.trim() };
-      addCustomer(c);
-      setFormData((prev: any) => ({ ...prev, customerId: c.id, phone: c.phone, email: c.email }));
-      setNewCustomer({ name: '', phone: '', email: '' });
-      setShowAddCustomer(false);
-      setShowCustomerList(false);
-    };
-
-    return (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
-                    <h3 className="text-xl font-bold">{isNew ? 'הוספת אירוע חדש' : 'עריכת אירוע'}</h3>
-                    <button onClick={onClose}><X size={24} /></button>
-                </div>
-                <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6 max-h-[70vh] overflow-y-auto">
-                    <div className="md:col-span-2 space-y-1 relative">
-                      <label className="text-xs font-bold text-slate-400">שיוך ללקוח (חיפוש לפי שם)</label>
-                      <div className="flex gap-2">
-                        <input className="flex-1 p-2 bg-slate-50 border rounded-lg" placeholder="הקלד שם, טלפון או אימייל..." value={showCustomerList || !formData.customerId ? customerSearch : (getCustomerById(formData.customerId)?.name || customerSearch)} onChange={e => { setCustomerSearch(e.target.value); setShowCustomerList(true); if (!e.target.value) setFormData((prev: any) => ({ ...prev, customerId: '', title: prev.title, phone: prev.phone, email: prev.email })); }} onFocus={() => setShowCustomerList(true)} onBlur={() => setTimeout(() => setShowCustomerList(false), 200)} />
-                        <button type="button" onClick={() => setShowAddCustomer(true)} className="p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 shrink-0" title="הוסף לקוח חדש"><Plus size={20}/></button>
-                      </div>
-                      {showCustomerList && !showAddCustomer && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 max-h-48 overflow-y-auto">
-                          <button type="button" onClick={() => { setFormData((prev: any) => ({ ...prev, customerId: '', title: prev.title, phone: prev.phone, email: prev.email })); setShowCustomerList(false); setCustomerSearch(''); }} className="w-full p-2 text-right text-slate-500 hover:bg-slate-50 text-sm font-bold">ללא לקוח</button>
-                          {filteredCustomers.map(c => (
-                            <button type="button" key={c.id} onClick={() => { setFormData(prev => ({ ...prev, customerId: c.id, phone: c.phone, email: c.email })); setShowCustomerList(false); setCustomerSearch(''); }} className="w-full p-2 text-right hover:bg-purple-50 text-sm font-bold border-t border-slate-100">{c.name} – {c.phone}</button>
-                          ))}
-                        </div>
-                      )}
-                      {showAddCustomer && (
-                        <div className="mt-2 p-4 bg-purple-50 rounded-xl border border-purple-100 space-y-2">
-                          <input className="w-full p-2 border rounded-lg text-sm" placeholder="שם מלא" value={newCustomer.name} onChange={e => setNewCustomer(prev => ({ ...prev, name: e.target.value }))} />
-                          <input className="w-full p-2 border rounded-lg text-sm" placeholder="טלפון" value={newCustomer.phone} onChange={e => setNewCustomer(prev => ({ ...prev, phone: e.target.value }))} />
-                          <input className="w-full p-2 border rounded-lg text-sm" placeholder="אימייל" value={newCustomer.email} onChange={e => setNewCustomer(prev => ({ ...prev, email: e.target.value }))} />
-                          <div className="flex gap-2">
-                            <button type="button" onClick={handleAddCustomer} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold">הוסף ולשייך</button>
-                            <button type="button" onClick={() => { setShowAddCustomer(false); setNewCustomer({ name: '', phone: '', email: '' }); }} className="text-slate-500 text-sm font-bold">ביטול</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="md:col-span-2 space-y-1"><label className="text-xs font-bold text-slate-400">שם האירוע / המזמין</label><input className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})}/></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">טלפון</label><input className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})}/></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">אימייל</label><input className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})}/></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">סכום (₪)</label><input type="number" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})}/></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">תאריך</label><input type="date" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})}/></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">תאריך תשלום בפועל</label><input type="date" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.paymentDate || ''} onChange={e => setFormData({...formData, paymentDate: e.target.value || undefined})}/></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">תאריך עברי</label><input className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.hebrewDate} onChange={e => setFormData({...formData, hebrewDate: e.target.value})}/></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">סוג אירוע</label><select className="w-full p-2 border rounded-lg" value={formData.eventType} onChange={e => setFormData({...formData, eventType: e.target.value as any})}>{Object.values(EventType).map(v => <option key={v} value={v}>{v}</option>)}</select></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">תג אירוע</label><select className="w-full p-2 border rounded-lg" value={formData.tag} onChange={e => setFormData({...formData, tag: e.target.value})}>{Object.keys(EVENT_TAGS).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">מס׳ משתתפים / קליקרים</label><input type="number" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.clickersNeeded || 0} onChange={e => setFormData({...formData, clickersNeeded: Number(e.target.value)})} placeholder="50"/></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">שעת התחלה</label><input type="time" step="900" min="00:00" max="23:45" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})}/></div>
-                    <div className="space-y-1"><label className="text-xs font-bold text-slate-400">שעת סיום</label><input type="time" step="900" min="00:00" max="23:45" className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})}/></div>
-                    <div className="md:col-span-2 space-y-1"><label className="text-xs font-bold text-slate-400">כתובת</label><input className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})}/></div>
-                    <div className="md:col-span-2 space-y-1"><label className="text-xs font-bold text-slate-400">הערות</label><textarea className="w-full p-2 bg-slate-50 border rounded-lg" value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})}/></div>
-                </div>
-                <div className="p-6 bg-slate-50 border-t flex justify-between items-center">
-                    {!isNew ? <button onClick={() => { if(confirm('מחק אירוע?')) { deleteEvent(formData.id); onClose(); } }} className="text-red-500 hover:text-red-700 flex items-center gap-1 font-bold"><Trash2 size={18}/> מחק אירוע</button> : <div></div>}
-                    <div className="flex gap-3">
-                        <button onClick={onClose} className="px-4 py-2 font-bold text-slate-400">ביטול</button>
-                        <button onClick={handleSave} className="bg-purple-600 text-white px-8 py-2 rounded-xl font-bold shadow-lg">שמור</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 const EventsBoard: React.FC = () => {
-  const { events, getCustomerById, importEvents, addTask, updateEvent, applyPaymentDatesFromImport } = useApp();
+  const { events, customers, getCustomerById, importEvents, addTask, updateEvent, applyPaymentDatesFromImport } = useApp();
   const [searchParams] = useSearchParams();
   const highlightEventId = searchParams.get('eventId');
   const [searchTerm, setSearchTerm] = useState('');
-  const [editingEvent, setEditingEvent] = useState<AppEvent | null>(null);
+  const [eventModal, setEventModal] = useState<
+    { type: 'edit'; event: AppEvent } | { type: 'new'; preselectedCustomerId?: string; draftKey: number } | null
+  >(null);
   const [creatingTaskForEvent, setCreatingTaskForEvent] = useState<AppEvent | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const paymentCsvRef = useRef<HTMLInputElement>(null);
@@ -495,6 +373,18 @@ const EventsBoard: React.FC = () => {
     });
   };
 
+  const matchedCustomersForSearch = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return [];
+    return customers.filter(
+      c =>
+        c.name.toLowerCase().includes(q) ||
+        (c.phone && c.phone.includes(q)) ||
+        (c.email && c.email.toLowerCase().includes(q)) ||
+        (c.companyName && c.companyName.toLowerCase().includes(q))
+    );
+  }, [customers, searchTerm]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -513,7 +403,13 @@ const EventsBoard: React.FC = () => {
         <div className="flex flex-wrap gap-2">
           <input type="file" ref={fileInputRef} onChange={async (e) => { const file = e.target.files?.[0]; if(file) { importEvents(await parseCSV(file)); alert('ייבוא וסנכרון הושלם!'); } }} className="hidden" accept=".csv" />
           <input type="file" ref={paymentCsvRef} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { const rows = await parseCSV(file); const n = applyPaymentDatesFromImport(rows as Record<string, unknown>[]); alert(n ? `עודכנו תאריכי תשלום ל-${n} אירועים` : 'לא נמצאו התאמות. וודאו שיש בעמודות Item ID ותאריך תשלום, ושהמזהה תואם לאירוע.'); } finally { e.target.value = ''; } }} className="hidden" accept=".csv" />
-          <Link to="/book?skipPortal=true" className="bg-purple-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-lg hover:bg-purple-700 transition-all"><Plus size={18} /> הוסף אירוע</Link>
+          <button
+            type="button"
+            onClick={() => setEventModal({ type: 'new', draftKey: Date.now() })}
+            className="bg-purple-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-lg hover:bg-purple-700 transition-all"
+          >
+            <Plus size={18} /> הוסף אירוע
+          </button>
           <button type="button" onClick={() => fileInputRef.current?.click()} className="bg-white border px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-slate-50 transition-all"><Upload size={18} /> ייבוא</button>
           <button type="button" title="קובץ נתוני אירועים: Item ID + תאריך תשלום" onClick={() => paymentCsvRef.current?.click()} className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-amber-100 transition-all"><CalendarIcon size={18} /> תאריכי תשלום</button>
           <button onClick={() => setViewMode(v => v === 'all' ? 'unpaid' : 'all')} className={`px-4 py-2 rounded-xl font-bold transition-all shadow-sm ${viewMode === 'unpaid' ? 'bg-red-500 text-white' : 'bg-white text-slate-700 border'}`}>
@@ -532,6 +428,33 @@ const EventsBoard: React.FC = () => {
               <button onClick={() => toggleAllGroups(true)} className="text-xs font-bold text-slate-400 bg-slate-50 px-3 py-2 rounded-lg">כווץ הכל</button>
           </div>
       </div>
+
+      {searchTerm.trim() && matchedCustomersForSearch.length > 0 && (
+        <div className="bg-gradient-to-l from-purple-50 to-white border border-purple-200 rounded-xl p-4 shadow-sm">
+          <h3 className="text-sm font-black text-slate-800 mb-2 flex items-center gap-2">
+            <UserPlus size={18} className="text-purple-600" />
+            לקוחות תואמים לחיפוש — אירוע חדש בלי טופס הזמנה
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {matchedCustomersForSearch.map(c => (
+              <div
+                key={c.id}
+                className="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm"
+              >
+                <span className="font-bold text-slate-800">{c.name}</span>
+                <span className="text-slate-500 text-xs">{c.phone}</span>
+                <button
+                  type="button"
+                  onClick={() => setEventModal({ type: 'new', preselectedCustomerId: c.id, draftKey: Date.now() })}
+                  className="text-xs font-bold bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700"
+                >
+                  + אירוע ללקוח
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Category Filter */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
@@ -615,14 +538,31 @@ const EventsBoard: React.FC = () => {
                 </button>
                 {!collapsedGroups[group] && (
                     <div className="divide-y divide-slate-50">
-                        {list.map((e: AppEvent) => <EventRow key={e.id} event={e} onEdit={setEditingEvent} onCreateTask={setCreatingTaskForEvent} />)}
+                        {list.map((e: AppEvent) => (
+                          <EventRow
+                            key={e.id}
+                            event={e}
+                            onEdit={ev => setEventModal({ type: 'edit', event: ev })}
+                            onCreateTask={setCreatingTaskForEvent}
+                          />
+                        ))}
                     </div>
                 )}
             </div>
         )})}
       </div>
 
-      {editingEvent && <EditEventModal event={editingEvent} onClose={() => setEditingEvent(null)} />}
+      {eventModal?.type === 'edit' && (
+        <EditEventModal event={eventModal.event} onClose={() => setEventModal(null)} />
+      )}
+      {eventModal?.type === 'new' && (
+        <EditEventModal
+          key={eventModal.draftKey}
+          isNew
+          preselectedCustomerId={eventModal.preselectedCustomerId}
+          onClose={() => setEventModal(null)}
+        />
+      )}
       
       {creatingTaskForEvent && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">

@@ -4,11 +4,11 @@ import { useApp } from '../context/AppContext';
 import { Phone, Mail, Search, ChevronDown, ChevronUp, MessageCircle, Send, Plus, Upload, X, Calendar, Loader2, Edit, ExternalLink, DollarSign, ListTodo } from 'lucide-react';
 import { Customer } from '../types';
 import { parseCSV } from '../services/utils';
-import { EventStatus, PaymentStatus, EventType } from '../types';
 import { Link } from 'react-router-dom';
+import EditEventModal from '../components/EditEventModal';
 
 const CustomersBoard: React.FC = () => {
-  const { customers, events, tasks, addCustomer, importCustomers, addEvent, sendPortalEmailForCustomer, updateCustomer, addTask } = useApp();
+  const { customers, events, tasks, addCustomer, importCustomers, sendPortalEmailForCustomer, updateCustomer, addTask } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [showDebtOnly, setShowDebtOnly] = useState(false);
   const [expandedLetters, setExpandedLetters] = useState<Record<string, boolean>>({});
@@ -18,6 +18,7 @@ const CustomersBoard: React.FC = () => {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
   const [creatingTaskFor, setCreatingTaskFor] = useState<Customer | null>(null);
+  const [newEventForCustomer, setNewEventForCustomer] = useState<{ customerId: string; key: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [newCust, setNewCust] = useState({ name: '', phone: '', email: '', notes: '' });
@@ -294,7 +295,14 @@ const CustomersBoard: React.FC = () => {
                                                 <button onClick={() => window.open(`mailto:${c.email}`, '_blank')} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors" title="שלח מייל"><Mail size={18}/></button>
                                                 <button onClick={() => handleSendPortal(c)} disabled={sendingPortalId === c.id} className="p-2.5 text-purple-600 hover:bg-purple-50 rounded-xl transition-colors" title="שלח פורטל במייל">{sendingPortalId === c.id ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>}</button>
                                                 <button onClick={() => handleWhatsApp(c.phone)} className="p-2.5 text-green-600 hover:bg-green-50 rounded-xl transition-colors" title="וואטסאפ"><MessageCircle size={18}/></button>
-                                                <Link to={`/book?customerId=${c.id}&skipPortal=true`} className="p-2.5 text-orange-600 hover:bg-orange-50 rounded-xl transition-colors flex items-center justify-center" title="צור אירוע"><Calendar size={18}/></Link>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setNewEventForCustomer({ customerId: c.id, key: Date.now() })}
+                                                  className="p-2.5 text-orange-600 hover:bg-orange-50 rounded-xl transition-colors flex items-center justify-center"
+                                                  title="צור אירוע (עורך מלא)"
+                                                >
+                                                  <Calendar size={18} />
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -333,6 +341,15 @@ const CustomersBoard: React.FC = () => {
                   <div className="flex justify-end gap-3"><button onClick={() => setEditingCustomer(null)} className="px-4 py-2 font-bold text-slate-400">ביטול</button><button onClick={handleUpdateCust} className="bg-purple-600 text-white px-8 py-2 rounded-xl font-bold">שמור</button></div>
               </div>
           </div>
+        )}
+
+        {newEventForCustomer && (
+          <EditEventModal
+            key={newEventForCustomer.key}
+            isNew
+            preselectedCustomerId={newEventForCustomer.customerId}
+            onClose={() => setNewEventForCustomer(null)}
+          />
         )}
 
         {creatingTaskFor && (

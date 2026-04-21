@@ -4,10 +4,23 @@
  * משתני סביבה ב-.env (או server/.env): ראה .env.example
  */
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+const path = require('path');
+const { pathToFileURL } = require('url');
 const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
 const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
+
+const greenInvoiceLogicUrl = pathToFileURL(
+  path.join(__dirname, '..', 'netlify', 'functions', 'lib', 'greenInvoiceLogic.mjs')
+).href;
+let greenInvoiceModPromise;
+function loadGreenInvoiceLogic() {
+  if (!greenInvoiceModPromise) {
+    greenInvoiceModPromise = import(greenInvoiceLogicUrl);
+  }
+  return greenInvoiceModPromise;
+}
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -60,6 +73,18 @@ app.post('/api/send-email', async (req, res) => {
   } catch (err) {
     console.error('Send email error:', err);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/green-invoice — proxy לחשבונית ירוקה (אותה לוגיקה כמו Netlify)
+app.post('/api/green-invoice', async (req, res) => {
+  try {
+    const mod = await loadGreenInvoiceLogic();
+    const { statusCode, body } = await mod.handleGreenInvoiceBody(req.body || {}, process.env);
+    res.status(statusCode).json(body);
+  } catch (err) {
+    console.error('Green Invoice:', err);
+    res.status(500).json({ success: false, error: err.message || String(err) });
   }
 });
 
