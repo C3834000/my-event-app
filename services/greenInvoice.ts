@@ -1,4 +1,5 @@
-import type { AppEvent, PaymentMethod } from '../types';
+import { PaymentMethod } from '../types';
+import type { AppEvent } from '../types';
 
 const API_PATH = '/api/green-invoice';
 
