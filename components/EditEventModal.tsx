@@ -82,9 +82,9 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
 
   const handleGreenInvoice = async () => {
     const cust = formData.customerId ? getCustomerById(formData.customerId) : null;
-    const clientName = (cust?.name || formData.title || '').trim();
+    const clientName = (cust?.name || '').trim();
     if (!clientName) {
-      alert('נדרש שם לקוח או כותרת אירוע להפקת מסמך.');
+      alert('יש לשייך לקוח לאירוע לפני הפקת מסמך.');
       return;
     }
     if (!formData.amount || Number(formData.amount) <= 0) {
@@ -102,6 +102,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
           `מסמך נוצר בהצלחה.`,
           r.number != null ? `מספר מסמך: ${r.number}` : '',
           link ? `קישור הורדה: ${link}` : '',
+          r.emailSent ? `המסמך נשלח למייל הלקוח.` : '',
         ].filter(Boolean);
         alert(lines.join('\n'));
       } else {

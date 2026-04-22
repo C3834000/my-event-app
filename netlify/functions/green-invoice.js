@@ -127,6 +127,7 @@ async function handleBody(body, env) {
     lang,
     currency,
     date: docDate,
+    signed: true,
     client,
     income: [{ description: itemDescription, quantity: 1, price: amount, currency, vatType }],
     payment: [{ price: amount, currency, date: paymentDate, type: paymentType }],
@@ -144,9 +145,24 @@ async function handleBody(body, env) {
         body: { success: false, error: typeof msg === 'string' ? msg : JSON.stringify(msg), details: data },
       };
     }
+
+    const docId = data?.id;
+    let emailSent = false;
+    if (docId && email) {
+      try {
+        const { res: sendRes } = await greenInvoiceApi(env, `/documents/${docId}/send`, {
+          method: 'POST',
+          body: JSON.stringify({ emails: [email] }),
+        });
+        emailSent = sendRes.ok;
+      } catch {
+        // email sending is best-effort; do not fail the whole request
+      }
+    }
+
     return {
       statusCode: 200,
-      body: { success: true, id: data?.id, number: data?.number, url: data?.url, raw: data },
+      body: { success: true, id: docId, number: data?.number, url: data?.url, emailSent, raw: data },
     };
   } catch (e) {
     if (e.code === 'NOT_CONFIGURED') {
