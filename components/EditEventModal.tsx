@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { EventStatus, PaymentStatus, EventType, AppEvent } from '../types';
+/** סוגי אירוע זמינים לבחירה (מוסתר: ClickForYouAurim) */
+const AVAILABLE_EVENT_TYPES = Object.values(EventType).filter(v => v !== EventType.ClickForYouAurim);
 import { Plus, X, FileText, Trash2, Loader2, CheckCircle, ExternalLink, RefreshCw } from 'lucide-react';
 import {
   buildGreenInvoiceParamsFromEvent,
@@ -351,7 +353,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
               value={formData.eventType}
               onChange={e => setFormData({ ...formData, eventType: e.target.value as any })}
             >
-              {Object.values(EventType).map(v => (
+              {AVAILABLE_EVENT_TYPES.map(v => (
                 <option key={v} value={v}>
                   {v}
                 </option>

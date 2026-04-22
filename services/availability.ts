@@ -1,7 +1,9 @@
 import type { AppEvent } from '../types';
 import { EventStatus } from '../types';
 
-/** מקסימום משתתפים במקביל בכל רגע (עודכן לפי דרישה) */
+/** מקסימום משתתפים במקביל — תוכניות קליקאורים / קליקרים (1000 קליקרים) */
+export const MAX_CLICKER_CAPACITY = 1000;
+/** מקסימום משתתפים במקביל — פון קליך / טוק קליך */
 export const MAX_SIMULTANEOUS_PARTICIPANTS = 500;
 /** משך פעילות לבדיקה (דקות) */
 export const SLOT_DURATION_MIN = 90;
@@ -68,16 +70,21 @@ export function isSlotAvailable(
   events: AppEvent[],
   dateStr: string,
   startTime: string,
-  requestedParticipants: number
+  requestedParticipants: number,
+  options?: { filterEventTypes?: string[]; maxCapacity?: number }
 ): { available: boolean; freeCapacity: number; used: number } {
+  const capacity = options?.maxCapacity ?? MAX_SIMULTANEOUS_PARTICIPANTS;
   const st = normalizeTimeString(startTime);
   const start = new Date(`${dateStr}T${st}:00`);
   if (Number.isNaN(start.getTime())) {
-    return { available: false, freeCapacity: 0, used: MAX_SIMULTANEOUS_PARTICIPANTS };
+    return { available: false, freeCapacity: 0, used: capacity };
   }
   const end = new Date(start.getTime() + SLOT_DURATION_MIN * 60 * 1000);
-  const used = capacityUsedDuring(events, start.getTime(), end.getTime());
-  const free = MAX_SIMULTANEOUS_PARTICIPANTS - used;
+  const filteredEvents = options?.filterEventTypes
+    ? events.filter(e => options.filterEventTypes!.includes(e.eventType))
+    : events;
+  const used = capacityUsedDuring(filteredEvents, start.getTime(), end.getTime());
+  const free = capacity - used;
   return {
     available: free >= requestedParticipants,
     freeCapacity: free,
@@ -118,7 +125,8 @@ export function suggestNearestSlots(
   preferredDateStr: string,
   preferredTime: string,
   requestedParticipants: number,
-  count = 4
+  count = 4,
+  slotOptions?: { filterEventTypes?: string[]; maxCapacity?: number }
 ): SlotSuggestion[] {
   const pref = new Date(`${preferredDateStr}T${normalizeTimeString(preferredTime)}:00`);
   const prefMs = pref.getTime();
@@ -131,7 +139,8 @@ export function suggestNearestSlots(
       const start = new Date(`${dateStr}T${time}:00`);
       if (Number.isNaN(start.getTime())) continue;
       const end = new Date(start.getTime() + SLOT_DURATION_MIN * 60 * 1000);
-      const { available, freeCapacity } = isSlotAvailable(events, dateStr, time, requestedParticipants);
+      void end;
+      const { available, freeCapacity } = isSlotAvailable(events, dateStr, time, requestedParticipants, slotOptions);
       if (!available) continue;
       const startMs = start.getTime();
       const dayDiff = Math.abs(dayOff);

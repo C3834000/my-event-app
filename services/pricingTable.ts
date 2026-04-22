@@ -83,6 +83,56 @@ export function priceForParticipantsAndDuration(
   return roundPriceToTens(unscaled * (ANCHOR_PRICE_100_PARTICIPANTS_1_5H / ref));
 }
 
+// ─── Per-activity pricing ────────────────────────────────────────────────────
+
+/** תמחור קליקאורים — כולל מע"מ (null = מעל 500, יסוכם מול המשרד) */
+export function klikaurimPrice(participants: number): number | null {
+  if (participants > 500) return null;
+  if (participants <= 50)  return 2500;
+  if (participants <= 100) return 2850;
+  if (participants <= 150) return 3200;
+  if (participants <= 200) return 3500;
+  if (participants <= 250) return 3750;
+  if (participants <= 300) return 4000;
+  if (participants <= 350) return 4250;
+  if (participants <= 400) return 4500;
+  return 5000;
+}
+
+/** תמחור קליקרים — כולל מע"מ */
+export function klikersPrice(participants: number): number | null {
+  if (participants > 500) return null;
+  if (participants <= 50)  return 3700;
+  if (participants <= 100) return 3900;
+  if (participants <= 150) return 4250;
+  if (participants <= 200) return 4500;
+  if (participants <= 250) return 4850;
+  if (participants <= 300) return 5100;
+  if (participants <= 350) return 5600;
+  if (participants <= 400) return 6000;
+  return 6500;
+}
+
+/** תמחור קליך פור יו (לפי מדרגות קבועות) */
+export function klik4youPrice(participants: number): number | null {
+  if (participants > 200) return null;
+  if (participants <= 30)  return 600;
+  if (participants <= 40)  return 700;
+  if (participants <= 50)  return 800;
+  if (participants <= 75)  return 1000;
+  if (participants <= 100) return 1200;
+  if (participants <= 120) return 1500;
+  if (participants <= 150) return 1800;
+  return 2300;
+}
+
+/** VAT rate */
+export const VAT_RATE = 1.18;
+/** מחיר ללא מע"מ (עיגול לעשרות) */
+export function priceWithoutVat(priceWithVat: number): number {
+  return Math.round((priceWithVat / VAT_RATE) / 10) * 10;
+}
+
 /** שורה בטבלה (לתצוגה) */
 export interface PricingRow {
   participants: number;

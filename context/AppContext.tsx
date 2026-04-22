@@ -108,7 +108,7 @@ const DEFAULT_FORM: CustomForm = {
     { id: 'f1', type: 'text', label: 'שם מלא המזמין', required: true, mapping: 'name', placeholder: 'ישראל ישראלי' },
     { id: 'f2', type: 'tel', label: 'טלפון נייד (זמין באירוע)', required: true, mapping: 'phone', placeholder: '050-0000000' },
     { id: 'f3', type: 'email', label: 'כתובת דוא"ל לקבלת אישור', required: true, mapping: 'email', placeholder: 'user@example.com' },
-    { id: 'f9', type: 'select', label: 'סוג התוכנית המבוקשת', required: true, mapping: 'eventType', options: Object.values(EventType) },
+    { id: 'f9', type: 'select', label: 'סוג התוכנית המבוקשת', required: true, mapping: 'eventType', options: Object.values(EventType).filter(v => v !== EventType.ClickForYouAurim) },
     { id: 'f5', type: 'date', label: 'תאריך האירוע', required: true, mapping: 'date' },
     { id: 'f_heb', type: 'text', label: 'תאריך אירוע עברי', required: true, mapping: 'hebrewDate', placeholder: 'לדוגמה: י כסלו תשפה' },
     { id: 'f6', type: 'time', label: 'שעת התחלה', required: true, mapping: 'startTime' },
