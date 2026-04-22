@@ -42,6 +42,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '' });
   const [greenInvoiceLoading, setGreenInvoiceLoading] = useState(false);
+  const [greenInvoiceDocType, setGreenInvoiceDocType] = useState(320);
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
     if (!q) return customers.slice(0, 20);
@@ -93,7 +94,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
     if (!confirm(`להפיק מסמך בחשבונית ירוקה עבור ${clientName} בסך \u20AA${Number(formData.amount)}?`)) return;
     setGreenInvoiceLoading(true);
     try {
-      const params = buildGreenInvoiceParamsFromEvent(formData as AppEvent, clientName);
+      const params = buildGreenInvoiceParamsFromEvent(formData as AppEvent, clientName, { documentType: greenInvoiceDocType });
       const r = await createGreenInvoiceDocument(params);
       if (r.success) {
         const link = r.url?.he || r.url?.origin || r.url?.en;
@@ -355,6 +356,18 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
         <div className="p-6 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
           {!isNew ? (
             <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={greenInvoiceDocType}
+                onChange={e => setGreenInvoiceDocType(Number(e.target.value))}
+                className="p-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 bg-white outline-none focus:ring-2 focus:ring-emerald-200"
+                title="סוג מסמך"
+              >
+                <option value={10}>הצעת מחיר</option>
+                <option value={300}>חשבון עסקה (דרישת תשלום)</option>
+                <option value={305}>חשבונית מס</option>
+                <option value={320}>חשבונית מס / קבלה</option>
+                <option value={400}>קבלה</option>
+              </select>
               <button
                 type="button"
                 onClick={handleGreenInvoice}
@@ -362,7 +375,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
               >
                 {greenInvoiceLoading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
-                חשבונית ירוקה
+                שלח לחשבונית ירוקה
               </button>
               <button
                 type="button"

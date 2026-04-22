@@ -85,13 +85,14 @@ export function buildGreenInvoiceParamsFromEvent(
   const amount = Number(event.amount) || 0;
   const date = event.date?.slice(0, 10);
   const paymentDate = event.paymentDate?.slice(0, 10);
-  const desc = event.title?.trim() || customerName;
+  const eventTitle = (event.title?.trim() || event.eventType || 'אירוע');
+  const itemDesc = (event.notes?.trim() || event.eventType || eventTitle);
   return {
-    clientName: customerName.trim() || desc,
+    clientName: customerName.trim(),
     clientEmail: event.email?.trim() || undefined,
     clientPhone: event.phone?.trim() || undefined,
-    description: `אירוע: ${desc}`,
-    itemDescription: `${desc} — ${event.eventType || 'אירוע'}`,
+    description: eventTitle,
+    itemDescription: itemDesc,
     amount,
     currency: 'ILS',
     lang: 'he',
