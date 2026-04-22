@@ -111,7 +111,7 @@ async function handleBody(body, env) {
   const documentType = body.documentType != null ? Number(body.documentType) : 320;
   const itemDescription = (body.itemDescription || body.description || 'שירות').trim();
   const description = (body.description || itemDescription).trim();
-  const vatType = body.vatType != null ? Number(body.vatType) : 0;
+  const vatType = body.vatType != null ? Number(body.vatType) : 1;
   const paymentType = body.paymentType != null ? Number(body.paymentType) : 4;
   const paymentDate = (body.paymentDate || docDate).slice(0, 10);
 
