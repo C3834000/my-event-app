@@ -99,26 +99,30 @@ async function handleBody(body, env) {
     return { statusCode: 400, body: { success: false, error: 'Unknown action' } };
   }
 
-  const clientName = (body.clientName || '').trim();
+  // Strip portal-booking prefix that may appear in clientName or descriptions
+  const PORTAL_PREFIX = /^הזמנה\s+מפורטל[:\s]*/u;
+  const cleanStr = (s) => (s || '').trim().replace(PORTAL_PREFIX, '').trim();
+
+  const clientName = cleanStr(body.clientName) || 'לקוח';
   const amount = Number(body.amount);
-  if (!clientName || !Number.isFinite(amount) || amount <= 0) {
-    return { statusCode: 400, body: { success: false, error: 'נדרשים שם לקוח וסכום חיובי' } };
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { statusCode: 400, body: { success: false, error: 'נדרש סכום חיובי' } };
   }
 
   const currency = (body.currency || 'ILS').toUpperCase();
   const lang = body.lang || 'he';
   const docDate = (body.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
   const documentType = body.documentType != null ? Number(body.documentType) : 320;
-  const itemDescription = (body.itemDescription || body.description || 'שירות').trim();
-  const description = (body.description || itemDescription).trim();
+  const itemDescription = cleanStr(body.itemDescription || body.description) || 'שירות';
+  const description = cleanStr(body.description) || itemDescription;
   const vatType = body.vatType != null ? Number(body.vatType) : 1;
   const paymentType = body.paymentType != null ? Number(body.paymentType) : 4;
   const paymentDate = (body.paymentDate || docDate).slice(0, 10);
 
-  const client = { name: clientName, country: body.clientCountry || 'IL' };
   const email = (body.clientEmail || '').trim();
-  if (email) client.emails = [email];
   const phone = (body.clientPhone || '').trim();
+  const client = { name: clientName, country: body.clientCountry || 'IL' };
+  if (email) client.emails = [email];
   if (phone) client.phone = phone;
 
   const payload = {
@@ -128,6 +132,7 @@ async function handleBody(body, env) {
     currency,
     date: docDate,
     signed: true,
+    sendByEmail: email ? true : false,
     client,
     income: [{ description: itemDescription, quantity: 1, price: amount, currency, vatType }],
     payment: [{ price: amount, currency, date: paymentDate, type: paymentType }],
@@ -147,8 +152,10 @@ async function handleBody(body, env) {
     }
 
     const docId = data?.id;
-    let emailSent = false;
-    if (docId && email) {
+    // sendByEmail:true in the payload triggers automatic emailing during creation.
+    // As a backup, also call the explicit send endpoint.
+    let emailSent = !!(email && payload.sendByEmail);
+    if (docId && email && !emailSent) {
       try {
         const { res: sendRes } = await greenInvoiceApi(env, `/documents/${docId}/send`, {
           method: 'POST',

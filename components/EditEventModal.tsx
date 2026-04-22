@@ -94,7 +94,12 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
     if (!confirm(`להפיק מסמך בחשבונית ירוקה עבור ${clientName} בסך \u20AA${Number(formData.amount)}?`)) return;
     setGreenInvoiceLoading(true);
     try {
-      const params = buildGreenInvoiceParamsFromEvent(formData as AppEvent, clientName, { documentType: greenInvoiceDocType });
+      const clientEmail = (formData.email?.trim() || cust?.email?.trim()) || undefined;
+      const params = buildGreenInvoiceParamsFromEvent(
+        { ...(formData as AppEvent), email: clientEmail ?? formData.email },
+        clientName,
+        { documentType: greenInvoiceDocType },
+      );
       const r = await createGreenInvoiceDocument(params);
       if (r.success) {
         const link = r.url?.he || r.url?.origin || r.url?.en;
