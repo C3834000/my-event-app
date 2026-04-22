@@ -65,7 +65,7 @@ const ACTIVITIES: ActivityDef[] = [
   },
   {
     id: 'klik4you',
-    label: 'קליך פור יו',
+    label: 'קליק פור יו',
     subtitle: 'ערכת קליקרים להשכרה בהפעלה עצמית',
     image: '/activity-3-klik4you.png',
     participantOptions: [30, 40, 50, 75, 100, 120, 150, 200],
@@ -78,7 +78,7 @@ const ACTIVITIES: ActivityDef[] = [
   },
   {
     id: 'phoneklik',
-    label: 'פון קליך',
+    label: 'פון קליק',
     subtitle: 'חידון במערכת הטלפונית לאירוע פרונטאלי',
     image: '/activity-4-phoneklik.png',
     participantOptions: [50, 100, 150, 200],
@@ -91,7 +91,7 @@ const ACTIVITIES: ActivityDef[] = [
   },
   {
     id: 'talkklik',
-    label: 'טוק קליך',
+    label: 'טוק קליק',
     subtitle: 'חדר ועידה אינטראקטיבי',
     image: '/activity-5-talkklik.png',
     participantOptions: [50, 100, 150, 200, 250, 300, 350, 400, 450, 500],
@@ -280,7 +280,7 @@ const AvailabilityChecker: React.FC = () => {
               </div>
               <div>
                 <label className="flex items-center gap-2 text-sm font-bold text-purple-100 mb-2">
-                  <Clock size={16} /> שעת התחלה (חצאי שעות)
+                  <Clock size={16} /> שעת התחלה
                 </label>
                 <select
                   value={time}
@@ -413,7 +413,7 @@ const AvailabilityChecker: React.FC = () => {
             )}
 
             <p className="text-center text-xs text-purple-300/60 mt-10">
-              בדיקה אינה שומרת שריון — השריין רק אחרי שליחת טופס ההזמנה.
+              שריון אירוע יתבצע רק אחרי שליחת טופס ההזמנה.
             </p>
           </>
         )}
