@@ -20,12 +20,16 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   return (
     <aside className="w-64 bg-slate-900 text-white h-screen flex flex-col shadow-xl">
       {/* Header - Fixed */}
-      <div className="p-6 border-b border-slate-700 flex justify-between items-center shrink-0">
-        <div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-            ME-CFM
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">ניהול אירועים ותזרים</p>
+      <div className="px-4 py-3 border-b border-slate-700 flex justify-between items-center shrink-0">
+        <div className="flex items-center">
+          <div className="bg-white rounded-2xl p-1.5">
+            <img
+              src="/logo.png"
+              alt="לוגו"
+              className="h-14 w-auto"
+              style={{ mixBlendMode: 'multiply' }}
+            />
+          </div>
         </div>
         {onClose && (
             <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-white">
