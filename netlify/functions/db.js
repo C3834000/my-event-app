@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const DATE_FIELDS = new Set(['due_date', 'completed_date', 'reminder_date', 'reminder_date_time', 'follow_up_date', 'follow_up_reminder', 'payment_date', 'last_updated_at']);
-const NUM_FIELDS = new Set(['amount', 'paid_amount', 'potential_revenue', 'estimated_time_min', 'progress', 'priority', 'clickers_needed', 'waiting_days', 'ease_of_execution']);
+const NUM_FIELDS = new Set(['amount', 'paid_amount', 'potential_revenue', 'estimated_time_min', 'progress', 'priority', 'clickers_needed', 'waiting_days', 'ease_of_execution', 'gi_doc_number', 'gi_doc_type']);
 
 /** עמודות שקיימות בטבלת events (camelCase לפני toSnake) — מונע 500 כשה-UI שולח שדות שלא קיימים ב-DB */
 const EVENTS_PAYLOAD_KEYS = new Set([
@@ -9,6 +9,8 @@ const EVENTS_PAYLOAD_KEYS = new Set([
   'status', 'paymentStatus', 'eventType', 'clickersNeeded', 'location', 'reminderDateTime',
   'tag', 'category', 'hebrewDate', 'paymentMethod', 'notes', 'externalId', 'phone', 'email',
   'termsAccepted', 'taskId', 'paymentDate',
+  // Green Invoice document tracking
+  'giDocId', 'giDocNumber', 'giDocType', 'giDocDate', 'giDocUrl',
 ]);
 
 function filterEventsPayload(data) {

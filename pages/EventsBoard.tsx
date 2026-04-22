@@ -2,11 +2,12 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { EventStatus, PaymentStatus, EventType, AppEvent, PaymentMethod } from '../types';
-import { Plus, Search, Calendar as CalendarIcon, Download, X, MapPin, Users, Clock, ChevronDown, ChevronUp, MousePointer2, Info, Upload, Edit, UserPlus } from 'lucide-react';
+import { Plus, Search, Calendar as CalendarIcon, Download, X, MapPin, Users, Clock, ChevronDown, ChevronUp, MousePointer2, Info, Upload, Edit, UserPlus, FileCheck } from 'lucide-react';
 import { exportToCSV, parseCSV } from '../services/utils';
 import { useSearchParams } from 'react-router-dom';
 import EditEventModal from '../components/EditEventModal';
 import { EVENT_TAGS } from '../constants/eventBoard';
+import { giDocTypeName } from '../services/greenInvoice';
 
 const CATEGORY_COLORS: string[] = [
   'bg-sky-100 text-sky-800 border border-sky-200',
@@ -133,6 +134,30 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
                              <Info size={14} className="text-amber-600 mt-0.5 shrink-0" />
                              <span className="text-xs font-medium break-words">{event.notes}</span>
                           </div>
+                      )}
+                      {event.giDocId && (
+                        <div className="sm:col-span-2">
+                          <span
+                            className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-pointer hover:bg-emerald-100"
+                            onClick={() => onEdit(event)}
+                            title="פתח לפרטי מסמך"
+                          >
+                            <FileCheck size={13} />
+                            {giDocTypeName(event.giDocType)}
+                            {event.giDocNumber ? ` #${event.giDocNumber}` : ''}
+                            {event.giDocUrl && (
+                              <a
+                                href={event.giDocUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="underline mr-1"
+                              >
+                                הורד
+                              </a>
+                            )}
+                          </span>
+                        </div>
                       )}
                   </div>
               </div>

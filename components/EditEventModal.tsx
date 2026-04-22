@@ -1,8 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { EventStatus, PaymentStatus, EventType, AppEvent } from '../types';
-import { Plus, X, FileText, Trash2, Loader2 } from 'lucide-react';
-import { buildGreenInvoiceParamsFromEvent, createGreenInvoiceDocument } from '../services/greenInvoice';
+import { Plus, X, FileText, Trash2, Loader2, CheckCircle, ExternalLink, RefreshCw } from 'lucide-react';
+import {
+  buildGreenInvoiceParamsFromEvent,
+  createGreenInvoiceDocument,
+  convertGreenInvoiceDocument,
+  giDocTypeName,
+  giAllowedConversions,
+} from '../services/greenInvoice';
 import { EVENT_TAGS } from '../constants/eventBoard';
 
 export interface EditEventModalProps {
@@ -43,6 +49,16 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '' });
   const [greenInvoiceLoading, setGreenInvoiceLoading] = useState(false);
   const [greenInvoiceDocType, setGreenInvoiceDocType] = useState(320);
+  const [convertLoading, setConvertLoading] = useState(false);
+  const [convertTargetType, setConvertTargetType] = useState<number | null>(null);
+  // GI document state (persisted per event)
+  const [giDoc, setGiDoc] = useState({
+    id: event?.giDocId || '',
+    number: event?.giDocNumber ?? null as number | null,
+    type: event?.giDocType ?? null as number | null,
+    date: event?.giDocDate || '',
+    url: event?.giDocUrl || '',
+  });
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
     if (!q) return customers.slice(0, 20);
@@ -80,6 +96,22 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
     setShowCustomerList(false);
   };
 
+  const applyGiResult = (r: Awaited<ReturnType<typeof createGreenInvoiceDocument>>, docType: number) => {
+    if (!r.success) return;
+    const url = r.url?.he || r.url?.origin || r.url?.en || '';
+    const newGi = { id: r.id || '', number: r.number ?? null, type: docType, date: new Date().toISOString().slice(0, 10), url };
+    setGiDoc(newGi);
+    if (!isNew && formData.id) {
+      updateEvent(formData.id, {
+        giDocId: newGi.id,
+        giDocNumber: newGi.number ?? undefined,
+        giDocType: newGi.type,
+        giDocDate: newGi.date,
+        giDocUrl: newGi.url,
+      } as Partial<AppEvent>);
+    }
+  };
+
   const handleGreenInvoice = async () => {
     const cust = formData.customerId ? getCustomerById(formData.customerId) : null;
     const clientName = (cust?.name || '').trim();
@@ -102,6 +134,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
       );
       const r = await createGreenInvoiceDocument(params);
       if (r.success) {
+        applyGiResult(r, greenInvoiceDocType);
         const link = r.url?.he || r.url?.origin || r.url?.en;
         const lines = [
           `מסמך נוצר בהצלחה.`,
@@ -117,6 +150,37 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
       alert((e as Error).message || 'שגיאה');
     } finally {
       setGreenInvoiceLoading(false);
+    }
+  };
+
+  const handleConvertDocument = async (targetType: number) => {
+    if (!giDoc.id) return;
+    setConvertTargetType(targetType);
+    const cust = formData.customerId ? getCustomerById(formData.customerId) : null;
+    const clientEmail = (formData.email?.trim() || cust?.email?.trim()) || undefined;
+    const targetLabel = giDocTypeName(targetType);
+    if (!confirm(`ליצור ${targetLabel} מתוך מסמך מס' ${giDoc.number}?`)) { setConvertTargetType(null); return; }
+    setConvertLoading(true);
+    try {
+      const r = await convertGreenInvoiceDocument(giDoc.id, targetType, clientEmail);
+      if (r.success) {
+        applyGiResult(r, targetType);
+        const link = r.url?.he || r.url?.origin || r.url?.en;
+        const lines = [
+          `${targetLabel} נוצר בהצלחה.`,
+          r.number != null ? `מספר מסמך: ${r.number}` : '',
+          link ? `קישור הורדה: ${link}` : '',
+          r.emailSent ? `המסמך נשלח למייל הלקוח.` : '',
+        ].filter(Boolean);
+        alert(lines.join('\n'));
+      } else {
+        alert([r.error, r.hint].filter(Boolean).join('\n\n'));
+      }
+    } catch (e) {
+      alert((e as Error).message || 'שגיאה');
+    } finally {
+      setConvertLoading(false);
+      setConvertTargetType(null);
     }
   };
 
@@ -358,6 +422,53 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
               onChange={e => setFormData({ ...formData, notes: e.target.value })}
             />
           </div>
+
+          {/* ── Green Invoice Status ─────────────────────────────────── */}
+          {!isNew && giDoc.id && (
+            <div className="md:col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle size={18} className="text-emerald-600 shrink-0" />
+                <span className="font-bold text-emerald-800 text-sm">מסמך חשבונית ירוקה נשלח</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                <div><span className="font-bold">סוג:</span> {giDocTypeName(giDoc.type ?? undefined)}</div>
+                {giDoc.number != null && <div><span className="font-bold">מספר:</span> {giDoc.number}</div>}
+                {giDoc.date && <div><span className="font-bold">תאריך:</span> {giDoc.date}</div>}
+              </div>
+              {giDoc.url && (
+                <a
+                  href={giDoc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:underline"
+                >
+                  <ExternalLink size={13} /> צפה/הורד מסמך
+                </a>
+              )}
+              {/* המרה למסמך אחר */}
+              {giAllowedConversions(giDoc.type ?? undefined).length > 0 && (
+                <div className="pt-2 border-t border-emerald-200">
+                  <p className="text-xs font-bold text-slate-500 mb-2">יצירת מסמך חדש מתוך המסמך הזה:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {giAllowedConversions(giDoc.type ?? undefined).map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => handleConvertDocument(opt.value)}
+                        disabled={convertLoading}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-emerald-300 text-emerald-800 text-xs font-bold hover:bg-emerald-100 disabled:opacity-50"
+                      >
+                        {convertLoading && convertTargetType === opt.value
+                          ? <Loader2 size={13} className="animate-spin" />
+                          : <RefreshCw size={13} />}
+                        צור {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="p-6 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
           {!isNew ? (

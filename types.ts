@@ -93,6 +93,16 @@ export interface AppEvent {
   taskId?: string;
   /** תאריך תשלום בפועל (YYYY-MM-DD) */
   paymentDate?: string;
+  /** Green Invoice – מזהה מסמך אחרון שנשלח */
+  giDocId?: string;
+  /** Green Invoice – מספר מסמך */
+  giDocNumber?: number;
+  /** Green Invoice – סוג מסמך (10/300/305/320/400) */
+  giDocType?: number;
+  /** Green Invoice – תאריך יצירת המסמך */
+  giDocDate?: string;
+  /** Green Invoice – כתובת URL להורדה */
+  giDocUrl?: string;
 }
 
 export interface Lead {

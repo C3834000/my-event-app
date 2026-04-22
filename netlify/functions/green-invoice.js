@@ -95,6 +95,49 @@ async function handleBody(body, env) {
     }
   }
 
+  // ── convertDocument: יצירת מסמך חדש מתוך מסמך קיים ──────────────────────
+  if (body.action === 'convertDocument') {
+    const parentDocId = (body.parentDocId || '').trim();
+    const newType = body.documentType != null ? Number(body.documentType) : null;
+    if (!parentDocId || !newType) {
+      return { statusCode: 400, body: { success: false, error: 'נדרשים parentDocId ו-documentType' } };
+    }
+    try {
+      const { res, data } = await greenInvoiceApi(env, `/documents/${parentDocId}/copy`, {
+        method: 'POST',
+        body: JSON.stringify({ type: newType, signed: true }),
+      });
+      if (!res.ok) {
+        const msg = data?.error?.message || data?.message || data?.error || JSON.stringify(data);
+        return {
+          statusCode: res.status >= 400 && res.status < 600 ? res.status : 502,
+          body: { success: false, error: typeof msg === 'string' ? msg : JSON.stringify(msg), details: data },
+        };
+      }
+      const docId = data?.id;
+      const email = (body.clientEmail || '').trim();
+      let emailSent = false;
+      if (docId && email) {
+        try {
+          const { res: sr } = await greenInvoiceApi(env, `/documents/${docId}/send`, {
+            method: 'POST',
+            body: JSON.stringify({ emails: [email] }),
+          });
+          emailSent = sr.ok;
+        } catch { /* best-effort */ }
+      }
+      return {
+        statusCode: 200,
+        body: { success: true, id: docId, number: data?.number, url: data?.url, emailSent, raw: data },
+      };
+    } catch (e) {
+      if (e.code === 'NOT_CONFIGURED') {
+        return { statusCode: 503, body: { success: false, error: e.message } };
+      }
+      return { statusCode: 500, body: { success: false, error: e.message || String(e) } };
+    }
+  }
+
   if (body.action !== 'createDocument') {
     return { statusCode: 400, body: { success: false, error: 'Unknown action' } };
   }

@@ -78,6 +78,42 @@ export async function createGreenInvoiceDocument(params: CreateGreenInvoiceParam
   });
 }
 
+/** יצירת מסמך חדש מתוך מסמך קיים (המרה) */
+export async function convertGreenInvoiceDocument(
+  parentDocId: string,
+  documentType: number,
+  clientEmail?: string,
+): Promise<GreenInvoiceResult> {
+  return postGreenInvoice({ action: 'convertDocument', parentDocId, documentType, clientEmail });
+}
+
+/** שם ידידותי לסוג מסמך */
+export function giDocTypeName(type?: number): string {
+  switch (type) {
+    case 10:  return 'הצעת מחיר';
+    case 300: return 'חשבון עסקה';
+    case 305: return 'חשבונית מס';
+    case 320: return 'חשבונית מס/קבלה';
+    case 400: return 'קבלה';
+    default:  return type ? `מסמך (${type})` : '';
+  }
+}
+
+/** אילו סוגי מסמך ניתן ליצור מתוך סוג נתון */
+export function giAllowedConversions(fromType?: number): { value: number; label: string }[] {
+  switch (fromType) {
+    case 300: // חשבון עסקה → חשבונית מס / חשבונית מס+קבלה
+      return [
+        { value: 305, label: 'חשבונית מס' },
+        { value: 320, label: 'חשבונית מס/קבלה' },
+      ];
+    case 305: // חשבונית מס → קבלה
+      return [{ value: 400, label: 'קבלה' }];
+    default:
+      return [];
+  }
+}
+
 export function buildGreenInvoiceParamsFromEvent(
   event: AppEvent,
   customerName: string,
