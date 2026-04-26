@@ -36,10 +36,10 @@ const CustomersBoard: React.FC = () => {
   const filtered = customers.filter(c => {
     const term = searchTerm.toLowerCase().trim();
     const matchesSearch = !term || (
-      c.name.toLowerCase().includes(term) || 
-      c.phone.includes(term) || 
-      (c.email && c.email.toLowerCase().includes(term)) ||
-      (c.companyName && c.companyName.toLowerCase().includes(term))
+      (c.name ?? '').toLowerCase().includes(term) ||
+      (c.phone ?? '').includes(term) ||
+      (c.email ?? '').toLowerCase().includes(term) ||
+      (c.companyName ?? '').toLowerCase().includes(term)
     );
     
     if (!matchesSearch) return false;
