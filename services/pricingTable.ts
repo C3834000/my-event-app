@@ -88,20 +88,6 @@ export function priceForParticipantsAndDuration(
 /** תמחור קליקאורים — כולל מע"מ (null = מעל 500, יסוכם מול המשרד) */
 export function klikaurimPrice(participants: number): number | null {
   if (participants > 500) return null;
-  if (participants <= 50)  return 2500;
-  if (participants <= 100) return 2850;
-  if (participants <= 150) return 3200;
-  if (participants <= 200) return 3500;
-  if (participants <= 250) return 3750;
-  if (participants <= 300) return 4000;
-  if (participants <= 350) return 4250;
-  if (participants <= 400) return 4500;
-  return 5000;
-}
-
-/** תמחור קליקרים — כולל מע"מ */
-export function klikersPrice(participants: number): number | null {
-  if (participants > 500) return null;
   if (participants <= 50)  return 3700;
   if (participants <= 100) return 3900;
   if (participants <= 150) return 4250;
@@ -111,6 +97,20 @@ export function klikersPrice(participants: number): number | null {
   if (participants <= 350) return 5600;
   if (participants <= 400) return 6000;
   return 6500;
+}
+
+/** תמחור קליקרים — כולל מע"מ */
+export function klikersPrice(participants: number): number | null {
+  if (participants > 500) return null;
+  if (participants <= 50)  return 2500;
+  if (participants <= 100) return 2850;
+  if (participants <= 150) return 3200;
+  if (participants <= 200) return 3500;
+  if (participants <= 250) return 3750;
+  if (participants <= 300) return 4000;
+  if (participants <= 350) return 4250;
+  if (participants <= 400) return 4500;
+  return 5000;
 }
 
 /** תמחור קליך פור יו (לפי מדרגות קבועות) */

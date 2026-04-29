@@ -594,6 +594,106 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { eventId: event.id, customerId: finalCustomerId || '' };
   };
 
+  const buildPortalEmailHtml = (name: string, portalUrl: string, companyName: string) => {
+    const BASE = 'https://myecrm2026.netlify.app/#';
+    const availabilityUrl = `${BASE}/check-availability`;
+    const klik4youUrl = `${BASE}/klik4you`;
+    const bookUrl = `${BASE}/book`;
+    return `<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#0f0a1e;font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f0a1e;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+        <!-- Header -->
+        <tr><td style="background:linear-gradient(135deg,#4c1d95 0%,#6d28d9 50%,#7c3aed 100%);border-radius:20px 20px 0 0;padding:36px 32px;text-align:center;">
+          <h1 style="margin:0 0 6px;color:#fff;font-size:28px;font-weight:900;letter-spacing:-0.5px;">${companyName}</h1>
+          <p style="margin:0;color:#c4b5fd;font-size:14px;">מערכות חידון ואינטראקציה לאירועים</p>
+        </td></tr>
+
+        <!-- Body -->
+        <tr><td style="background:#1e1040;padding:36px 32px;">
+          <p style="color:#e9d5ff;font-size:17px;font-weight:700;margin:0 0 12px;">שלום ${name},</p>
+          <p style="color:#c4b5fd;font-size:15px;line-height:1.7;margin:0 0 20px;">
+            בהמשך להתעניינותך בתוכניות חברת ${companyName} — שמחים להזמין אותך לגלות את עולם הקליקרים שלנו!<br/>
+            מחכים לך כאן מגוון תוכניות לאירועים מכל הסוגים: ימי גיבוש, ימי כיף, בר/בת מצווה, חתונות ועוד.
+          </p>
+
+          <!-- What can you do -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+            <tr>
+              <td style="background:#2d1a5e;border:1px solid #4c2d9a;border-radius:14px;padding:16px 20px;vertical-align:top;width:48%;">
+                <p style="margin:0 0 6px;font-size:22px;">🎯</p>
+                <p style="margin:0 0 4px;color:#e9d5ff;font-weight:800;font-size:14px;">בדיקת זמינות</p>
+                <p style="margin:0;color:#a78bfa;font-size:12px;">בדוק אם התאריך שלך פנוי</p>
+              </td>
+              <td width="4%"></td>
+              <td style="background:#2d1a5e;border:1px solid #4c2d9a;border-radius:14px;padding:16px 20px;vertical-align:top;width:48%;">
+                <p style="margin:0 0 6px;font-size:22px;">💰</p>
+                <p style="margin:0 0 4px;color:#e9d5ff;font-weight:800;font-size:14px;">מחירים ותוכניות</p>
+                <p style="margin:0;color:#a78bfa;font-size:12px;">5 סוגי תוכניות לכל אירוע</p>
+              </td>
+            </tr>
+          </table>
+
+          <!-- CTA Buttons -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+            <tr>
+              <td align="center" style="padding-bottom:12px;">
+                <a href="${availabilityUrl}" style="display:inline-block;background:linear-gradient(135deg,#059669,#10b981);color:#fff;text-decoration:none;font-weight:900;font-size:17px;padding:16px 40px;border-radius:14px;box-shadow:0 6px 24px rgba(16,185,129,0.35);">
+                  🗓️ &nbsp; בדוק זמינות ומחיר
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding-bottom:12px;">
+                <a href="${portalUrl}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;text-decoration:none;font-weight:900;font-size:15px;padding:14px 36px;border-radius:14px;box-shadow:0 6px 24px rgba(124,58,237,0.35);">
+                  ✨ &nbsp; כניסה לפורטל האישי שלך
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td align="center">
+                <a href="${bookUrl}" style="display:inline-block;background:transparent;border:2px solid #6d28d9;color:#c4b5fd;text-decoration:none;font-weight:700;font-size:14px;padding:11px 30px;border-radius:12px;">
+                  📝 &nbsp; מעבר לטופס הזמנה
+                </a>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Klik4You Infographic Banner -->
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr><td style="background:linear-gradient(135deg,#1e3a5f 0%,#1e1040 100%);border:1px solid #3b4f8a;border-radius:16px;padding:20px;text-align:center;">
+              <p style="margin:0 0 10px;color:#93c5fd;font-size:13px;font-weight:700;">גם לאירועים קטנים — ערכת קליקרים להפעלה עצמית</p>
+              <a href="${klik4youUrl}" style="text-decoration:none;">
+                <img src="https://myecrm2026.netlify.app/activity-3-klik4you.png"
+                     alt="קליק פור יו"
+                     width="90"
+                     style="display:block;margin:0 auto 10px;filter:drop-shadow(0 0 12px rgba(147,197,253,0.5));"
+                />
+                <span style="display:inline-block;background:#1e40af;color:#bfdbfe;font-weight:900;font-size:13px;padding:8px 22px;border-radius:10px;text-decoration:none;">
+                  קליק פור יו ← לחץ לפרטים מלאים
+                </span>
+              </a>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="background:#160d35;border-radius:0 0 20px 20px;padding:24px 32px;text-align:center;border-top:1px solid #2d1a5e;">
+          <p style="margin:0 0 6px;color:#7c3aed;font-weight:900;font-size:15px;">${companyName}</p>
+          <p style="margin:0;color:#6d28d9;font-size:12px;">המייל הזה נשלח אוטומטית — אין צורך להשיב</p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+  };
+
   const sendPortalEmail = async (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) throw new Error('הליד לא נמצא');
@@ -603,15 +703,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!toEmail) throw new Error('לא הוגדר מייל לליד — יש למלא שדה אימייל לפני שליחת הפורטל.');
     const { success, error, hint } = await sendEmail({
       to: toEmail,
-      subject: `פורטל הלקוח האישי שלך - ${settings.companyName}`,
-      html: `
-          <div dir="rtl" style="font-family: Heebo, sans-serif;">
-            <p>שלום ${lead.name},</p>
-            <p>הנה הקישור לפורטל האישי שלך להמשך ההכנה לאירוע:</p>
-            <p><a href="${portalUrl}">${portalUrl}</a></p>
-            <p>בברכה,<br/>${settings.companyName}</p>
-          </div>
-        `,
+      subject: `הוזמנת לחוות את תוכניות ${settings.companyName} 🎯`,
+      html: buildPortalEmailHtml(lead.name, portalUrl, settings.companyName),
     });
     if (!success) throw new Error(formatSendEmailError(error, hint));
     addActivity('email', `מייל עם קישור לפורטל נשלח ל-${lead.name} (${toEmail})`);
@@ -771,8 +864,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!toEmail) throw new Error('לא הוגדר מייל ללקוח — יש למלא אימייל בכרטיס הלקוח לפני שליחת הפורטל.');
     const { success, error, hint } = await sendEmail({
       to: toEmail,
-      subject: `פורטל הלקוח האישי שלך - ${settings.companyName}`,
-      html: `<div dir="rtl" style="font-family: Heebo, sans-serif;"><p>שלום ${customer.name},</p><p>הנה הקישור לפורטל האישי שלך:</p><p><a href="${portalUrl}">${portalUrl}</a></p><p>בברכה,<br/>${settings.companyName}</p></div>`,
+      subject: `הוזמנת לחוות את תוכניות ${settings.companyName} 🎯`,
+      html: buildPortalEmailHtml(customer.name, portalUrl, settings.companyName),
     });
     if (!success) throw new Error(formatSendEmailError(error, hint));
     addActivity('email', `מייל פורטל נשלח ללקוח ${customer.name} (${toEmail})`);
