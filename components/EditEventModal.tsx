@@ -67,7 +67,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
     return customers
       .filter(
         c =>
-          c.name.toLowerCase().includes(q) || (c.phone || '').includes(q) || c.email.toLowerCase().includes(q)
+          (c.name ?? '').toLowerCase().includes(q) || (c.phone ?? '').includes(q) || (c.email ?? '').toLowerCase().includes(q)
       )
       .slice(0, 20);
   }, [customers, customerSearch]);
