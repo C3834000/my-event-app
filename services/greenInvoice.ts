@@ -123,8 +123,11 @@ export function buildGreenInvoiceParamsFromEvent(
   const date = event.date?.slice(0, 10);
   const paymentDate = event.paymentDate?.slice(0, 10);
 
-  // Document-level description: event type only (never the portal title)
-  const docDescription = (event.eventType || 'אירוע').trim();
+  // Document-level description: event type + notes (if any) as second line
+  const docDescription = [
+    (event.eventType || 'אירוע').trim(),
+    event.notes?.trim() || '',
+  ].filter(Boolean).join('\n');
 
   // Line-item description: structured event details
   const itemParts: string[] = [];
