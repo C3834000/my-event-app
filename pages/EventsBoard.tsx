@@ -203,6 +203,7 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
                         <option value="חשבון עסקה">✓ חשבון עסקה</option>
                         <option value="חשבונית מס">✓ חשבונית מס</option>
                         <option value="חשבונית מס/קבלה">✓ חשבונית מס/קבלה</option>
+                        <option value="קבלה">✓ קבלה</option>
                       </select>
                   </div>
               </div>

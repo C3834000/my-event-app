@@ -109,6 +109,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
       300: 'חשבון עסקה',
       305: 'חשבונית מס',
       320: 'חשבונית מס/קבלה',
+      400: 'קבלה',
     };
     const invoiceSentValue = docTypeToInvoiceSent[docType] || '';
     const giUpdates: Partial<AppEvent> = {
@@ -167,15 +168,20 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
   };
 
   const handleConvertDocument = async (targetType: number) => {
-    if (!giDoc.id) return;
     setConvertTargetType(targetType);
     const cust = formData.customerId ? getCustomerById(formData.customerId) : null;
+    const clientName = (cust?.name || '').trim();
     const clientEmail = (formData.email?.trim() || cust?.email?.trim()) || undefined;
     const targetLabel = giDocTypeName(targetType);
-    if (!confirm(`ליצור ${targetLabel} מתוך מסמך מס' ${giDoc.number}?`)) { setConvertTargetType(null); return; }
+    if (!confirm(`ליצור ${targetLabel} עבור ${clientName} בסך ₪${Number(formData.amount)}?`)) { setConvertTargetType(null); return; }
     setConvertLoading(true);
     try {
-      const r = await convertGreenInvoiceDocument(giDoc.id, targetType, clientEmail);
+      const params = buildGreenInvoiceParamsFromEvent(
+        { ...(formData as AppEvent), email: clientEmail ?? formData.email },
+        clientName,
+        { documentType: targetType, date: greenInvoiceDocDate },
+      );
+      const r = await createGreenInvoiceDocument(params);
       if (r.success) {
         applyGiResult(r, targetType);
         const link = r.url?.he || r.url?.origin || r.url?.en;
@@ -360,6 +366,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
               <option value="חשבון עסקה">חשבון עסקה</option>
               <option value="חשבונית מס">חשבונית מס</option>
               <option value="חשבונית מס/קבלה">חשבונית מס/קבלה</option>
+              <option value="קבלה">קבלה</option>
             </select>
           </div>
           <div className="space-y-1">
