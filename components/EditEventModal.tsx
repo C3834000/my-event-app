@@ -105,14 +105,23 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
     const url = r.url?.he || r.url?.origin || r.url?.en || '';
     const newGi = { id: r.id || '', number: r.number ?? null, type: docType, date: new Date().toISOString().slice(0, 10), url };
     setGiDoc(newGi);
+    const docTypeToInvoiceSent: Record<number, string> = {
+      300: 'חשבון עסקה',
+      305: 'חשבונית מס',
+      320: 'חשבונית מס/קבלה',
+    };
+    const invoiceSentValue = docTypeToInvoiceSent[docType] || '';
+    const giUpdates: Partial<AppEvent> = {
+      giDocId: newGi.id,
+      giDocNumber: newGi.number ?? undefined,
+      giDocType: newGi.type,
+      giDocDate: newGi.date,
+      giDocUrl: newGi.url,
+      ...(invoiceSentValue ? { invoiceSent: invoiceSentValue } : {}),
+    };
+    setFormData((prev: any) => ({ ...prev, ...giUpdates }));
     if (!isNew && formData.id) {
-      updateEvent(formData.id, {
-        giDocId: newGi.id,
-        giDocNumber: newGi.number ?? undefined,
-        giDocType: newGi.type,
-        giDocDate: newGi.date,
-        giDocUrl: newGi.url,
-      } as Partial<AppEvent>);
+      updateEvent(formData.id, giUpdates);
     }
   };
 
