@@ -93,7 +93,7 @@ interface AppContextType {
   uploadAllToCloud: () => Promise<{ success: boolean; message: string }>;
 }
 
-const AppContext = createContext<AppContextType | undefined>(undefined);
+export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'ME_CFM_STORAGE_V12';
 

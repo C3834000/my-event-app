@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, Clock, Users, Search, Sparkles, AlertCircle, Loader2, Tag, ShieldCheck, Car } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { eventsService } from '../services/supabase';
+import { AppContext } from '../context/AppContext';
 import { EventType } from '../types';
 import type { AppEvent } from '../types';
 import {
@@ -108,9 +109,21 @@ const ACTIVITIES: ActivityDef[] = [
 
 const AvailabilityChecker: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const { events } = useApp();
-  const loading = false;
-  const loadError: string | null = null;
+  const [cloudEvents, setCloudEvents] = useState<AppEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Context events (available when admin is logged in) — used to supplement cloud data
+  const appCtx = useContext(AppContext);
+  const contextEvents: AppEvent[] = appCtx?.events ?? [];
+
+  // Merge cloud + context events, deduplicated by id — ensures local-only events are counted
+  const events = useMemo(() => {
+    const map = new Map<string, AppEvent>();
+    cloudEvents.forEach(e => map.set(e.id, e));
+    contextEvents.forEach(e => map.set(e.id, e));
+    return Array.from(map.values());
+  }, [cloudEvents, contextEvents]);
 
   const [activityId, setActivityId] = useState<string>('klikaurim');
   const [dateStr, setDateStr] = useState(() => {
@@ -121,6 +134,23 @@ const AvailabilityChecker: React.FC = () => {
   const [participants, setParticipants] = useState(100);
   const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const list = await eventsService.getAll();
+        if (!cancelled) setCloudEvents(Array.isArray(list) ? list : []);
+      } catch (e: any) {
+        if (!cancelled) setLoadError(e?.message || 'שגיאה בטעינת היומן');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const activity = ACTIVITIES.find(a => a.id === activityId) ?? ACTIVITIES[0];
 
