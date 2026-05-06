@@ -11,6 +11,8 @@ const EVENTS_PAYLOAD_KEYS = new Set([
   'termsAccepted', 'taskId', 'paymentDate',
   // Green Invoice document tracking
   'giDocId', 'giDocNumber', 'giDocType', 'giDocDate', 'giDocUrl',
+  // סטטוס שליחת חשבונית
+  'invoiceSent',
 ]);
 
 function filterEventsPayload(data) {

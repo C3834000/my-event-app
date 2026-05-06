@@ -189,6 +189,21 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
                           {Object.values(PaymentStatus).map(s => <option key={s} value={s} className="bg-white text-slate-800">{s}</option>)}
                       </select>
                   </div>
+                  <div className="w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => updateEvent(event.id, { invoiceSent: !event.invoiceSent })}
+                        title={event.invoiceSent ? 'חשבונית נשלחה – לחץ לביטול' : 'סמן כחשבונית נשלחה'}
+                        className={`w-full flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-2.5 rounded-lg transition-all ${
+                          event.invoiceSent
+                            ? 'bg-green-500 text-white hover:bg-green-600'
+                            : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'
+                        }`}
+                      >
+                        <FileCheck size={14} />
+                        {event.invoiceSent ? 'חשבונית נשלחה ✓' : 'חשבונית?'}
+                      </button>
+                  </div>
               </div>
             </div>
 

@@ -103,6 +103,8 @@ export interface AppEvent {
   giDocDate?: string;
   /** Green Invoice – כתובת URL להורדה */
   giDocUrl?: string;
+  /** האם נשלחה חשבונית ללקוח */
+  invoiceSent?: boolean;
 }
 
 export interface Lead {
