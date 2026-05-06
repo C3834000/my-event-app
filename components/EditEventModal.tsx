@@ -52,6 +52,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '' });
   const [greenInvoiceLoading, setGreenInvoiceLoading] = useState(false);
   const [greenInvoiceDocType, setGreenInvoiceDocType] = useState(320);
+  const [greenInvoiceDocDate, setGreenInvoiceDocDate] = useState(new Date().toISOString().slice(0, 10));
   const [convertLoading, setConvertLoading] = useState(false);
   const [convertTargetType, setConvertTargetType] = useState<number | null>(null);
   // GI document state (persisted per event)
@@ -133,7 +134,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
       const params = buildGreenInvoiceParamsFromEvent(
         { ...(formData as AppEvent), email: clientEmail ?? formData.email },
         clientName,
-        { documentType: greenInvoiceDocType },
+        { documentType: greenInvoiceDocType, date: greenInvoiceDocDate },
       );
       const r = await createGreenInvoiceDocument(params);
       if (r.success) {
@@ -501,6 +502,14 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
                 <option value={320}>חשבונית מס / קבלה</option>
                 <option value={400}>קבלה</option>
               </select>
+              <input
+                type="date"
+                value={greenInvoiceDocDate}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={e => setGreenInvoiceDocDate(e.target.value)}
+                className="p-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 bg-white outline-none focus:ring-2 focus:ring-emerald-200"
+                title="תאריך המסמך"
+              />
               <button
                 type="button"
                 onClick={handleGreenInvoice}
