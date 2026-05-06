@@ -158,10 +158,15 @@ const AvailabilityChecker: React.FC = () => {
     return isSlotAvailable(events, dateStr, time, participants, slotOpts);
   }, [checked, submitting, events, dateStr, time, participants, activityId]);
 
+  // בדיקה ישירה: אם יש מספיק מקום פנוי — תמיד זמין
+  const isAvailable = checkResult
+    ? (checkResult.available || checkResult.freeCapacity >= participants)
+    : false;
+
   const alternatives = useMemo(() => {
-    if (!checked || !checkResult || checkResult.available) return [];
+    if (!checked || !checkResult || isAvailable) return [];
     return suggestNearestSlots(events, dateStr, time, participants, 4, slotOpts);
-  }, [checked, checkResult, events, dateStr, time, participants, activityId]);
+  }, [checked, checkResult, isAvailable, events, dateStr, time, participants, activityId]);
 
   const estimatedPrice = activity.getPrice(participants);
 
@@ -359,7 +364,7 @@ const AvailabilityChecker: React.FC = () => {
                       להזמנה עכשיו ←
                     </Link>
                   </div>
-                ) : checkResult?.available ? (
+                ) : isAvailable ? (
                   <div className="bg-gradient-to-br from-green-600/40 to-emerald-700/40 border-2 border-green-400/60 rounded-3xl p-6 text-center shadow-xl">
                     <Sparkles className="mx-auto text-yellow-300 mb-3" size={40} />
                     <h2 className="text-2xl font-black text-white mb-2">בינגו! יש לך תאריך ושעה</h2>
