@@ -44,7 +44,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
     email: event?.email || initialCust?.email || '',
     hebrewDate: event?.hebrewDate || '',
     paymentDate: event?.paymentDate || '',
-    invoiceSent: event?.invoiceSent || false,
+    invoiceSent: event?.invoiceSent || '',
   });
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerList, setShowCustomerList] = useState(false);
@@ -339,17 +339,18 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
               onChange={e => setFormData({ ...formData, paymentDate: e.target.value || undefined })}
             />
           </div>
-          <div className="space-y-1 flex items-center">
-            <label className="flex items-center gap-3 cursor-pointer select-none w-full p-2 bg-slate-50 border rounded-lg hover:bg-green-50 transition-colors">
-              <input
-                type="checkbox"
-                checked={!!formData.invoiceSent}
-                onChange={e => setFormData((prev: any) => ({ ...prev, invoiceSent: e.target.checked }))}
-                className="w-4 h-4 accent-green-600 cursor-pointer"
-              />
-              <span className="text-sm font-bold text-slate-700">חשבונית נשלחה ללקוח</span>
-              {formData.invoiceSent && <span className="text-xs text-green-600 font-bold">✓</span>}
-            </label>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-400">סוג חשבונית שנשלחה</label>
+            <select
+              className={`w-full p-2 border rounded-lg text-sm font-bold ${formData.invoiceSent ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-50 text-slate-500'}`}
+              value={formData.invoiceSent || ''}
+              onChange={e => setFormData((prev: any) => ({ ...prev, invoiceSent: e.target.value || '' }))}
+            >
+              <option value="">לא נשלחה</option>
+              <option value="חשבון עסקה">חשבון עסקה</option>
+              <option value="חשבונית מס">חשבונית מס</option>
+              <option value="חשבונית מס/קבלה">חשבונית מס/קבלה</option>
+            </select>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-400">תאריך עברי</label>

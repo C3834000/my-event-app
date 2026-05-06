@@ -189,20 +189,21 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
                           {Object.values(PaymentStatus).map(s => <option key={s} value={s} className="bg-white text-slate-800">{s}</option>)}
                       </select>
                   </div>
-                  <div className="w-full sm:w-auto">
-                      <button
-                        type="button"
-                        onClick={() => updateEvent(event.id, { invoiceSent: !event.invoiceSent })}
-                        title={event.invoiceSent ? 'חשבונית נשלחה – לחץ לביטול' : 'סמן כחשבונית נשלחה'}
-                        className={`w-full flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-2.5 rounded-lg transition-all ${
+                  <div className="w-full sm:w-auto sm:min-w-[12rem] xl:w-56">
+                      <select
+                        value={event.invoiceSent || ''}
+                        onChange={(e) => updateEvent(event.id, { invoiceSent: e.target.value || undefined })}
+                        className={`w-full text-xs font-bold p-2.5 rounded-lg border-0 outline-none cursor-pointer transition-all ${
                           event.invoiceSent
-                            ? 'bg-green-500 text-white hover:bg-green-600'
-                            : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-slate-100 text-slate-500'
                         }`}
                       >
-                        <FileCheck size={14} />
-                        {event.invoiceSent ? 'חשבונית נשלחה ✓' : 'חשבונית?'}
-                      </button>
+                        <option value="">📄 חשבונית – לא נשלחה</option>
+                        <option value="חשבון עסקה">✓ חשבון עסקה</option>
+                        <option value="חשבונית מס">✓ חשבונית מס</option>
+                        <option value="חשבונית מס/קבלה">✓ חשבונית מס/קבלה</option>
+                      </select>
                   </div>
               </div>
             </div>
