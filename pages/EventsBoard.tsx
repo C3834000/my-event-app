@@ -347,6 +347,10 @@ const EventsBoard: React.FC = () => {
 
   useEffect(() => {
     if (!highlightEventId) return;
+    // פתיחה אוטומטית של המודל לאירוע הנבחר
+    const event = events.find(e => e.id === highlightEventId);
+    if (event) setEventModal({ type: 'edit', event });
+    // גלילה לשורה
     const t = window.setTimeout(() => {
       const el = document.getElementById(`event-row-${highlightEventId}`);
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' });

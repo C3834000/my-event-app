@@ -75,15 +75,15 @@ const TaskCard: React.FC<{ task: any; onToggle: (id: string) => void; onUpdate: 
     <div className="bg-slate-50 rounded-lg border border-slate-200 hover:border-purple-300 hover:bg-purple-50/30 transition-all">
       <div className="p-2 cursor-pointer" onClick={() => setShowDetails(!showDetails)}>
         <div className="flex items-start gap-2 mb-1">
-          <div className={`shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black ${
+          <div className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-black ${
             task.priority === 5 ? 'bg-red-500 text-white' : 
             task.priority === 4 ? 'bg-orange-400 text-white' : 
             task.priority === 3 ? 'bg-yellow-400 text-slate-800' : 
             'bg-slate-300 text-slate-700'
           }`}>
-            {task.priority === 5 ? 'HIGH' : task.priority === 4 ? 'HIGH' : task.priority === 3 ? 'MEDIUM' : 'LOW'}
+            {task.priority === 5 ? 'HIGH' : task.priority === 4 ? 'HIGH' : task.priority === 3 ? 'MED' : 'LOW'}
           </div>
-          <h4 className="font-bold text-[10px] text-slate-800 flex-1">{task.title}</h4>
+          <h4 className="font-bold text-xs text-slate-800 flex-1">{task.title}</h4>
           <button 
             onClick={(e) => { e.stopPropagation(); onToggle(task.id); }}
             className={`shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
@@ -93,7 +93,7 @@ const TaskCard: React.FC<{ task: any; onToggle: (id: string) => void; onUpdate: 
             {task.isCompleted && <Check size={10} className="text-white" strokeWidth={3}/>}
           </button>
         </div>
-        <div className="flex items-center gap-1.5 flex-wrap text-[8px]">
+        <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
           {task.estimatedTimeMin > 0 && <span className="text-slate-600 font-bold">⏱️ {task.estimatedTimeMin}ד'</span>}
           {(task.potentialRevenue || 0) > 0 && <span className="text-green-600 font-bold">💰 ₪{(task.potentialRevenue / 1000).toFixed(0)}K</span>}
           {task.dueDate && <span className="text-orange-600 font-bold">📅 {new Date(task.dueDate).toLocaleDateString('he-IL', {day: 'numeric', month: 'short'})}</span>}
@@ -101,7 +101,7 @@ const TaskCard: React.FC<{ task: any; onToggle: (id: string) => void; onUpdate: 
       </div>
       {showDetails && (
         <div className="px-2 pb-2 space-y-2 border-t border-slate-200 pt-2">
-          <div className="grid grid-cols-2 gap-2 text-[9px]">
+          <div className="grid grid-cols-2 gap-2 text-[10px]">
             {(task.easeOfExecution || 0) > 0 && (
               <div className="bg-teal-50 px-2 py-1 rounded">
                 <span className="text-teal-600 font-bold">קלות: {task.easeOfExecution}/5</span>
@@ -114,20 +114,20 @@ const TaskCard: React.FC<{ task: any; onToggle: (id: string) => void; onUpdate: 
             )}
           </div>
           {task.requiredResources && (
-            <p className="text-[9px] text-slate-600 bg-slate-100 p-2 rounded">
+            <p className="text-[10px] text-slate-600 bg-slate-100 p-2 rounded">
               <span className="font-bold">משאבים:</span> {task.requiredResources}
             </p>
           )}
           <div className="flex gap-1">
             <button 
               onClick={(e) => { e.stopPropagation(); onUpdate(task.id, { progress: 50 }); }}
-              className="flex-1 bg-blue-500 text-white py-1 rounded text-[9px] font-bold hover:bg-blue-600"
+              className="flex-1 bg-blue-500 text-white py-1 rounded text-[10px] font-bold hover:bg-blue-600"
             >
               בתהליך
             </button>
             <button 
               onClick={(e) => { e.stopPropagation(); onUpdate(task.id, { progress: 100, isCompleted: true }); }}
-              className="flex-1 bg-green-500 text-white py-1 rounded text-[9px] font-bold hover:bg-green-600"
+              className="flex-1 bg-green-500 text-white py-1 rounded text-[10px] font-bold hover:bg-green-600"
             >
               הושלם
             </button>
@@ -443,6 +443,13 @@ const Dashboard: React.FC = () => {
             </p>
           </div>
           <div className="flex gap-2">
+            <Link
+              to="/check-availability"
+              className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-md hover:bg-emerald-700 transition-all text-sm"
+              title="בדוק זמינות תאריך לפעילות"
+            >
+              <CalendarIcon size={14} /> בדיקת זמינות
+            </Link>
             <button 
               onClick={async () => {
                 const btn = document.activeElement as HTMLButtonElement;
@@ -624,7 +631,7 @@ const Dashboard: React.FC = () => {
             )}
             <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 space-y-0.5 pr-1">
               {dayPlanSlots.map(slot => (
-                <div key={slot.hour} className="flex gap-2 text-[9px] border-b border-slate-100/80 py-1">
+                <div key={slot.hour} className="flex gap-2 text-xs border-b border-slate-100/80 py-1">
                   <div className="w-10 shrink-0 font-mono font-bold text-slate-500 tabular-nums">
                     {String(slot.hour).padStart(2, '0')}:00
                   </div>
@@ -634,8 +641,17 @@ const Dashboard: React.FC = () => {
                     ) : (
                       slot.items.map((it, idx) => (
                         <div key={`${it.type}-${it.id}-${idx}`} className={`rounded px-2 py-1 ${it.type === 'event' ? 'bg-purple-50 border border-purple-100' : 'bg-amber-50 border border-amber-100'}`}>
-                          <div className="font-bold text-slate-800 truncate">{it.label}</div>
-                          {it.sub && <div className="text-[8px] text-slate-500">{it.sub}</div>}
+                          {it.type === 'event' ? (
+                            <Link
+                              to={`/events?eventId=${it.id}`}
+                              className="font-bold text-purple-700 truncate block hover:text-purple-900 hover:underline"
+                            >
+                              {it.label}
+                            </Link>
+                          ) : (
+                            <div className="font-bold text-slate-800 truncate">{it.label}</div>
+                          )}
+                          {it.sub && <div className="text-[10px] text-slate-500">{it.sub}</div>}
                         </div>
                       ))
                     )}
@@ -659,7 +675,7 @@ const Dashboard: React.FC = () => {
                 {/* Today's Tasks */}
                 {smartTasks.todayTasks.length > 0 && (
                   <div>
-                    <h4 className="text-[10px] font-black text-purple-700 mb-1.5">🎯 משימות להיום</h4>
+                    <h4 className="text-xs font-black text-purple-700 mb-1.5">🎯 משימות להיום</h4>
                     <div className="space-y-1.5">
                       {smartTasks.todayTasks.map(task => (
                         <TaskCard key={task.id} task={task} onToggle={toggleTask} onUpdate={updateTask} />
@@ -671,7 +687,7 @@ const Dashboard: React.FC = () => {
                 {/* Urgent Tasks */}
                 {smartTasks.urgentTasks.length > 0 && (
                   <div>
-                    <h4 className="text-[10px] font-black text-red-700 mb-1.5">🔥 דחוף</h4>
+                    <h4 className="text-xs font-black text-red-700 mb-1.5">🔥 דחוף</h4>
                     <div className="space-y-1.5">
                       {smartTasks.urgentTasks.slice(0, 3).map(task => (
                         <TaskCard key={task.id} task={task} onToggle={toggleTask} onUpdate={updateTask} />
@@ -683,7 +699,7 @@ const Dashboard: React.FC = () => {
                 {/* Financial Tasks */}
                 {smartTasks.financialTasks.length > 0 && (
                   <div>
-                    <h4 className="text-[10px] font-black text-green-700 mb-1.5">💰 פוטנציאל כלכלי</h4>
+                    <h4 className="text-xs font-black text-green-700 mb-1.5">💰 פוטנציאל כלכלי</h4>
                     <div className="space-y-1.5">
                       {smartTasks.financialTasks.slice(0, 3).map(task => (
                         <TaskCard key={task.id} task={task} onToggle={toggleTask} onUpdate={updateTask} />
@@ -695,7 +711,7 @@ const Dashboard: React.FC = () => {
                 {/* Quick Tasks */}
                 {smartTasks.quickTasks.length > 0 && (
                   <div>
-                    <h4 className="text-[10px] font-black text-blue-700 mb-1.5">⚡ קצרות</h4>
+                    <h4 className="text-xs font-black text-blue-700 mb-1.5">⚡ קצרות</h4>
                     <div className="space-y-1.5">
                       {smartTasks.quickTasks.slice(0, 3).map(task => (
                         <TaskCard key={task.id} task={task} onToggle={toggleTask} onUpdate={updateTask} />
@@ -707,7 +723,7 @@ const Dashboard: React.FC = () => {
                 {/* Easy Tasks */}
                 {smartTasks.easyTasks.length > 0 && (
                   <div>
-                    <h4 className="text-[10px] font-black text-teal-700 mb-1.5">😊 קלות לביצוע</h4>
+                    <h4 className="text-xs font-black text-teal-700 mb-1.5">😊 קלות לביצוע</h4>
                     <div className="space-y-1.5">
                       {smartTasks.easyTasks.slice(0, 3).map(task => (
                         <TaskCard key={task.id} task={task} onToggle={toggleTask} onUpdate={updateTask} />
@@ -719,7 +735,7 @@ const Dashboard: React.FC = () => {
                 {/* Overdue Tasks */}
                 {smartTasks.overdueTasks.length > 0 && (
                   <div>
-                    <h4 className="text-[10px] font-black text-orange-700 mb-1.5">⏰ נדחו</h4>
+                    <h4 className="text-xs font-black text-orange-700 mb-1.5">⏰ נדחו</h4>
                     <div className="space-y-1.5">
                       {smartTasks.overdueTasks.slice(0, 3).map(task => (
                         <TaskCard key={task.id} task={task} onToggle={toggleTask} onUpdate={updateTask} />
@@ -743,23 +759,23 @@ const Dashboard: React.FC = () => {
                 {/* Marketing Campaigns Summary */}
                 <div className="bg-blue-50 rounded-lg p-2 border border-blue-200">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-black text-blue-700">Leads from Facebook:</span>
+                    <span className="text-xs font-black text-blue-700">Leads from Facebook:</span>
                     <span className="text-xs font-black text-blue-700">{leads.filter(l => l.source?.includes('Facebook')).length}</span>
                   </div>
-                  <p className="text-[9px] text-blue-600">(High Quality)</p>
+                  <p className="text-[10px] text-blue-600">(High Quality)</p>
                 </div>
                 
                 <div className="bg-pink-50 rounded-lg p-2 border border-pink-200">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-black text-pink-700">Instagram Campaign</span>
+                    <span className="text-xs font-black text-pink-700">Instagram Campaign</span>
                     <Instagram size={14} className="text-pink-600"/>
                   </div>
-                  <p className="text-[9px] text-pink-600">Status: Running</p>
+                  <p className="text-[10px] text-pink-600">Status: Running</p>
                 </div>
 
                 {/* Marketing Tasks with Full Details */}
                 <div className="space-y-2 mt-3">
-                  <h4 className="text-[10px] font-black text-purple-700">משימות שיווק</h4>
+                  <h4 className="text-xs font-black text-purple-700">משימות שיווק</h4>
                   {tasks.filter(t => !t.isCompleted && (t.category === 'שיווק' || t.category === 'קליכיף')).slice(0, 5).map(task => (
                     <TaskCard key={task.id} task={task} onToggle={toggleTask} onUpdate={updateTask} />
                   ))}
@@ -767,15 +783,15 @@ const Dashboard: React.FC = () => {
 
                 {/* Recent Leads */}
                 <div className="space-y-2 mt-3">
-                  <h4 className="text-[10px] font-black text-blue-700">לידים אחרונים</h4>
+                  <h4 className="text-xs font-black text-blue-700">לידים אחרונים</h4>
                   {leads.slice(0, 3).map(lead => (
                     <div key={lead.id} className="bg-blue-50 rounded-lg p-2 border border-blue-200">
                       <div className="flex items-start gap-2">
                         <PhoneCall size={10} className="text-blue-600 shrink-0 mt-0.5"/>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[10px] font-bold text-slate-800 truncate">{lead.name}</p>
-                          <p className="text-[8px] text-slate-500">{lead.phone}</p>
-                          {lead.eventDetails && <p className="text-[8px] text-slate-400 truncate mt-0.5">{lead.eventDetails}</p>}
+                          <p className="text-xs font-bold text-slate-800 truncate">{lead.name}</p>
+                          <p className="text-[10px] text-slate-500">{lead.phone}</p>
+                          {lead.eventDetails && <p className="text-[10px] text-slate-400 truncate mt-0.5">{lead.eventDetails}</p>}
                         </div>
                       </div>
                     </div>
@@ -795,7 +811,7 @@ const Dashboard: React.FC = () => {
                   <div key={task.id} className="bg-white rounded-lg p-2 border-r-4 border-orange-400 shadow-sm">
                     <div className="flex items-start gap-2">
                       <Bell size={12} className="text-orange-600 shrink-0"/>
-                      <p className="text-[10px] font-bold text-slate-800">{task.title}</p>
+                      <p className="text-xs font-bold text-slate-800">{task.title}</p>
                     </div>
                   </div>
                 ))}
@@ -845,12 +861,12 @@ const Dashboard: React.FC = () => {
                               setEditingNoteText('');
                             }}
                             autoFocus
-                            className="flex-1 text-[10px] px-2 py-1 border border-purple-400 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 font-bold"
+                            className="flex-1 text-xs px-2 py-1 border border-purple-400 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 font-bold"
                           />
                         ) : (
                           <>
                             <p 
-                              className={`text-[10px] font-bold flex-1 cursor-pointer ${note.done ? 'line-through text-slate-400' : 'text-slate-700'}`}
+                              className={`text-xs font-bold flex-1 cursor-pointer ${note.done ? 'line-through text-slate-400' : 'text-slate-700'}`}
                               onDoubleClick={() => {
                                 setEditingNoteId(note.id);
                                 setEditingNoteText(note.text);
@@ -890,7 +906,7 @@ const Dashboard: React.FC = () => {
                         value={newNoteText}
                         onChange={(e) => setNewNoteText(e.target.value)}
                         placeholder="הוסף תזכורת..."
-                        className="flex-1 text-[10px] px-2 py-1 border border-yellow-300 rounded focus:outline-none focus:ring-1 focus:ring-purple-500"
+                        className="flex-1 text-xs px-2 py-1 border border-yellow-300 rounded focus:outline-none focus:ring-1 focus:ring-purple-500"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && newNoteText.trim()) {
                             setDailyNotes(prev => [...prev, { id: `n_${Date.now()}`, text: newNoteText, done: false }]);
@@ -905,7 +921,7 @@ const Dashboard: React.FC = () => {
                             setNewNoteText('');
                           }
                         }}
-                        className="shrink-0 bg-purple-600 text-white px-2 py-1 rounded text-[10px] font-bold hover:bg-purple-700 transition-all"
+                        className="shrink-0 bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 transition-all"
                         title="הוסף פתק"
                       >
                         +
