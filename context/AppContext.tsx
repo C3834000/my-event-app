@@ -23,6 +23,17 @@ function mergeNewRowsFromCloud<T extends { id: string }>(local: T[], cloud: T[])
   return [...newOnes, ...local];
 }
 
+/** איחוד ענן + מקומי: כל מה שבענן + מה שיש רק מקומית; אם אותו id — נתוני המקומי דורסים (שינויים אחרונים בדפדפן). מונע החלפת רשימה מלאה כשהענן "גדול יותר" ואיבוד אירועים מקומיים. */
+function mergeUnionCloudWithLocalOverlay<T extends { id: string }>(local: T[], cloud: T[]): T[] {
+  const byId = new Map<string, T>();
+  for (const e of cloud) byId.set(e.id, e);
+  for (const e of local) {
+    const cur = byId.get(e.id);
+    byId.set(e.id, cur ? ({ ...cur, ...e } as T) : e);
+  }
+  return Array.from(byId.values());
+}
+
 interface Activity {
   id: string;
   type: 'email' | 'sync' | 'system';
@@ -213,8 +224,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const localTasksArr = local.tasks || [];
 
       if (cloudEvents.length > 0) {
-        if (cloudEvents.length > localCounts.events) setEvents(cloudEvents);
-        else setEvents(mergeNewRowsFromCloud(localEvents, cloudEvents));
+        if (cloudEvents.length > localCounts.events) {
+          setEvents(mergeUnionCloudWithLocalOverlay(localEvents as AppEvent[], cloudEvents as AppEvent[]));
+        } else {
+          setEvents(mergeNewRowsFromCloud(localEvents, cloudEvents));
+        }
       }
       if (cloudCustomers.length > 0) {
         if (cloudCustomers.length > localCounts.customers) setCustomers(cloudCustomers);
@@ -257,22 +271,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // אל תדרוס רשימה שלמה כשאותו אורך — הענן עלול להיות לפני commit; רק אם יש יותר שורות בענן או מזג ids חדשים
         setCustomers((prev) => {
           if (cloudCustomers.length === 0) return prev;
-          if (cloudCustomers.length > prev.length) return cloudCustomers;
+          if (cloudCustomers.length > prev.length) return mergeUnionCloudWithLocalOverlay(prev, cloudCustomers);
           return mergeNewRowsFromCloud(prev, cloudCustomers);
         });
         setEvents((prev) => {
           if (cloudEvents.length === 0) return prev;
-          if (cloudEvents.length > prev.length) return cloudEvents;
+          if (cloudEvents.length > prev.length) return mergeUnionCloudWithLocalOverlay(prev, cloudEvents);
           return mergeNewRowsFromCloud(prev, cloudEvents);
         });
         setLeads((prev) => {
           if (cloudLeads.length === 0) return prev;
-          if (cloudLeads.length > prev.length) return cloudLeads;
+          if (cloudLeads.length > prev.length) return mergeUnionCloudWithLocalOverlay(prev, cloudLeads);
           return mergeNewRowsFromCloud(prev, cloudLeads);
         });
         setTasks((prev) => {
           if (cloudTasks.length === 0) return prev;
-          if (cloudTasks.length > prev.length) return cloudTasks;
+          if (cloudTasks.length > prev.length) return mergeUnionCloudWithLocalOverlay(prev, cloudTasks);
           return mergeNewRowsFromCloud(prev, cloudTasks);
         });
 
@@ -418,10 +432,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('👤 לקוח חדש נוצר בענן:', newCustomer);
     }
 
+    const newEventId = `e_${Date.now()}`;
     const event: AppEvent = {
-      id: `e_${Date.now()}`,
+      id: newEventId,
       customerId: finalCustomerId || '',
-      title: finalCustomerId ? `אירוע - ${data.name || 'לקוח'}` : `הזמנה מפורטל: ${data.name || 'לקוח'}`,
+      /* כותרת נקייה — בלי "הזמנה מפורטל" שמבלבל בכרטיס ובמיילים */
+      title: `אירוע – ${data.name || 'לקוח'}`,
+      externalId: `H-${newEventId.replace(/^e_/, '')}`,
       date: data.date || new Date().toISOString().split('T')[0],
       startTime: data.startTime || '10:00',
       endTime: data.endTime || '11:30',

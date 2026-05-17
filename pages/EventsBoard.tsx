@@ -39,8 +39,11 @@ const HEADER_BG_COLORS: string[] = [
   'bg-gradient-to-r from-lime-400 to-green-400',
 ];
 
+/** קבוצת כל האירועים שתאריכם היום או בעתיד (לא "נוספו עכשיו" — רק לפי תאריך) */
+const FUTURE_EVENTS_GROUP = '📅 אירועים עתידיים';
+
 const getHeaderBg = (category: string) => {
-  if (category === '🆕 אירועים חדשים') return 'bg-gradient-to-r from-purple-500 to-pink-500';
+  if (category === FUTURE_EVENTS_GROUP) return 'bg-gradient-to-r from-purple-500 to-pink-500';
   const idx = Math.abs(category.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % HEADER_BG_COLORS.length;
   return HEADER_BG_COLORS[idx];
 };
@@ -306,7 +309,7 @@ const EventsBoard: React.FC = () => {
           eventDate.setHours(0, 0, 0, 0);
           const isFutureEvent = eventDate >= today;
           
-          const groupName = isFutureEvent ? '🆕 אירועים חדשים' : ((e as any).category || e.tag || 'כללי');
+          const groupName = isFutureEvent ? FUTURE_EVENTS_GROUP : ((e as any).category || e.tag || 'כללי');
           
           // סינון קטגוריות אם יש בחירה
           if (selectedCategories.size > 0 && !selectedCategories.has(groupName)) {
@@ -318,8 +321,8 @@ const EventsBoard: React.FC = () => {
       });
       
       return Object.keys(groups).sort((a, b) => {
-          if (a === '🆕 אירועים חדשים') return -1;
-          if (b === '🆕 אירועים חדשים') return 1;
+          if (a === FUTURE_EVENTS_GROUP) return -1;
+          if (b === FUTURE_EVENTS_GROUP) return 1;
           if (a === 'לבדיקה') return -1;
           if (b === 'לבדיקה') return 1;
           return a.localeCompare(b);
@@ -337,7 +340,7 @@ const EventsBoard: React.FC = () => {
       let changed = false;
       Object.keys(groupedEvents).forEach(key => {
         if (next[key] === undefined) {
-          next[key] = key !== '🆕 אירועים חדשים';
+          next[key] = key !== FUTURE_EVENTS_GROUP;
           changed = true;
         }
       });
@@ -395,7 +398,7 @@ const EventsBoard: React.FC = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const isFutureEvent = eventDate >= today;
-      const groupName = isFutureEvent ? '🆕 אירועים חדשים' : ((e as any).category || e.tag || 'כללי');
+      const groupName = isFutureEvent ? FUTURE_EVENTS_GROUP : ((e as any).category || e.tag || 'כללי');
       cats.add(groupName);
     });
     return Array.from(cats).sort();
@@ -575,10 +578,12 @@ const EventsBoard: React.FC = () => {
                     <div className="flex items-center gap-4">
                         <span className="px-3 py-1.5 rounded-full text-xs font-black bg-white/30 text-white backdrop-blur-sm shadow-sm">{group}</span>
                         <span className="text-sm font-bold text-white/95">{list.length} אירועים</span>
-                        <span className="text-sm font-black text-white/95">💰 ₪{totalRevenue.toLocaleString()}</span>
-                        {totalAmount > totalRevenue && (
-                            <span className="text-xs font-bold text-white/80">/ ₪{totalAmount.toLocaleString()}</span>
-                        )}
+                        <span className="text-sm font-black text-white/95" title="סכום ששולם בפועל מהאירועים בקבוצה">
+                          שולם: ₪{totalRevenue.toLocaleString()}
+                        </span>
+                        <span className="text-xs font-bold text-white/85" title="סכום חיוב כולל לפני ניכוי שולם">
+                          {' '}/ סה״כ חיוב: ₪{totalAmount.toLocaleString()}
+                        </span>
                     </div>
                     {collapsedGroups[group] ? <ChevronDown size={22} className="text-white" /> : <ChevronUp size={22} className="text-white" />}
                 </button>
