@@ -417,19 +417,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const handlePublicBookingSubmit = async (data: any, leadId?: string, customerId?: string) => {
     console.log('🎯 handlePublicBookingSubmit נקרא עם הנתונים:', data, 'leadId:', leadId, 'customerId:', customerId);
-    
+
+    // =========================================================================
+    // הגנה מפני כפילויות (מונע מקרים כמו "גלים תיירות 3311 אירועים"):
+    // 1) אם כבר קיים אירוע עם אותו טלפון + תאריך + שעת התחלה → מחזירים אותו
+    // 2) אם אותו טלפון שלח טופס בדקה האחרונה → דחייה (anti-spam / double-click)
+    // =========================================================================
+    const normPhone = String(data.phone || '').replace(/[^0-9]/g, '');
+    const dateKey = data.date || new Date().toISOString().split('T')[0];
+    const startKey = data.startTime || '10:00';
+
+    if (normPhone) {
+      // 1) כפילות תוכן: אותו טלפון + אותו תאריך + אותה שעת התחלה
+      const dup = events.find(e =>
+        String(e.phone || '').replace(/[^0-9]/g, '') === normPhone &&
+        e.date === dateKey &&
+        (e.startTime || '10:00') === startKey
+      );
+      if (dup) {
+        console.warn('🛑 כפילות זוהתה — מחזיר את האירוע הקיים במקום ליצור חדש:', dup.id);
+        addActivity('system', `נחסמה כפילות הזמנה מהפורטל (טלפון ${normPhone} בתאריך ${dateKey}) — האירוע הקיים: ${dup.id}`);
+        return { eventId: dup.id, customerId: dup.customerId };
+      }
+
+      // 2) הגנת קצב: אותו טלפון לא יכול לשלוח שוב תוך 60 שניות
+      try {
+        const RATE_KEY = 'ME_CFM_BOOKING_RATE_V1';
+        const rateRaw = localStorage.getItem(RATE_KEY);
+        const rate: Record<string, number> = rateRaw ? JSON.parse(rateRaw) : {};
+        const now = Date.now();
+        const last = rate[normPhone] || 0;
+        if (now - last < 60_000) {
+          console.warn('🛑 הגנת קצב: שליחה כפולה תוך פחות מדקה — נדחה');
+          throw new Error('כבר שלחתם הזמנה לפני רגע. אנא המתינו דקה ונסו שוב אם צריך.');
+        }
+        rate[normPhone] = now;
+        // ניקוי ערכים ישנים (>24 שעות)
+        for (const k of Object.keys(rate)) {
+          if (now - rate[k] > 24 * 60 * 60 * 1000) delete rate[k];
+        }
+        localStorage.setItem(RATE_KEY, JSON.stringify(rate));
+      } catch (e) {
+        if (e instanceof Error && e.message.includes('המתינו')) throw e;
+        // localStorage לא זמין — ממשיכים בלי הגנת קצב
+      }
+    }
+
     let finalCustomerId = customerId;
     if (!customerId && !leadId && data.name && data.phone) {
-      const newCustomer: Customer = {
-        id: `c_${Date.now()}`,
-        name: data.name,
-        phone: data.phone,
-        email: data.email || '',
-      };
-      await customersService.create(newCustomer);
-      finalCustomerId = newCustomer.id;
-      setCustomers((prev) => [newCustomer, ...prev]);
-      console.log('👤 לקוח חדש נוצר בענן:', newCustomer);
+      // אם כבר קיים לקוח עם אותו טלפון — נשתמש בו במקום ליצור כפילות
+      const existingCustomer = customers.find(c =>
+        String(c.phone || '').replace(/[^0-9]/g, '') === normPhone
+      );
+      if (existingCustomer) {
+        finalCustomerId = existingCustomer.id;
+        console.log('♻️ נמצא לקוח קיים לפי טלפון — לא נוצר חדש:', existingCustomer.id);
+      } else {
+        const newCustomer: Customer = {
+          id: `c_${Date.now()}`,
+          name: data.name,
+          phone: data.phone,
+          email: data.email || '',
+        };
+        await customersService.create(newCustomer);
+        finalCustomerId = newCustomer.id;
+        setCustomers((prev) => [newCustomer, ...prev]);
+        console.log('👤 לקוח חדש נוצר בענן:', newCustomer);
+      }
     }
 
     const newEventId = `e_${Date.now()}`;

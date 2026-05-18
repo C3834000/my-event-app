@@ -10,6 +10,8 @@ import {
 const PORTAL_VIDEO_URL = 'https://drive.google.com/file/d/1-1qFyTUztkknjsREk2tuN8G5-rouYp4N/preview';
 const GUIDE_PDF_URL = 'https://drive.google.com/file/d/1gHeYbZFEL88Q3mdtqXkkQeEQsBC9GgmL/view';
 const ACTIVATION_GUIDE_URL = 'https://drive.google.com/file/d/1-5xdVHlMEa8tSL1l9MczKwCs1LRIuC1l/view?usp=sharing';
+// אתר הכנת החידון/טריוויה — הלקוח בונה כאן את החידון שלו
+const QUIZ_BUILDER_URL = 'https://quikhiv-trivia.netlify.app/';
 const ACTIVATION_GUIDE_EMBED = 'https://drive.google.com/file/d/1-5xdVHlMEa8tSL1l9MczKwCs1LRIuC1l/preview';
 const WHATSAPP_NUMBER = '0529934000';
 const WHATSAPP_LINK = `https://wa.me/972${WHATSAPP_NUMBER.replace(/^0/, '')}`;
@@ -241,7 +243,7 @@ const ClientJourneyPortal: React.FC = () => {
                   
                   <div className="bg-white rounded-2xl p-6 mb-6 shadow-md border border-blue-100">
                     <p className="text-sm text-slate-700 mb-4 font-bold leading-relaxed">בשביל להכין חידון עליכם להכנס לקישור הזה בו תוכלו להכין את החידון שלכם:</p>
-                    <a href="https://app.funclickgames.com/account/?ps=clickkef" target="_blank" rel="noopener noreferrer" className="block bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-xl font-bold text-center shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2">
+                    <a href={QUIZ_BUILDER_URL} target="_blank" rel="noopener noreferrer" className="block bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-xl font-bold text-center shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2">
                       <ExternalLink size={20} />
                       כניסה לאתר ההכנה
                     </a>
@@ -391,6 +393,9 @@ const ClientJourneyPortal: React.FC = () => {
                     <p><strong>1.</strong> עליכם לוודא את סידור התשלום</p>
                     <p><strong>2.</strong> ללחוץ על כפתור <strong>"שליחת בקשה להורדת משחק"</strong> באתר הכנת החידון</p>
                     <p><strong>3.</strong> אנו מקבלים את הבקשה שלכם, מאשרים את ההורדה, ואתם תקבלו למייל שלכם מייל עם קישור להורדת המשחק שלכם והוראות הפעלה.</p>
+                    <a href={QUIZ_BUILDER_URL} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-black text-sm transition-all shadow-md hover:shadow-lg">
+                      🎯 כניסה לאתר הכנת החידון ←
+                    </a>
                   </div>
                 </div>
 
@@ -410,6 +415,9 @@ const ClientJourneyPortal: React.FC = () => {
                     <p><strong>2.</strong> ללחוץ על כפתור <strong>"שליחת בקשה להורדת משחק טלפוני בלבד"</strong> באתר הכנת החידון. בחרו את מס׳ המשתתפים, סמנו את אופן התשלום כפי שסוכם איתנו ואשרו את שליחת הבקשה</p>
                     <p><strong>3.</strong> אנו מקבלים את הבקשה שלכם, מאשרים את ההורדה, ואתם תקבלו למייל שלכם מייל עם קישור להורדת המשחק שלכם והוראות הפעלה.</p>
                     <p><strong>4.</strong> מספר הטלפון והחדר שדרכו המשתתפים מתחברים יופיע על המסך עם הפעלת המשחק בפעם הראשונה</p>
+                    <a href={QUIZ_BUILDER_URL} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-5 py-3 rounded-xl font-black text-sm transition-all shadow-md hover:shadow-lg">
+                      🎯 כניסה לאתר הכנת החידון ←
+                    </a>
                   </div>
                 </div>
 
@@ -429,6 +437,9 @@ const ClientJourneyPortal: React.FC = () => {
                     <p><strong>2.</strong> ללחוץ על כפתור <strong>"שליחת בקשה להורדת משחק טלפוני בלבד"</strong> באתר הכנת החידון. בחרו את מס׳ המשתתפים, סמנו את אופן התשלום כפי שסוכם איתנו ואשרו את שליחת הבקשה</p>
                     <p><strong>3.</strong> אנו מקבלים את הבקשה שלכם, מאשרים את ההורדה, ואתם תקבלו למייל שלכם מייל עם קישור להורדת המשחק שלכם והוראות הפעלה.</p>
                     <p><strong>4.</strong> מספר הטלפון והחדר שדרכו המשתתפים מתחברים יופיע על המסך עם הפעלת המשחק בפעם הראשונה. המנחה מפעיל את המשחק מהמחשב שלו ורואה את נתוני ההצבעה וכו׳</p>
+                    <a href={QUIZ_BUILDER_URL} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-5 py-3 rounded-xl font-black text-sm transition-all shadow-md hover:shadow-lg">
+                      🎯 כניסה לאתר הכנת החידון ←
+                    </a>
                   </div>
                 </div>
               </div>
