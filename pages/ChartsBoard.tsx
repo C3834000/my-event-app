@@ -6,6 +6,35 @@ import { PaymentStatus } from '../types';
 
 const COLORS = ['#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#06b6d4', '#84cc16'];
 
+/** מיפוי סטטוס תשלום ל-chip צבעוני קומפקטי */
+const STATUS_CHIP: Record<string, { bg: string; text: string; short: string }> = {
+  [PaymentStatus.NotPaid]:        { bg: 'bg-rose-100',    text: 'text-rose-700',    short: 'לא שולם' },
+  [PaymentStatus.PaidCash]:       { bg: 'bg-emerald-100', text: 'text-emerald-700', short: 'מזומן' },
+  [PaymentStatus.Paid]:           { bg: 'bg-emerald-100', text: 'text-emerald-700', short: 'שולם' },
+  [PaymentStatus.PaidTransferL]:  { bg: 'bg-emerald-100', text: 'text-emerald-700', short: "העב' ל'" },
+  [PaymentStatus.PaidPartial]:    { bg: 'bg-orange-100',  text: 'text-orange-700',  short: 'חלקי' },
+  [PaymentStatus.PaidCredit]:     { bg: 'bg-emerald-100', text: 'text-emerald-700', short: 'אשראי' },
+  [PaymentStatus.Net30]:          { bg: 'bg-amber-100',   text: 'text-amber-800',   short: 'שוטף+30' },
+  [PaymentStatus.PaidCheck]:      { bg: 'bg-emerald-100', text: 'text-emerald-700', short: "צ'ק" },
+  [PaymentStatus.Net60]:          { bg: 'bg-amber-100',   text: 'text-amber-800',   short: 'שוטף+60' },
+  [PaymentStatus.PaidTransferH]:  { bg: 'bg-emerald-100', text: 'text-emerald-700', short: "העב' ח'" },
+  [PaymentStatus.PaidTransferM]:  { bg: 'bg-emerald-100', text: 'text-emerald-700', short: "העב' מ'" },
+  [PaymentStatus.PaidProvider]:   { bg: 'bg-emerald-100', text: 'text-emerald-700', short: 'ספק' },
+};
+
+const StatusChip = ({ status }: { status?: string }) => {
+  if (!status) return null;
+  const cfg = STATUS_CHIP[status] || { bg: 'bg-slate-100', text: 'text-slate-600', short: status };
+  return (
+    <span
+      className={`shrink-0 inline-block px-1.5 py-0.5 rounded-md text-[10px] font-black whitespace-nowrap ${cfg.bg} ${cfg.text}`}
+      title={status}
+    >
+      {cfg.short}
+    </span>
+  );
+};
+
 export default function ChartsBoard() {
   const { events, customers } = useApp();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -503,54 +532,56 @@ export default function ChartsBoard() {
               אין יתרות פתוחות 🎉
             </p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
-              {cashflow.byCustomer.map((c, idx) => (
-                <div
-                  key={c.customerKey}
-                  className="bg-gradient-to-br from-purple-50 to-pink-50 p-4 rounded-xl border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg transition-all"
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="text-sm font-black text-slate-800 truncate flex-1">
-                      {c.customerName}
-                    </div>
-                    <span className="text-[10px] font-black text-purple-700 bg-white px-2 py-0.5 rounded-full shrink-0 border border-purple-200">
-                      #{idx + 1}
-                    </span>
-                  </div>
-                  {c.phone && (
-                    <a
-                      href={`tel:${c.phone}`}
-                      className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 hover:text-purple-800 hover:underline mb-2"
+            <div className="overflow-x-auto max-h-[420px] overflow-y-auto rounded-xl border border-slate-100">
+              <table className="w-full text-sm" dir="rtl">
+                <thead className="sticky top-0 bg-gradient-to-l from-purple-50 to-pink-50 z-10 shadow-sm">
+                  <tr className="border-b-2 border-purple-200">
+                    <th className="text-right py-2 px-2 text-[11px] font-black text-slate-500 w-8">#</th>
+                    <th className="text-right py-2 px-2 text-[11px] font-black text-slate-600">לקוח</th>
+                    <th className="text-right py-2 px-2 text-[11px] font-black text-slate-600">טלפון</th>
+                    <th className="text-center py-2 px-2 text-[11px] font-black text-slate-600">אירועים</th>
+                    <th className="text-right py-2 px-2 text-[11px] font-black text-amber-700">צפי</th>
+                    <th className="text-right py-2 px-2 text-[11px] font-black text-rose-700">ללא תאריך</th>
+                    <th className="text-right py-2 px-2 text-[11px] font-black text-purple-700">סה"כ פתוח</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cashflow.byCustomer.map((c, idx) => (
+                    <tr
+                      key={c.customerKey}
+                      className={`border-b border-slate-100 hover:bg-purple-50/40 transition-colors ${idx % 2 === 1 ? 'bg-slate-50/50' : ''}`}
                     >
-                      <Phone size={12} /> {c.phone}
-                    </a>
-                  )}
-                  <div className="text-[10px] text-slate-500 font-bold mb-2">
-                    {c.eventCount} {c.eventCount === 1 ? 'אירוע' : 'אירועים'} פתוח
-                    {c.eventCount === 1 ? '' : 'ים'}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
-                      <div className="text-[10px] text-amber-600 font-black">צפי</div>
-                      <div className="text-sm font-black text-amber-800">
-                        ₪{c.totalExpected.toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="bg-rose-50 border border-rose-200 rounded-lg p-2">
-                      <div className="text-[10px] text-rose-600 font-black">ללא תאריך</div>
-                      <div className="text-sm font-black text-rose-800">
-                        ₪{c.totalUndated.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-purple-200 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-600">סה"כ פתוח:</span>
-                    <span className="text-base font-black text-purple-700">
-                      ₪{c.total.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                      <td className="py-2 px-2 text-[11px] font-black text-slate-400">{idx + 1}</td>
+                      <td className="py-2 px-2 text-sm font-black text-slate-800 max-w-[200px] truncate">
+                        {c.customerName}
+                      </td>
+                      <td className="py-2 px-2">
+                        {c.phone ? (
+                          <a
+                            href={`tel:${c.phone}`}
+                            title={c.phone}
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white border border-purple-200 text-purple-600 hover:bg-purple-50 hover:border-purple-400 transition-colors"
+                          >
+                            <Phone size={12} />
+                          </a>
+                        ) : (
+                          <span className="text-slate-300 text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-2 text-center text-xs font-bold text-slate-600">{c.eventCount}</td>
+                      <td className="py-2 px-2 text-sm font-black text-amber-700 whitespace-nowrap">
+                        {c.totalExpected > 0 ? `₪${c.totalExpected.toLocaleString()}` : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="py-2 px-2 text-sm font-black text-rose-700 whitespace-nowrap">
+                        {c.totalUndated > 0 ? `₪${c.totalUndated.toLocaleString()}` : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="py-2 px-2 text-sm font-black text-purple-800 whitespace-nowrap">
+                        ₪{c.total.toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -568,51 +599,48 @@ export default function ChartsBoard() {
                 אין תקבולים צפויים בקרוב
               </p>
             ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+              <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
                 {cashflow.futureInflows.map((item) => (
                   <div
                     key={item.key}
-                    className={`flex items-center justify-between p-3 rounded-xl border ${
+                    className={`flex items-center gap-2 p-2 rounded-lg border ${
                       item.status === 'received'
                         ? 'bg-emerald-50 border-emerald-200'
                         : 'bg-amber-50 border-amber-200'
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="text-xs font-black text-slate-700 shrink-0 w-20 text-center bg-white rounded-lg py-1.5 px-1 border border-slate-200">
-                        {new Date(item.date).toLocaleDateString('he-IL', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: '2-digit',
-                        })}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-black text-slate-800 truncate">{item.customerName}</div>
-                        {item.phone && (
-                          <a
-                            href={`tel:${item.phone}`}
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-purple-600 hover:underline"
-                          >
-                            <Phone size={10} /> {item.phone}
-                          </a>
-                        )}
-                        <div className="text-xs text-slate-500 truncate">{item.eventTitle}</div>
-                        {item.paymentStatus && (
-                          <div className="text-[10px] text-slate-400 font-bold truncate">{item.paymentStatus}</div>
-                        )}
-                      </div>
+                    {/* תאריך */}
+                    <div className="text-[11px] font-black text-slate-700 shrink-0 w-14 text-center bg-white rounded-md py-1 border border-slate-200">
+                      {new Date(item.date).toLocaleDateString('he-IL', {
+                        day: '2-digit',
+                        month: '2-digit',
+                      })}
                     </div>
-                    <div className="shrink-0 text-left ml-2">
-                      <div
-                        className={`text-base font-black ${
-                          item.status === 'received' ? 'text-emerald-700' : 'text-amber-700'
-                        }`}
+                    {/* שם + אירוע + סטטוס – שורה אחת */}
+                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                      <span className="text-sm font-black text-slate-800 truncate">{item.customerName}</span>
+                      <span className="text-xs text-slate-400 truncate hidden sm:inline" title={item.eventTitle}>
+                        · {item.eventTitle}
+                      </span>
+                      <StatusChip status={item.paymentStatus} />
+                    </div>
+                    {/* טלפון – אייקון בלבד */}
+                    {item.phone && (
+                      <a
+                        href={`tel:${item.phone}`}
+                        title={item.phone}
+                        className="shrink-0 w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-purple-600 hover:bg-purple-50 hover:border-purple-400 transition-colors"
                       >
-                        ₪{item.amount.toLocaleString()}
-                      </div>
-                      <div className="text-[10px] font-bold text-slate-500">
-                        {item.status === 'received' ? '✓ נכנס' : 'צפי'}
-                      </div>
+                        <Phone size={12} />
+                      </a>
+                    )}
+                    {/* סכום */}
+                    <div
+                      className={`shrink-0 text-sm font-black whitespace-nowrap ${
+                        item.status === 'received' ? 'text-emerald-700' : 'text-amber-700'
+                      }`}
+                    >
+                      ₪{item.amount.toLocaleString()}
                     </div>
                   </div>
                 ))}
@@ -641,34 +669,34 @@ export default function ChartsBoard() {
                     ב-{cashflow.undatedItems.length} אירועים
                   </p>
                 </div>
-                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
                   {cashflow.undatedItems.map((item) => (
                     <div
                       key={item.eventId}
-                      className="flex items-center justify-between p-3 rounded-xl bg-rose-50/60 border border-rose-100"
+                      className="flex items-center gap-2 p-2 rounded-lg bg-rose-50/60 border border-rose-100"
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-black text-slate-800 truncate">{item.customerName}</div>
-                        {item.phone && (
-                          <a
-                            href={`tel:${item.phone}`}
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-purple-600 hover:underline"
-                          >
-                            <Phone size={10} /> {item.phone}
-                          </a>
-                        )}
-                        <div className="text-xs text-slate-500 truncate">
-                          {item.eventTitle}
+                      {/* שם + אירוע + סטטוס */}
+                      <div className="min-w-0 flex-1 flex items-center gap-2">
+                        <span className="text-sm font-black text-slate-800 truncate">{item.customerName}</span>
+                        <span className="text-xs text-slate-400 truncate hidden sm:inline" title={item.eventTitle}>
+                          · {item.eventTitle}
                           {item.eventDate && ` · ${new Date(item.eventDate).toLocaleDateString('he-IL')}`}
-                        </div>
-                        <div className="text-[10px] text-rose-600 font-bold mt-0.5">
-                          {item.paymentStatus || 'ללא סטטוס תשלום'}
-                        </div>
+                        </span>
+                        <StatusChip status={item.paymentStatus} />
                       </div>
-                      <div className="shrink-0 text-left ml-2">
-                        <div className="text-base font-black text-rose-700">
-                          ₪{item.amount.toLocaleString()}
-                        </div>
+                      {/* טלפון */}
+                      {item.phone && (
+                        <a
+                          href={`tel:${item.phone}`}
+                          title={item.phone}
+                          className="shrink-0 w-7 h-7 rounded-full bg-white border border-rose-200 flex items-center justify-center text-rose-600 hover:bg-rose-50 hover:border-rose-400 transition-colors"
+                        >
+                          <Phone size={12} />
+                        </a>
+                      )}
+                      {/* סכום */}
+                      <div className="shrink-0 text-sm font-black text-rose-700 whitespace-nowrap">
+                        ₪{item.amount.toLocaleString()}
                       </div>
                     </div>
                   ))}
