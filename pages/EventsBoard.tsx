@@ -8,6 +8,23 @@ import { useSearchParams } from 'react-router-dom';
 import EditEventModal from '../components/EditEventModal';
 import { EVENT_TAGS } from '../constants/eventBoard';
 import { giDocTypeName } from '../services/greenInvoice';
+import { eventHasOpenBalance, eventYearKey } from '../services/eventKpi';
+
+const TODAY_KEY = () => new Date().toISOString().slice(0, 10);
+const YEAR_START_KEY = () => `${new Date().getFullYear()}-01-01`;
+const normalizeEventTag = (tag?: string) => {
+  const raw = (tag || 'קליכיף').trim() || 'קליכיף';
+  return raw
+    .replace(/"/g, '״')
+    .replace(/'/g, '׳')
+    .replace('גפן תשפ״ה', 'גפן תשפ״ה')
+    .replace('גפן תשפ"ה', 'גפן תשפ״ה')
+    .replace('גפן תשפ"ד', 'גפן תשפ״ד')
+    .replace('זה"ב - עיריית י-ם', 'זה״ב - עיריית י-ם');
+};
+
+const getBusinessCategory = (event: AppEvent) => normalizeEventTag(event.tag);
+const isFutureEvent = (event: AppEvent) => dateKey(event.date) >= TODAY_KEY();
 
 const CATEGORY_COLORS: string[] = [
   'bg-sky-100 text-sky-800 border border-sky-200',
@@ -39,11 +56,15 @@ const HEADER_BG_COLORS: string[] = [
   'bg-gradient-to-r from-lime-400 to-green-400',
 ];
 
-/** קבוצת כל האירועים שתאריכם היום או בעתיד (לא "נוספו עכשיו" — רק לפי תאריך) */
-const FUTURE_EVENTS_GROUP = '📅 אירועים עתידיים';
+const eventBoardGroupKey = (event: AppEvent) => {
+  if (isFutureEvent(event)) return '01 · אירועים עתידיים';
+  if (eventHasOpenBalance(event)) return '02 · גבייה פתוחה';
+  return `03 · ארכיון · ${eventYearKey(event)} · ${getBusinessCategory(event)}`;
+};
+
+const eventBoardGroupLabel = (group: string) => group.replace(/^\d{2} · /, '');
 
 const getHeaderBg = (category: string) => {
-  if (category === FUTURE_EVENTS_GROUP) return 'bg-gradient-to-r from-purple-500 to-pink-500';
   const idx = Math.abs(category.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % HEADER_BG_COLORS.length;
   return HEADER_BG_COLORS[idx];
 };
@@ -72,6 +93,72 @@ const EVENT_TYPE_STYLES: Record<string, string> = {
   [EventType.PhoneClick]: 'bg-[#e23344] text-white',
 };
 
+const EVENT_FILTERS_STORAGE_KEY = 'ME_CFM_EVENT_BOARD_FILTERS_V2';
+
+const dateKey = (value?: string) => (value || '').slice(0, 10);
+
+const MultiSelectFilter: React.FC<{
+  label: string;
+  options: string[];
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+  onSave: () => void;
+  getCount?: (option: string) => number;
+}> = ({ label, options, selected, onChange, onSave, getCount }) => {
+  const [open, setOpen] = useState(false);
+  const summary = selected.size === 0 ? 'הכל' : selected.size === options.length ? 'הכל נבחר' : `${selected.size} נבחרו`;
+
+  const toggle = (option: string) => {
+    const next = new Set(selected);
+    if (next.has(option)) next.delete(option);
+    else next.add(option);
+    onChange(next);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="min-w-[12rem] bg-white border border-slate-200 rounded-xl px-3 py-2 text-right shadow-sm hover:border-purple-300 transition-all"
+      >
+        <div className="text-[10px] font-black text-slate-400">{label}</div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-black text-slate-800 truncate">{summary}</span>
+          <ChevronDown size={15} className="text-slate-400 shrink-0" />
+        </div>
+      </button>
+
+      {open && (
+        <div className="absolute z-40 top-full right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-slate-200 p-3">
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <button type="button" onClick={() => onChange(new Set(options))} className="text-xs font-black bg-purple-50 text-purple-700 rounded-lg py-2">סמן הכל</button>
+            <button type="button" onClick={() => onChange(new Set())} className="text-xs font-black bg-slate-50 text-slate-600 rounded-lg py-2">ניקוי בחירה</button>
+            <button type="button" onClick={() => { onSave(); setOpen(false); }} className="text-xs font-black bg-emerald-50 text-emerald-700 rounded-lg py-2">שמירת בחירה</button>
+          </div>
+          <div className="max-h-72 overflow-y-auto space-y-1 pr-1">
+            {options.map(option => {
+              const checked = selected.has(option);
+              return (
+                <label key={option} className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(option)}
+                    className="w-4 h-4 accent-purple-600 shrink-0"
+                  />
+                  <span className="text-xs font-bold text-slate-700 flex-1 break-words">{option}</span>
+                  {getCount && <span className="text-[10px] font-black text-slate-400">{getCount(option)}</span>}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCreateTask?: (event: AppEvent) => void }> = ({ event, onEdit, onCreateTask }) => {
   const { getCustomerById, updateEvent, tasks } = useApp();
   const linkedTask = tasks.find(t => t.id === event.taskId);
@@ -79,6 +166,7 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
   const debt = event.amount - event.paidAmount;
   const isPaid = [PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck, PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider].includes(event.paymentStatus);
   const showDebt = !isPaid && debt > 0;
+  const businessCategory = getBusinessCategory(event);
 
   return (
       <div id={`event-row-${event.id}`} className="bg-white border-b border-slate-100 p-4 sm:p-5 hover:bg-slate-50 transition-colors group rounded-lg sm:rounded-none">
@@ -92,7 +180,7 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
                               <h4 className="text-base sm:text-lg font-bold text-slate-800 break-words">{event.title}</h4>
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            <span className={`text-xs font-bold px-3 py-1 rounded-lg ${EVENT_TAGS[event.tag] || 'bg-slate-400 text-white'}`}>{event.tag}</span>
+                            <span className={`text-xs font-bold px-3 py-1 rounded-lg ${EVENT_TAGS[businessCategory] || 'bg-slate-400 text-white'}`}>{businessCategory}</span>
                             <span className={`text-xs font-bold px-3 py-1 rounded-lg ${EVENT_TYPE_STYLES[event.eventType] || 'bg-slate-500 text-white'}`}>{event.eventType}</span>
                             {event.clickersNeeded > 0 && (
                                <span className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg text-xs font-bold border border-indigo-200">
@@ -268,8 +356,13 @@ const EventsBoard: React.FC = () => {
   const paymentCsvRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<'all' | 'unpaid'>('all');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [selectedYears, setSelectedYears] = useState<Set<string>>(new Set());
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [selectedEventTypes, setSelectedEventTypes] = useState<Set<string>>(new Set());
+  const [selectedPaymentStatuses, setSelectedPaymentStatuses] = useState<Set<string>>(new Set());
+  const [selectedEventStatuses, setSelectedEventStatuses] = useState<Set<string>>(new Set());
+  const [dateFrom, setDateFrom] = useState(YEAR_START_KEY());
+  const [dateTo, setDateTo] = useState(TODAY_KEY());
   const [newTask, setNewTask] = useState({ title: '', category: 'כללי' as any, priority: 3 });
   
   const ALL_EVENT_TYPE_VALUES = Object.values(EventType);
@@ -280,13 +373,44 @@ const EventsBoard: React.FC = () => {
     return Array.from(types);
   }, [events]);
 
-  const toggleEventTypeFilter = (type: string) => {
-    setSelectedEventTypes(prev => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      return next;
-    });
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(EVENT_FILTERS_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (Array.isArray(saved.years)) setSelectedYears(new Set(saved.years));
+      if (Array.isArray(saved.categories)) setSelectedCategories(new Set(saved.categories));
+      if (Array.isArray(saved.eventTypes)) setSelectedEventTypes(new Set(saved.eventTypes));
+      if (Array.isArray(saved.paymentStatuses)) setSelectedPaymentStatuses(new Set(saved.paymentStatuses));
+      if (Array.isArray(saved.eventStatuses)) setSelectedEventStatuses(new Set(saved.eventStatuses));
+      if (typeof saved.dateFrom === 'string') setDateFrom(saved.dateFrom || YEAR_START_KEY());
+      if (typeof saved.dateTo === 'string') setDateTo(saved.dateTo || TODAY_KEY());
+    } catch {
+      // Ignore invalid saved filters.
+    }
+  }, []);
+
+  const saveFilters = () => {
+    localStorage.setItem(EVENT_FILTERS_STORAGE_KEY, JSON.stringify({
+      years: Array.from(selectedYears),
+      categories: Array.from(selectedCategories),
+      eventTypes: Array.from(selectedEventTypes),
+      paymentStatuses: Array.from(selectedPaymentStatuses),
+      eventStatuses: Array.from(selectedEventStatuses),
+      dateFrom,
+      dateTo,
+    }));
+  };
+
+  const clearAllFilters = () => {
+    setSelectedYears(new Set());
+    setSelectedCategories(new Set());
+    setSelectedEventTypes(new Set());
+    setSelectedPaymentStatuses(new Set());
+    setSelectedEventStatuses(new Set());
+    setDateFrom(YEAR_START_KEY());
+    setDateTo(TODAY_KEY());
+    localStorage.removeItem(EVENT_FILTERS_STORAGE_KEY);
   };
 
   const filtered = useMemo(() => {
@@ -294,45 +418,52 @@ const EventsBoard: React.FC = () => {
         const cust = getCustomerById(e.customerId);
         const s = searchTerm.toLowerCase();
         const match = e.title.toLowerCase().includes(s) || cust?.name.toLowerCase().includes(s) || (e.externalId || '').toLowerCase().includes(s);
+        const yearMatch = selectedYears.size === 0 || selectedYears.has(eventYearKey(e));
+        const categoryMatch = selectedCategories.size === 0 || selectedCategories.has(getBusinessCategory(e));
         const typeMatch = selectedEventTypes.size === 0 || selectedEventTypes.has(e.eventType || '');
-        return typeMatch && (viewMode === 'all' ? match : (match && e.paymentStatus !== PaymentStatus.Paid));
+        const paymentStatusMatch = selectedPaymentStatuses.size === 0 || selectedPaymentStatuses.has(e.paymentStatus || '');
+        const eventStatusMatch = selectedEventStatuses.size === 0 || selectedEventStatuses.has(e.status || '');
+        const eventDate = dateKey(e.date);
+        const dateMatch = isFutureEvent(e) || ((!dateFrom || eventDate >= dateFrom) && (!dateTo || eventDate <= dateTo));
+        const modeMatch = viewMode === 'all' || eventHasOpenBalance(e);
+        return match && yearMatch && categoryMatch && typeMatch && paymentStatusMatch && eventStatusMatch && dateMatch && modeMatch;
       });
-  }, [events, searchTerm, getCustomerById, viewMode, selectedEventTypes]);
+  }, [events, searchTerm, getCustomerById, viewMode, selectedYears, selectedCategories, selectedEventTypes, selectedPaymentStatuses, selectedEventStatuses, dateFrom, dateTo]);
 
   const groupedEvents = useMemo(() => {
       const groups: Record<string, AppEvent[]> = {};
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
       
       filtered.forEach(e => {
-          const eventDate = new Date(e.date);
-          eventDate.setHours(0, 0, 0, 0);
-          const isFutureEvent = eventDate >= today;
-          
-          const groupName = isFutureEvent ? FUTURE_EVENTS_GROUP : ((e as any).category || e.tag || 'כללי');
-          
-          // סינון קטגוריות אם יש בחירה
-          if (selectedCategories.size > 0 && !selectedCategories.has(groupName)) {
-            return;
-          }
-          
+          const groupName = eventBoardGroupKey(e);
           if (!groups[groupName]) groups[groupName] = [];
           groups[groupName].push(e);
       });
       
       return Object.keys(groups).sort((a, b) => {
-          if (a === FUTURE_EVENTS_GROUP) return -1;
-          if (b === FUTURE_EVENTS_GROUP) return 1;
-          if (a === 'לבדיקה') return -1;
-          if (b === 'לבדיקה') return 1;
+          const rankA = a.slice(0, 2);
+          const rankB = b.slice(0, 2);
+          if (rankA !== rankB) return rankA.localeCompare(rankB);
+          const partsA = a.split(' · ');
+          const partsB = b.split(' · ');
+          const yearA = partsA[2] || '';
+          const yearB = partsB[2] || '';
+          const categoryA = partsA[3] || partsA[1] || '';
+          const categoryB = partsB[3] || partsB[1] || '';
+          if (rankA === '04' && yearA !== yearB) return yearB.localeCompare(yearA);
+          if (categoryA === 'לבדיקה') return -1;
+          if (categoryB === 'לבדיקה') return 1;
           return a.localeCompare(b);
       }).reduce((obj: any, key) => {
           obj[key] = groups[key].sort((a, b) => {
+              const da = dateKey(a.date);
+              const db = dateKey(b.date);
+              const ascending = key.startsWith('01') || key.startsWith('02') || viewMode === 'unpaid';
+              if (da !== db) return ascending ? da.localeCompare(db) : db.localeCompare(da);
               return b.id.localeCompare(a.id);
           });
           return obj;
       }, {});
-  }, [filtered, selectedCategories]);
+  }, [filtered, viewMode]);
 
   useEffect(() => {
     setCollapsedGroups(prev => {
@@ -340,7 +471,7 @@ const EventsBoard: React.FC = () => {
       let changed = false;
       Object.keys(groupedEvents).forEach(key => {
         if (next[key] === undefined) {
-          next[key] = key !== FUTURE_EVENTS_GROUP;
+          next[key] = false;
           changed = true;
         }
       });
@@ -392,35 +523,20 @@ const EventsBoard: React.FC = () => {
 
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
-    events.forEach(e => {
-      const eventDate = new Date(e.date);
-      eventDate.setHours(0, 0, 0, 0);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const isFutureEvent = eventDate >= today;
-      const groupName = isFutureEvent ? FUTURE_EVENTS_GROUP : ((e as any).category || e.tag || 'כללי');
-      cats.add(groupName);
-    });
+    events.forEach(e => cats.add(getBusinessCategory(e)));
     return Array.from(cats).sort();
   }, [events]);
 
-  const totalRevenueFiltered = useMemo(() => {
-    const eventsToCount = selectedCategories.size === 0 
-      ? Object.values(groupedEvents).flat()
-      : Object.entries(groupedEvents)
-          .filter(([cat]) => selectedCategories.has(cat))
-          .map(([, list]) => list).flat();
-    return eventsToCount.reduce((sum, e: AppEvent) => sum + (e.paidAmount || 0), 0);
-  }, [groupedEvents, selectedCategories]);
+  const allYears = useMemo(() => {
+    const years = new Set<string>();
+    events.forEach(e => years.add(eventYearKey(e)));
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [events]);
 
-  const toggleCategoryFilter = (cat: string) => {
-    setSelectedCategories(prev => {
-      const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat);
-      else next.add(cat);
-      return next;
-    });
-  };
+  const totalRevenueFiltered = useMemo(() => {
+    const eventsToCount = Object.values(groupedEvents).flat();
+    return eventsToCount.reduce((sum, e: AppEvent) => sum + (e.paidAmount || 0), 0);
+  }, [groupedEvents]);
 
   const matchedCustomersForSearch = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -505,62 +621,77 @@ const EventsBoard: React.FC = () => {
         </div>
       )}
 
-      {/* Category Filter */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-black text-slate-700">🏷️ סנן קטגוריות:</h3>
-          <div className="flex gap-2">
-            <button onClick={() => setSelectedCategories(new Set(allCategories))} className="text-xs font-bold text-blue-600 hover:underline">בחר הכל</button>
-            <button onClick={() => setSelectedCategories(new Set())} className="text-xs font-bold text-slate-500 hover:underline">נקה הכל</button>
+        <div className="flex flex-col xl:flex-row xl:items-end gap-3">
+          <div className="flex-1">
+            <h3 className="text-sm font-black text-slate-700 mb-2">סינון אירועים</h3>
+            <div className="flex flex-wrap gap-3">
+              <MultiSelectFilter
+                label="שנים"
+                options={allYears}
+                selected={selectedYears}
+                onChange={setSelectedYears}
+                onSave={saveFilters}
+                getCount={(year) => events.filter(e => eventYearKey(e) === year).length}
+              />
+              <MultiSelectFilter
+                label="תגיות / תחומים"
+                options={allCategories}
+                selected={selectedCategories}
+                onChange={setSelectedCategories}
+                onSave={saveFilters}
+                getCount={(cat) => events.filter(e => getBusinessCategory(e) === cat).length}
+              />
+              <MultiSelectFilter
+                label="סוג אירוע"
+                options={allEventTypes}
+                selected={selectedEventTypes}
+                onChange={setSelectedEventTypes}
+                onSave={saveFilters}
+                getCount={(type) => events.filter(e => e.eventType === type).length}
+              />
+              <MultiSelectFilter
+                label="סטטוס תשלום"
+                options={Object.values(PaymentStatus)}
+                selected={selectedPaymentStatuses}
+                onChange={setSelectedPaymentStatuses}
+                onSave={saveFilters}
+                getCount={(status) => events.filter(e => e.paymentStatus === status).length}
+              />
+              <MultiSelectFilter
+                label="סטטוס אירוע"
+                options={Object.values(EventStatus)}
+                selected={selectedEventStatuses}
+                onChange={setSelectedEventStatuses}
+                onSave={saveFilters}
+                getCount={(status) => events.filter(e => e.status === status).length}
+              />
+              <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
+                <div className="text-[10px] font-black text-slate-400 mb-1">טווח תאריכים</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={e => setDateFrom(e.target.value)}
+                    className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-purple-100"
+                    title="מתאריך"
+                  />
+                  <span className="text-xs text-slate-400">עד</span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={e => setDateTo(e.target.value)}
+                    className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-purple-100"
+                    title="עד תאריך"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {allCategories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => toggleCategoryFilter(cat)}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                selectedCategories.size === 0 || selectedCategories.has(cat)
-                  ? 'bg-purple-100 text-purple-700 border-2 border-purple-300'
-                  : 'bg-slate-100 text-slate-400 border-2 border-transparent'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Event Type Filter */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-black text-slate-700">🎯 סנן לפי סוג אירוע:</h3>
-          <div className="flex gap-2">
-            <button onClick={() => setSelectedEventTypes(new Set(allEventTypes))} className="text-xs font-bold text-green-600 hover:underline">בחר הכל</button>
-            <button onClick={() => setSelectedEventTypes(new Set())} className="text-xs font-bold text-slate-500 hover:underline">נקה הכל</button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={saveFilters} className="text-xs font-black bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700">שמירת בחירה</button>
+            <button type="button" onClick={clearAllFilters} className="text-xs font-black bg-slate-100 text-slate-600 px-4 py-2 rounded-xl hover:bg-slate-200">ניקוי בחירה</button>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {allEventTypes.map(type => {
-            const count = events.filter(e => e.eventType === type).length;
-            const isActive = selectedEventTypes.size === 0 || selectedEventTypes.has(type);
-            return (
-              <button
-                key={type}
-                onClick={() => toggleEventTypeFilter(type)}
-                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
-                  isActive
-                    ? 'bg-green-100 text-green-800 border-2 border-green-300'
-                    : 'bg-slate-100 text-slate-400 border-2 border-transparent'
-                }`}
-              >
-                {type}
-                <span className={`mr-1 font-black ${isActive ? 'text-green-600' : 'text-slate-400'}`}>
-                  ({count})
-                </span>
-              </button>
-            );
-          })}
         </div>
       </div>
 
@@ -576,7 +707,7 @@ const EventsBoard: React.FC = () => {
                     className={`w-full flex items-center justify-between py-3 px-5 ${getHeaderBg(group)} hover:opacity-90 transition-all shadow-sm`}
                 >
                     <div className="flex items-center gap-4">
-                        <span className="px-3 py-1.5 rounded-full text-xs font-black bg-white/30 text-white backdrop-blur-sm shadow-sm">{group}</span>
+                        <span className="px-3 py-1.5 rounded-full text-xs font-black bg-white/30 text-white backdrop-blur-sm shadow-sm">{eventBoardGroupLabel(group)}</span>
                         <span className="text-sm font-bold text-white/95">{list.length} אירועים</span>
                         <span className="text-sm font-black text-white/95" title="סכום ששולם בפועל מהאירועים בקבוצה">
                           שולם: ₪{totalRevenue.toLocaleString()}

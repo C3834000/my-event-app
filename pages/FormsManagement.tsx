@@ -220,6 +220,7 @@ const FormsManagement: React.FC = () => {
                                   >
                                      <option value="">בחר שדה במערכת (אופציונלי)...</option>
                                      <option value="name">שם לקוח</option>
+                                     <option value="invoiceName">שם לחשבונית</option>
                                      <option value="phone">טלפון לקוח</option>
                                      <option value="email">אימייל לקוח</option>
                                      <option value="eventTitle">שם האירוע</option>

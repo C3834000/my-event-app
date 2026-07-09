@@ -46,12 +46,45 @@ export function excludeEventFromKpis(ev: AppEvent): boolean {
   return ev.status === EventStatus.Cancelled;
 }
 
+export function yearFromDateKey(dateStr: string | undefined): string {
+  return parseEventDateKey(dateStr)?.slice(0, 4) || 'ללא שנה';
+}
+
+export function currentYearKey(): string {
+  return String(new Date().getFullYear());
+}
+
+export function eventYearKey(ev: AppEvent): string {
+  return yearFromDateKey(ev.date);
+}
+
+/** הכנסה שכבר התקבלה נספרת לפי תאריך התשלום בפועל, ואם אין כזה לפי תאריך האירוע. */
+export function incomeDateKey(ev: AppEvent): string | null {
+  return parseEventDateKey(ev.paymentDate || ev.date);
+}
+
+export function incomeYearKey(ev: AppEvent): string {
+  return yearFromDateKey(ev.paymentDate || ev.date);
+}
+
+export function eventCategoryKey(ev: AppEvent): string {
+  return (ev.category || ev.tag || 'כללי').trim() || 'כללי';
+}
+
+export function eventOutstandingBalance(ev: AppEvent): number {
+  return Math.max(0, numMoney(ev.amount) - numMoney(ev.paidAmount));
+}
+
+export function eventHasOpenBalance(ev: AppEvent): boolean {
+  if (excludeEventFromKpis(ev)) return false;
+  if (isPaidForKpi(ev.paymentStatus)) return false;
+  return eventOutstandingBalance(ev) > 0;
+}
+
 /** Open debt: event date before today (local calendar), not cancelled, not fully-paid status, positive balance */
 export function eventContributesToOpenDebt(ev: AppEvent, todayKey: string): boolean {
   if (excludeEventFromKpis(ev)) return false;
   const key = parseEventDateKey(ev.date);
   if (!key || key >= todayKey) return false;
-  if (isPaidForKpi(ev.paymentStatus)) return false;
-  const balance = Math.max(0, numMoney(ev.amount) - numMoney(ev.paidAmount));
-  return balance > 0;
+  return eventHasOpenBalance(ev);
 }

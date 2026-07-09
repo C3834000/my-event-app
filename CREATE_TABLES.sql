@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS events (
   category TEXT,
   hebrew_date TEXT,
   payment_date DATE,
+  invoice_name TEXT,
   task_id TEXT,
   payment_method TEXT,
   notes TEXT,

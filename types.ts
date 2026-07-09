@@ -93,6 +93,8 @@ export interface AppEvent {
   taskId?: string;
   /** תאריך תשלום בפועל (YYYY-MM-DD) */
   paymentDate?: string;
+  /** שם הלקוח כפי שיופיע במסמך חשבונית ירוקה */
+  invoiceName?: string;
   /** Green Invoice – מזהה מסמך אחרון שנשלח */
   giDocId?: string;
   /** Green Invoice – מספר מסמך */

@@ -44,6 +44,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
     email: event?.email || initialCust?.email || '',
     hebrewDate: event?.hebrewDate || '',
     paymentDate: event?.paymentDate || '',
+    invoiceName: event?.invoiceName || '',
     invoiceSent: event?.invoiceSent || '',
   });
   const [customerSearch, setCustomerSearch] = useState('');
@@ -79,9 +80,14 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
       addEvent(formData);
     } else {
       updateEvent(formData.id, formData);
-      try {
-        await sendEventUpdateEmail(formData);
-      } catch (_) {}
+      const customerEmail = (formData.email || getCustomerById(formData.customerId)?.email || '').trim();
+      if (customerEmail && confirm(`האירוע נשמר.\nהאם לשלוח מייל עדכון ללקוח?\n\nיישלח אל: ${customerEmail}`)) {
+        try {
+          await sendEventUpdateEmail(formData);
+        } catch (e) {
+          alert((e as Error).message || 'האירוע נשמר, אבל שליחת העדכון ללקוח נכשלה.');
+        }
+      }
     }
     onClose();
   };
@@ -118,6 +124,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
       giDocType: newGi.type,
       giDocDate: newGi.date,
       giDocUrl: newGi.url,
+      invoiceName: formData.invoiceName || '',
       ...(invoiceSentValue ? { invoiceSent: invoiceSentValue } : {}),
     };
     setFormData((prev: any) => ({ ...prev, ...giUpdates }));
@@ -128,9 +135,9 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
 
   const handleGreenInvoice = async () => {
     const cust = formData.customerId ? getCustomerById(formData.customerId) : null;
-    const clientName = (cust?.name || '').trim();
+    const clientName = (formData.invoiceName || cust?.name || '').trim();
     if (!clientName) {
-      alert('יש לשייך לקוח לאירוע לפני הפקת מסמך.');
+      alert('יש לשייך לקוח לאירוע או למלא שם לחשבונית לפני הפקת מסמך.');
       return;
     }
     if (!formData.amount || Number(formData.amount) <= 0) {
@@ -170,7 +177,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
   const handleConvertDocument = async (targetType: number) => {
     setConvertTargetType(targetType);
     const cust = formData.customerId ? getCustomerById(formData.customerId) : null;
-    const clientName = (cust?.name || '').trim();
+    const clientName = (formData.invoiceName || cust?.name || '').trim();
     const clientEmail = (formData.email?.trim() || cust?.email?.trim()) || undefined;
     const targetLabel = giDocTypeName(targetType);
     if (!confirm(`ליצור ${targetLabel} עבור ${clientName} בסך ₪${Number(formData.amount)}?`)) { setConvertTargetType(null); return; }
@@ -310,6 +317,15 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
               className="w-full p-2 bg-slate-50 border rounded-lg"
               value={formData.title}
               onChange={e => setFormData({ ...formData, title: e.target.value })}
+            />
+          </div>
+          <div className="md:col-span-2 space-y-1">
+            <label className="text-xs font-bold text-slate-400">שם לחשבונית</label>
+            <input
+              className="w-full p-2 bg-slate-50 border rounded-lg"
+              value={formData.invoiceName || ''}
+              onChange={e => setFormData({ ...formData, invoiceName: e.target.value })}
+              placeholder="אם שונה משם הלקוח, כתבו ע&quot;ש מי להפיק"
             />
           </div>
           <div className="space-y-1">

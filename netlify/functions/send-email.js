@@ -17,7 +17,15 @@ export const handler = async (event) => {
 
   const { to, subject, text, html } = JSON.parse(event.body || '{}');
 
-  if (!to || !subject) {
+  // ניקוי תווים בלתי-נראים (סימני כיווניות RTL וכו') שגורמים לדומיין Punycode שגוי
+  const sanitizeAddress = (value) =>
+    String(value || '')
+      .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\u061C\uFEFF\u00A0]/g, '')
+      .replace(/\s+/g, '')
+      .trim();
+  const cleanTo = Array.isArray(to) ? to.map(sanitizeAddress).filter(Boolean) : sanitizeAddress(to);
+
+  if (!cleanTo || !cleanTo.length || !subject) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing to or subject' }) };
   }
 
@@ -39,7 +47,7 @@ export const handler = async (event) => {
   try {
     await transporter.sendMail({
       from: `"${FROM_NAME || 'קליכיף'}" <${FROM_EMAIL || SMTP_USER}>`,
-      to: Array.isArray(to) ? to.join(', ') : to,
+      to: Array.isArray(cleanTo) ? cleanTo.join(', ') : cleanTo,
       subject,
       text: text || (html ? html.replace(/<[^>]+>/g, '') : ''),
       html: html || undefined,

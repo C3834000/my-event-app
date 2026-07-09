@@ -197,6 +197,9 @@ const ClientJourneyPortal: React.FC = () => {
                     <p className="text-slate-500 text-lg">
                       מומלץ <strong className="text-slate-700">קודם</strong> לבדוק ביומן שלנו אם התאריך והשעה שמתאימים לכם <strong className="text-slate-700">פנויים</strong> – ולקבל הערכת מחיר. אחרי שמצאתם חלון מתאים, מלאו את טופס ההזמנה כדי <strong className="text-slate-700">לשריין רשמית</strong> – רק מה שמוזן בטופס נכנס למערכת.
                     </p>
+                    <div className="bg-orange-50 border-2 border-orange-200 rounded-2xl p-4 text-sm text-orange-900 font-bold leading-relaxed">
+                      חשוב: כדי לשריין את האירוע באופן מסודר, חובה למלא את טופס הזמנת האירוע ולאשר את תנאי ההזמנה. במידה והאירוע מתקדם ללא מילוי הטופס, המשך התהליך וקיום האירוע ייחשבו כאישור מצד המזמין לתנאי ההזמנה.
+                    </div>
                     <div className="flex flex-col sm:flex-row gap-4 flex-wrap justify-center md:justify-start">
                       <Link
                         to={`/check-availability?${portalIdQuery}`}

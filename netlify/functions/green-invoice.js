@@ -71,6 +71,109 @@ async function greenInvoiceApi(env, path, opts = {}) {
   return { res, data };
 }
 
+function pickArray(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.documents)) return data.documents;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+}
+
+function getTotalCount(data, fallbackLength) {
+  const n = Number(data?.totalItems ?? data?.total ?? data?.count ?? data?.totalCount);
+  return Number.isFinite(n) ? n : fallbackLength;
+}
+
+function normalizeDocument(doc) {
+  const payment = Array.isArray(doc?.payment) ? doc.payment[0] : Array.isArray(doc?.payments) ? doc.payments[0] : undefined;
+  const incomeRows = Array.isArray(doc?.income) ? doc.income : Array.isArray(doc?.items) ? doc.items : [];
+  const incomeTotal = incomeRows.reduce((sum, row) => {
+    const price = Number(row?.price ?? row?.total ?? row?.amount ?? 0);
+    const quantity = Number(row?.quantity ?? 1);
+    return sum + (Number.isFinite(price) ? price : 0) * (Number.isFinite(quantity) ? quantity : 1);
+  }, 0);
+  const amount = Number(
+    doc?.amount ??
+    doc?.total ??
+    doc?.totalAmount ??
+    doc?.price ??
+    payment?.price ??
+    payment?.amount ??
+    incomeTotal
+  );
+  const netAmount = Number(
+    doc?.amountDueVat ??
+    doc?.amountExcludeVat ??
+    doc?.amountDueVatLocal ??
+    incomeRows.reduce((sum, row) => sum + Number(row?.amount ?? row?.price ?? 0), 0)
+  );
+  const vatAmount = Number(doc?.vat ?? doc?.vatLocal ?? (amount - netAmount));
+  return {
+    id: String(doc?.id ?? doc?._id ?? ''),
+    number: doc?.number ?? doc?.documentNumber ?? doc?.serialNumber,
+    type: Number(doc?.type ?? doc?.documentType ?? 0) || undefined,
+    date: String(doc?.date ?? doc?.documentDate ?? doc?.createdAt ?? '').slice(0, 10),
+    paymentDate: String(payment?.date ?? doc?.paymentDate ?? doc?.date ?? doc?.documentDate ?? '').slice(0, 10),
+    clientName: doc?.client?.name ?? doc?.clientName ?? doc?.customerName ?? '',
+    description: doc?.description ?? doc?.remarks ?? '',
+    amount: Number.isFinite(amount) ? amount : 0,
+    netAmount: Number.isFinite(netAmount) ? netAmount : (Number.isFinite(amount) ? amount / 1.18 : 0),
+    vatAmount: Number.isFinite(vatAmount) ? vatAmount : 0,
+    status: Number(doc?.status),
+    amountOpened: Number(doc?.amountOpened ?? 0),
+    currency: doc?.currency ?? payment?.currency ?? 'ILS',
+    url: doc?.url,
+    raw: doc,
+  };
+}
+
+function normalizePaymentRecord(row) {
+  const doc = row?.document || row?.doc || {};
+  const amount = Number(row?.price ?? row?.amount ?? row?.total ?? doc?.total ?? doc?.amount ?? 0);
+  const netAmount = Number(doc?.amountDueVat ?? doc?.amountExcludeVat ?? doc?.amountDueVatLocal ?? (amount / 1.18));
+  const vatAmount = Number(doc?.vat ?? doc?.vatLocal ?? (amount - netAmount));
+  return {
+    id: String(row?.id ?? doc?.id ?? ''),
+    number: doc?.number ?? doc?.documentNumber ?? row?.documentNumber,
+    type: Number(doc?.type ?? row?.documentType ?? row?.type ?? 0) || undefined,
+    date: String(doc?.date ?? doc?.documentDate ?? row?.date ?? '').slice(0, 10),
+    paymentDate: String(row?.date ?? row?.paymentDate ?? doc?.date ?? doc?.documentDate ?? '').slice(0, 10),
+    clientName: doc?.client?.name ?? row?.client?.name ?? row?.clientName ?? '',
+    description: doc?.description ?? row?.description ?? '',
+    amount: Number.isFinite(amount) ? amount : 0,
+    netAmount: Number.isFinite(netAmount) ? netAmount : (Number.isFinite(amount) ? amount / 1.18 : 0),
+    vatAmount: Number.isFinite(vatAmount) ? vatAmount : 0,
+    status: Number(doc?.status ?? row?.status),
+    amountOpened: Number(doc?.amountOpened ?? 0),
+    currency: row?.currency ?? doc?.currency ?? 'ILS',
+    url: doc?.url,
+    raw: row,
+  };
+}
+
+async function searchGreenInvoicePaged(env, path, buildPayload, normalize, maxPages, pageSize) {
+  const docs = [];
+  for (let pageIndex = 0; pageIndex < maxPages; pageIndex++) {
+    const { res, data } = await greenInvoiceApi(env, path, {
+      method: 'POST',
+      body: JSON.stringify(buildPayload(pageIndex)),
+    });
+    if (!res.ok) {
+      const msg = data?.error?.message || data?.message || data?.error || JSON.stringify(data);
+      const err = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      err.status = res.status;
+      err.details = data;
+      throw err;
+    }
+    const pageDocs = pickArray(data);
+    docs.push(...pageDocs.map(normalize).filter(d => d.id || d.amount > 0));
+    const total = getTotalCount(data, docs.length);
+    if (pageDocs.length < pageSize || docs.length >= total) break;
+  }
+  return docs;
+}
+
 async function handleBody(body, env) {
   if (!body || typeof body !== 'object') {
     return { statusCode: 400, body: { success: false, error: 'Invalid body' } };
@@ -92,6 +195,87 @@ async function handleBody(body, env) {
           }),
         },
       };
+    }
+  }
+
+  if (body.action === 'searchDocuments') {
+    const fromDate = String(body.fromDate || `${new Date().getFullYear()}-01-01`).slice(0, 10);
+    const toDate = String(body.toDate || `${new Date().getFullYear()}-12-31`).slice(0, 10);
+    const type = Array.isArray(body.type) ? body.type.map(Number).filter(Number.isFinite) : [305, 320, 400];
+    const pageSize = Math.min(Math.max(Number(body.pageSize) || 100, 1), 100);
+    const maxPages = Math.min(Math.max(Number(body.maxPages) || 20, 1), 50);
+    const docs = [];
+
+    const attempts = [
+      {
+        path: '/documents/search',
+        normalize: normalizeDocument,
+        buildPayload: (pageIndex) => ({ page: pageIndex, pageSize, fromDate, toDate, sort: 'documentDate' }),
+      },
+      {
+        path: '/documents/search',
+        normalize: normalizeDocument,
+        buildPayload: (pageIndex) => ({ page: pageIndex + 1, pageSize, fromDate, toDate, sort: 'documentDate' }),
+      },
+      {
+        path: '/documents/search',
+        normalize: normalizeDocument,
+        buildPayload: (pageIndex) => ({ page: pageIndex, pageSize, fromDate, toDate }),
+      },
+      {
+        path: '/documents/search',
+        normalize: normalizeDocument,
+        buildPayload: (pageIndex) => ({ page: pageIndex + 1, pageSize, fromDate, toDate }),
+      },
+      {
+        path: '/documents/search',
+        normalize: normalizeDocument,
+        buildPayload: (pageIndex) => ({ page: pageIndex, pageSize, from: fromDate, to: toDate }),
+      },
+      {
+        path: '/documents/payments/search',
+        normalize: normalizePaymentRecord,
+        buildPayload: (pageIndex) => ({ page: pageIndex, pageSize, fromDate, toDate }),
+      },
+      {
+        path: '/documents/payments/search',
+        normalize: normalizePaymentRecord,
+        buildPayload: (pageIndex) => ({ page: pageIndex + 1, pageSize, fromDate, toDate }),
+      },
+    ];
+
+    try {
+      let lastError = null;
+      for (const attempt of attempts) {
+        try {
+          docs.splice(0, docs.length, ...(await searchGreenInvoicePaged(env, attempt.path, attempt.buildPayload, attempt.normalize, maxPages, pageSize)));
+          lastError = null;
+          break;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      if (lastError) {
+        return {
+          statusCode: lastError.status >= 400 && lastError.status < 600 ? lastError.status : 502,
+          body: { success: false, error: lastError.message || String(lastError), details: lastError.details },
+        };
+      }
+
+      const filteredDocs = docs.filter(d =>
+        (!type.length || !d.type || type.includes(Number(d.type))) &&
+        Number(d.status) !== 4
+      );
+
+      return {
+        statusCode: 200,
+        body: { success: true, fromDate, toDate, documents: filteredDocs, count: filteredDocs.length },
+      };
+    } catch (e) {
+      if (e.code === 'NOT_CONFIGURED') {
+        return { statusCode: 503, body: { success: false, error: e.message } };
+      }
+      return { statusCode: 500, body: { success: false, error: e.message || String(e) } };
     }
   }
 

@@ -5,7 +5,7 @@ import { settingsService } from '../services/supabase';
 import { 
   AlertCircle, Briefcase, Calendar as CalendarIcon, 
   CheckCircle2, Check, Zap, Clock, MapPin, Users, Mail, RefreshCw, ArrowLeft, ArrowRight, TrendingUp,
-  Target, PhoneCall, MessageSquare, Facebook, Instagram, Bell, StickyNote, Download, Upload
+  Target, PhoneCall, MessageSquare, Facebook, Instagram, Bell, StickyNote, Download, Upload, X
 } from 'lucide-react';
 import { EventType, AppEvent } from '../types';
 import { Link } from 'react-router-dom';
@@ -143,6 +143,7 @@ const Dashboard: React.FC = () => {
   const [debtModalOpen, setDebtModalOpen] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
+  const [dayModalDate, setDayModalDate] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [dailyNotes, setDailyNotes] = useState<Array<{id: string; text: string; done: boolean}>>([]);
@@ -286,6 +287,17 @@ const Dashboard: React.FC = () => {
   }, [events, currentDate, currentYear, currentMonth]);
 
   const selectedDayEvents = useMemo(() => events.filter(e => e.date === selectedDate).sort((a, b) => a.startTime.localeCompare(b.startTime)), [events, selectedDate]);
+  const upcomingEvents = useMemo(() => {
+    const todayKey = todayDateKey();
+    return events
+      .filter(e => (e.date || '').slice(0, 10) >= todayKey)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.startTime || '').localeCompare(b.startTime || ''))
+      .slice(0, 40);
+  }, [events]);
+  const dayModalEvents = useMemo(
+    () => (dayModalDate ? events.filter(e => (e.date || '').slice(0, 10) === dayModalDate).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || '')) : []),
+    [events, dayModalDate]
+  );
   const debtEventRows = useMemo(() => {
     const todayKey = todayDateKey();
     return events
@@ -566,7 +578,7 @@ const Dashboard: React.FC = () => {
                 const hasHoliday = !!item.holiday;
                 return (
                   <button 
-                    key={idx} onClick={() => setSelectedDate(item.date)}
+                    key={idx} onClick={() => { setSelectedDate(item.date); setDayModalDate(item.date); }}
                     className={`aspect-square rounded text-[11px] font-bold transition-all relative ${
                       isSelected ? 'bg-purple-600 text-white shadow-md' : 
                       hasHoliday ? 'bg-red-100 text-red-700 border border-red-300' :
@@ -612,52 +624,43 @@ const Dashboard: React.FC = () => {
 
         {/* COLUMN 2 (Center) - תוכנית יומית 24 שעות + משימות חכמות */}
         <div className="flex flex-col gap-3 overflow-hidden min-h-0">
-          {/* לוח 24 שעות — היום הנבחר בלוח שנה */}
+          {/* אירועים קרובים */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 flex-[0.85] overflow-hidden flex flex-col min-h-0">
             <div className="flex items-center justify-between mb-2 shrink-0">
               <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                <CalendarIcon size={16} className="text-purple-600"/> תוכנית יומית (24 שעות)
+                <CalendarIcon size={16} className="text-purple-600"/> אירועים קרובים
               </h3>
-              <div className="flex items-center gap-1">
-                <button type="button" onClick={() => goAdjacentDay(-1)} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="יום קודם"><ArrowRight size={12}/></button>
-                <button type="button" onClick={() => goAdjacentDay(1)} className="p-1 hover:bg-slate-100 rounded text-slate-600" title="יום הבא"><ArrowLeft size={12}/></button>
-              </div>
+              <span className="text-[10px] font-black text-purple-700 bg-purple-100 px-2 py-1 rounded-lg">{upcomingEvents.length}</span>
             </div>
-            {selectedDate && (
-              <p className="text-[9px] text-slate-600 font-bold mb-2 shrink-0">
-                {new Date(selectedDate).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
-                <span className="text-purple-600 mr-1">• {getHebrewDayGematria(new Date(selectedDate))}</span>
-              </p>
-            )}
-            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 space-y-0.5 pr-1">
-              {dayPlanSlots.map(slot => (
-                <div key={slot.hour} className="flex gap-2 text-xs border-b border-slate-100/80 py-1">
-                  <div className="w-10 shrink-0 font-mono font-bold text-slate-500 tabular-nums">
-                    {String(slot.hour).padStart(2, '0')}:00
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    {slot.items.length === 0 ? (
-                      <span className="text-slate-300">—</span>
-                    ) : (
-                      slot.items.map((it, idx) => (
-                        <div key={`${it.type}-${it.id}-${idx}`} className={`rounded px-2 py-1 ${it.type === 'event' ? 'bg-purple-50 border border-purple-100' : 'bg-amber-50 border border-amber-100'}`}>
-                          {it.type === 'event' ? (
-                            <Link
-                              to={`/events?eventId=${it.id}`}
-                              className="font-bold text-purple-700 truncate block hover:text-purple-900 hover:underline"
-                            >
-                              {it.label}
-                            </Link>
-                          ) : (
-                            <div className="font-bold text-slate-800 truncate">{it.label}</div>
-                          )}
-                          {it.sub && <div className="text-[10px] text-slate-500">{it.sub}</div>}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              ))}
+            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 space-y-1.5 pr-1">
+              {upcomingEvents.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6">אין אירועים קרובים</p>
+              ) : (
+                upcomingEvents.map(ev => {
+                  const cust = customers.find(c => c.id === ev.customerId);
+                  const d = new Date((ev.date || '').slice(0, 10) + 'T12:00:00');
+                  return (
+                    <Link
+                      key={ev.id}
+                      to={`/events?eventId=${ev.id}`}
+                      className="block rounded-lg border border-purple-100 bg-purple-50/50 hover:bg-purple-100 hover:border-purple-300 transition-all p-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-purple-800 text-xs truncate flex-1">{ev.title}</span>
+                        <span className="shrink-0 text-[10px] font-black text-purple-700 bg-white rounded px-1.5 py-0.5 tabular-nums">
+                          {d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' })}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500 flex-wrap">
+                        <span className="text-purple-600 font-bold">{getHebrewDayGematria(d)}</span>
+                        {ev.startTime && <span>🕒 {ev.startTime}{ev.endTime ? `–${ev.endTime}` : ''}</span>}
+                        {cust?.name && <span className="truncate">👤 {cust.name}</span>}
+                      </div>
+                      {ev.location && <div className="text-[10px] text-slate-400 truncate mt-0.5">📍 {ev.location}</div>}
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -1030,6 +1033,51 @@ const Dashboard: React.FC = () => {
             >
               סגור
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* פופאפ יום בלוח החודשי — פרטי האירועים של אותו יום */}
+      {dayModalDate && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDayModalDate(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-purple-600 to-pink-500 text-white p-4 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="font-black text-base">
+                  {new Date(dayModalDate + 'T12:00:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </h3>
+                <p className="text-xs opacity-90">{getHebrewDayGematria(new Date(dayModalDate + 'T12:00:00'))}</p>
+              </div>
+              <button onClick={() => setDayModalDate(null)} className="p-1.5 hover:bg-white/20 rounded-lg"><X size={18}/></button>
+            </div>
+            <div className="p-4 overflow-y-auto custom-scrollbar space-y-2">
+              {dayModalEvents.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-8">אין אירועים ביום זה</p>
+              ) : (
+                dayModalEvents.map(ev => {
+                  const cust = customers.find(c => c.id === ev.customerId);
+                  return (
+                    <Link
+                      key={ev.id}
+                      to={`/events?eventId=${ev.id}`}
+                      onClick={() => setDayModalDate(null)}
+                      className="block rounded-xl border border-purple-100 bg-purple-50/50 hover:bg-purple-100 hover:border-purple-300 p-3 transition-all"
+                    >
+                      <div className="font-bold text-purple-800 text-sm mb-1.5">{ev.title}</div>
+                      <div className="flex flex-col gap-1 text-xs text-slate-600">
+                        {(ev.startTime || ev.endTime) && <span>🕒 {ev.startTime}{ev.endTime ? `–${ev.endTime}` : ''}</span>}
+                        {cust?.name && <span>👤 {cust.name}</span>}
+                        {ev.phone && <span>📞 {ev.phone}</span>}
+                        {ev.location && <span>📍 {ev.location}</span>}
+                        {ev.eventType && <span>🧩 {ev.eventType}</span>}
+                        {(ev.clickersNeeded || 0) > 0 && <span>🖱️ {ev.clickersNeeded} קליקרים</span>}
+                        {ev.notes && <span className="text-amber-800 bg-amber-50 border border-amber-100 rounded p-1.5 mt-1">📝 {ev.notes}</span>}
+                      </div>
+                    </Link>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}

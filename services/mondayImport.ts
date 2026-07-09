@@ -75,6 +75,7 @@ export function importMondayEvents(csvData: any[]): AppEvent[] {
     try {
       // קריאת שדות מה-CSV
       const name = row['Name'] || row['שם'] || '';
+      const invoiceName = row['שם לחשבונית'] || row['invoiceName'] || row['invoice_name'] || '';
       const phone = row['מס\' טלפון: (המס\' שיהיה זמין בעת האירוע)'] || row['טלפון'] || '';
       const itemId = row['Item ID'] || `T-${Date.now()}-${index}`;
       const eventType = row['סוג אירוע'] || '';
@@ -115,6 +116,7 @@ export function importMondayEvents(csvData: any[]): AppEvent[] {
         tag: tag,
         phone: phone,
         email: email,
+        invoiceName: invoiceName,
         clickersNeeded: participants,
         notes: notes,
         hebrewDate: hebrewDate,

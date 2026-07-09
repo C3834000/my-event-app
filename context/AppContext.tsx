@@ -13,7 +13,7 @@ import {
   migrateFromLocalStorage
 } from '../services/supabase';
 import { buildPaymentDateUpdates } from '../services/paymentDateImport';
-import { parseEventDateKey, todayDateKey, numMoney, isPaidForKpi, excludeEventFromKpis } from '../services/eventKpi';
+import { currentYearKey, eventYearKey, incomeDateKey, parseEventDateKey, todayDateKey, numMoney, isPaidForKpi, excludeEventFromKpis } from '../services/eventKpi';
 
 /** כשמספר הרשומות בענן לא גדול מהמקומי — לא מחליפים רשימה שלמה (הענן עלול להיות ישן ולדרוס עריכה). רק מוסיפים שורות חדשות לפי id (למשל אירוע מהפורטל). */
 function mergeNewRowsFromCloud<T extends { id: string }>(local: T[], cloud: T[]): T[] {
@@ -117,6 +117,7 @@ const DEFAULT_FORM: CustomForm = {
   themeColor: '#4f46e5',
   fields: [
     { id: 'f1', type: 'text', label: 'שם מלא המזמין', required: true, mapping: 'name', placeholder: 'ישראל ישראלי' },
+    { id: 'f_invoice_name', type: 'text', label: 'שם לחשבונית', required: false, mapping: 'invoiceName', placeholder: 'אם שונה משם המזמין, כתבו ע"ש מי להפיק' },
     { id: 'f2', type: 'tel', label: 'טלפון נייד (זמין באירוע)', required: true, mapping: 'phone', placeholder: '050-0000000' },
     { id: 'f3', type: 'email', label: 'כתובת דוא"ל לקבלת אישור', required: true, mapping: 'email', placeholder: 'user@example.com' },
     { id: 'f9', type: 'select', label: 'סוג התוכנית המבוקשת', required: true, mapping: 'eventType', options: Object.values(EventType).filter(v => v !== EventType.ClickForYouAurim) },
@@ -508,6 +509,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       clickersNeeded: Number(data.clickersNeeded || 0),
       notes: data.notes || '',
       hebrewDate: data.hebrewDate || '',
+      invoiceName: data.invoiceName || '',
     };
 
     await eventsService.create(event);
@@ -548,6 +550,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 <h2 style="color: #0c4a6e; font-size: 20px; margin: 0 0 20px; font-weight: 800; text-align: center;">📋 פרטי האירוע שלך</h2>
                 <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
                   <tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0; width: 40%;">👤 שם המזמין:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${data.name || 'לא צוין'}</td></tr>
+                  ${event.invoiceName ? `<tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">🧾 שם לחשבונית:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${event.invoiceName}</td></tr>` : ''}
                   <tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">📞 טלפון:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${data.phone || 'לא צוין'}</td></tr>
                   <tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">📧 אימייל:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${data.email || 'לא צוין'}</td></tr>
                   <tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">📅 תאריך:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; font-size: 16px; border-bottom: 1px solid #e2e8f0;">${new Date(event.date).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
@@ -615,6 +618,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       eventType: event.eventType,
       hebrewDate: event.hebrewDate,
       notes: event.notes,
+      invoiceName: event.invoiceName,
       customerId: finalCustomerId
     }))}`;
 
@@ -634,6 +638,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               <h2 style="color: #991b1b; font-size: 18px; margin: 0 0 16px; font-weight: 800; text-align: center;">📋 פרטי האירוע</h2>
               <table style="width: 100%; border-collapse: collapse;">
                 <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700; width: 35%;">👤 שם:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${data.name || '-'}</td></tr>
+                ${event.invoiceName ? `<tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">🧾 שם לחשבונית:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${event.invoiceName}</td></tr>` : ''}
                 <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">📞 טלפון:</td><td style="padding: 8px; color: #1e293b; font-weight: 700;">${data.phone || '-'}</td></tr>
                 <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">📧 אימייל:</td><td style="padding: 8px; color: #1e293b; font-weight: 700;">${data.email || '-'}</td></tr>
                 <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">📅 תאריך:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${new Date(event.date).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
@@ -665,99 +670,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { eventId: event.id, customerId: finalCustomerId || '' };
   };
 
-  const buildPortalEmailHtml = (name: string, portalUrl: string, companyName: string) => {
+  const buildPortalEmailHtml = (name: string, portalUrl: string, companyName: string, portalQuery: string) => {
     const BASE = 'https://myecrm2026.netlify.app/#';
-    const availabilityUrl = `${BASE}/check-availability`;
+    const availabilityUrl = `${BASE}/check-availability?${portalQuery}`;
     const klik4youUrl = `${BASE}/klik4you`;
-    const bookUrl = `${BASE}/book`;
+    const bookUrl = `${BASE}/book?${portalQuery}`;
+    const quizPreviewUrl = 'https://quikhiv-trivia.netlify.app/';
+
+    const card = (num: string, badgeColor: string, icon: string, title: string, text: string, btnLabel: string, btnUrl: string, btnColor: string) => `
+      <table cellpadding="0" cellspacing="0" width="208" style="display:inline-table;width:208px;vertical-align:top;background:#ffffff;border:1px solid #e2e8f0;border-radius:18px;margin:6px;box-shadow:0 6px 18px rgba(76,29,149,0.08);" dir="rtl">
+        <tr><td style="padding:16px 14px 6px;text-align:center;">
+          <span style="display:inline-block;width:30px;height:30px;line-height:30px;border-radius:50%;background:${badgeColor};color:#ffffff;font-weight:900;font-size:15px;">${num}</span>
+        </td></tr>
+        <tr><td style="text-align:center;font-size:34px;padding:2px 14px;">${icon}</td></tr>
+        <tr><td style="padding:6px 14px 0;text-align:center;">
+          <p style="margin:0;color:#1e1b4b;font-weight:900;font-size:15px;line-height:1.4;">${title}</p>
+        </td></tr>
+        <tr><td style="padding:6px 14px 0;text-align:center;">
+          <p style="margin:0;color:#64748b;font-size:12px;line-height:1.6;min-height:58px;">${text}</p>
+        </td></tr>
+        <tr><td style="padding:10px 14px 16px;text-align:center;">
+          <a href="${btnUrl}" style="display:block;background:${btnColor};color:#ffffff;text-decoration:none;font-weight:900;font-size:13px;padding:12px 8px;border-radius:12px;">${btnLabel}</a>
+        </td></tr>
+      </table>`;
+
+    const checkItem = (text: string) => `
+      <tr>
+        <td style="width:22px;vertical-align:top;padding:3px 0;"><span style="display:inline-block;width:18px;height:18px;line-height:18px;border-radius:50%;background:#4f46e5;color:#ffffff;font-size:11px;font-weight:900;text-align:center;">✓</span></td>
+        <td style="padding:3px 8px 3px 0;color:#3730a3;font-size:12.5px;font-weight:700;line-height:1.5;">${text}</td>
+      </tr>`;
+
     return `<!DOCTYPE html>
 <html dir="rtl" lang="he">
 <head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
-<body style="margin:0;padding:0;background:#0f0a1e;font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f0a1e;padding:32px 16px;">
+<body style="margin:0;padding:0;background:#eef3ff;font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#eef3ff;padding:24px 8px;">
     <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+      <table width="700" cellpadding="0" cellspacing="0" style="max-width:700px;width:100%;background:#faf8ff;border-radius:24px;overflow:hidden;box-shadow:0 18px 50px rgba(54,28,119,0.16);">
 
         <!-- Header -->
-        <tr><td style="background:linear-gradient(135deg,#4c1d95 0%,#6d28d9 50%,#7c3aed 100%);border-radius:20px 20px 0 0;padding:36px 32px;text-align:center;">
-          <h1 style="margin:0 0 6px;color:#fff;font-size:28px;font-weight:900;letter-spacing:-0.5px;">${companyName}</h1>
-          <p style="margin:0;color:#c4b5fd;font-size:14px;">מערכות חידון ואינטראקציה לאירועים</p>
+        <tr><td style="background:linear-gradient(135deg,#ede9fe 0%,#e0e7ff 100%);padding:30px 24px 22px;text-align:center;">
+          <p style="margin:0 0 4px;color:#6d28d9;font-weight:900;font-size:17px;">${companyName}</p>
+          <p style="margin:0 0 14px;color:#8b5cf6;font-size:12px;font-weight:700;">חידונים · אירועים · קליקרים</p>
+          <h1 style="margin:0 0 10px;color:#1e1b4b;font-size:26px;font-weight:900;line-height:1.35;">שמחים שבחרתם בנו<br/>לקראת הכנת האירוע שלכם</h1>
+          <p style="margin:0;color:#475569;font-size:14px;line-height:1.7;">
+            שלום ${name},<br/>
+            כאן תוכלו לבדוק זמינות ומחיר, למלא טופס הזמנה,<br/>או להיכנס לאתר הכנת החידון ולהתרשם מהאפשרויות.
+          </p>
         </td></tr>
 
-        <!-- Body -->
-        <tr><td style="background:#1e1040;padding:36px 32px;">
-          <p style="color:#e9d5ff;font-size:17px;font-weight:700;margin:0 0 12px;">שלום ${name},</p>
-          <p style="color:#c4b5fd;font-size:15px;line-height:1.7;margin:0 0 20px;">
-            בהמשך להתעניינותך בתוכניות חברת ${companyName} — שמחים להזמין אותך לגלות את עולם הקליקרים שלנו!<br/>
-            מחכים לך כאן מגוון תוכניות לאירועים מכל הסוגים: ימי גיבוש, ימי כיף, בר/בת מצווה, חתונות ועוד.
-          </p>
+        <!-- 3 Cards -->
+        <tr><td align="center" style="padding:18px 10px 8px;text-align:center;">
+          ${card('1', '#2563eb', '🗓️', 'עדיין אין לכם מחיר או תאריך?', 'בדקו זמינות, בחרו תאריך ומספר משתתפים, וקבלו הערכת מחיר ראשונית.', 'בדיקת זמינות ומחיר', availabilityUrl, '#2563eb')}
+          ${card('2', '#7c3aed', '📝', 'כבר קיבלתם מחיר ויש לכם תאריך?', 'מלאו את פרטי האירוע כדי שנוכל להתחיל בהכנה.', 'מילוי טופס הזמנת אירוע', bookUrl, '#7c3aed')}
+          ${card('3', '#0d9488', '🎮', 'עדיין מתלבטים?', 'היכנסו לאתר הכנת החידון, ראו איך מכינים שאלות ותשובות ומה האפשרויות הקיימות.', 'כניסה לאתר הכנת החידון', quizPreviewUrl, '#0d9488')}
+        </td></tr>
 
-          <!-- What can you do -->
-          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-            <tr>
-              <td style="background:#2d1a5e;border:1px solid #4c2d9a;border-radius:14px;padding:16px 20px;vertical-align:top;width:48%;">
-                <p style="margin:0 0 6px;font-size:22px;">🎯</p>
-                <p style="margin:0 0 4px;color:#e9d5ff;font-weight:800;font-size:14px;">בדיקת זמינות</p>
-                <p style="margin:0;color:#a78bfa;font-size:12px;">בדוק אם התאריך שלך פנוי</p>
-              </td>
-              <td width="4%"></td>
-              <td style="background:#2d1a5e;border:1px solid #4c2d9a;border-radius:14px;padding:16px 20px;vertical-align:top;width:48%;">
-                <p style="margin:0 0 6px;font-size:22px;">💰</p>
-                <p style="margin:0 0 4px;color:#e9d5ff;font-weight:800;font-size:14px;">מחירים ותוכניות</p>
-                <p style="margin:0;color:#a78bfa;font-size:12px;">5 סוגי תוכניות לכל אירוע</p>
-              </td>
-            </tr>
-          </table>
-
-          <!-- CTA Buttons -->
-          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-            <tr>
-              <td align="center" style="padding-bottom:12px;">
-                <a href="${availabilityUrl}" style="display:inline-block;background:linear-gradient(135deg,#059669,#10b981);color:#fff;text-decoration:none;font-weight:900;font-size:17px;padding:16px 40px;border-radius:14px;box-shadow:0 6px 24px rgba(16,185,129,0.35);">
-                  🗓️ &nbsp; בדוק זמינות ומחיר
-                </a>
-              </td>
-            </tr>
-            <tr>
-              <td align="center" style="padding-bottom:12px;">
-                <a href="${portalUrl}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;text-decoration:none;font-weight:900;font-size:15px;padding:14px 36px;border-radius:14px;box-shadow:0 6px 24px rgba(124,58,237,0.35);">
-                  ✨ &nbsp; כניסה לפורטל האישי שלך
-                </a>
-              </td>
-            </tr>
-            <tr>
-              <td align="center">
-                <a href="${bookUrl}" style="display:inline-block;background:transparent;border:2px solid #6d28d9;color:#c4b5fd;text-decoration:none;font-weight:700;font-size:14px;padding:11px 30px;border-radius:12px;">
-                  📝 &nbsp; מעבר לטופס הזמנה
-                </a>
-              </td>
-            </tr>
-          </table>
-
-          <!-- Klik4You Infographic Banner -->
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr><td style="background:linear-gradient(135deg,#1e3a5f 0%,#1e1040 100%);border:1px solid #3b4f8a;border-radius:16px;padding:20px;text-align:center;">
-              <p style="margin:0 0 10px;color:#93c5fd;font-size:13px;font-weight:700;">גם לאירועים קטנים — ערכת קליקרים להפעלה עצמית</p>
-              <a href="${klik4youUrl}" style="text-decoration:none;">
-                <img src="https://myecrm2026.netlify.app/activity-3-klik4you.png"
-                     alt="קליק פור יו"
-                     width="90"
-                     style="display:block;margin:0 auto 10px;filter:drop-shadow(0 0 12px rgba(147,197,253,0.5));"
-                />
-                <span style="display:inline-block;background:#1e40af;color:#bfdbfe;font-weight:900;font-size:13px;padding:8px 22px;border-radius:10px;text-decoration:none;">
-                  קליק פור יו ← לחץ לפרטים מלאים
-                </span>
-              </a>
+        <!-- Booking terms notice -->
+        <tr><td style="padding:8px 24px 14px;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:2px solid #fdba74;border-radius:18px;" dir="rtl">
+            <tr><td style="padding:18px 20px;text-align:right;">
+              <p style="margin:0 0 8px;color:#9a3412;font-weight:900;font-size:15px;">חשוב להסדרת ההזמנה</p>
+              <p style="margin:0;color:#7c2d12;font-size:13px;line-height:1.7;font-weight:700;">
+                כדי לשריין את האירוע באופן מסודר, חובה למלא את טופס הזמנת האירוע ולאשר את תנאי ההזמנה.
+                במידה והאירוע מתקדם ללא מילוי הטופס, המשך התהליך וקיום האירוע ייחשבו כאישור מצד המזמין לתנאי ההזמנה.
+              </p>
             </td></tr>
           </table>
         </td></tr>
 
-        <!-- Footer -->
-        <tr><td style="background:#160d35;border-radius:0 0 20px 20px;padding:24px 32px;text-align:center;border-top:1px solid #2d1a5e;">
-          <p style="margin:0 0 6px;color:#7c3aed;font-weight:900;font-size:15px;">${companyName}</p>
-          <p style="margin:0;color:#6d28d9;font-size:12px;">המייל הזה נשלח אוטומטית — אין צורך להשיב</p>
+        <!-- Klik4You Box -->
+        <tr><td style="padding:14px 18px 8px;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:18px;" dir="rtl">
+            <tr><td style="padding:20px 22px 6px;">
+              <p style="margin:0 0 8px;color:#312e81;font-weight:900;font-size:17px;">קליק פור יו — ערכת קליקרים להפעלה עצמית</p>
+              <p style="margin:0 0 12px;color:#4338ca;font-size:13px;line-height:1.7;">
+                מתאים לאירועים שבהם אין צורך במנחה. אנחנו שולחים אליכם ערכת קליקרים מוכנה,
+                אתם מפעילים את החידון בעצמכם עם ציוד מקצועי, והערכה חוזרת אלינו לאחר האירוע.
+              </p>
+              <table cellpadding="0" cellspacing="0" dir="rtl">
+                ${checkItem('מתאים לימי גיבוש, ימי כיף ואירועים משפחתיים')}
+                ${checkItem('כולל קליקרים לפי מספר המשתתפים')}
+                ${checkItem('כולל מערכת לניהול החידון')}
+                ${checkItem('ניתן להכין שאלות ותשובות מראש')}
+                ${checkItem('מחזירים את הערכה לאחר האירוע')}
+              </table>
+            </td></tr>
+            <tr><td align="center" style="padding:12px 22px 20px;">
+              <a href="${klik4youUrl}" style="display:inline-block;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:900;font-size:14px;padding:13px 44px;border-radius:12px;">לפרטים על קליק פור יו</a>
+            </td></tr>
+          </table>
         </td></tr>
 
+        <!-- Personal portal link -->
+        <tr><td style="padding:10px 24px 18px;text-align:center;">
+          <a href="${portalUrl}" style="display:inline-block;background:#ffffff;border:2px solid #7c3aed;color:#6d28d9;text-decoration:none;font-weight:900;font-size:14px;padding:12px 36px;border-radius:12px;">✨ כניסה לפורטל האישי שלכם</a>
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="background:#f1f5f9;border-top:1px solid #e2e8f0;padding:18px 24px;text-align:center;">
+          <p style="margin:0 0 5px;color:#4c1d95;font-weight:900;font-size:15px;">${companyName}</p>
+          <p style="margin:0;color:#64748b;font-size:12px;">המייל הזה נשלח אוטומטית — אין צורך להשיב</p>
+        </td></tr>
       </table>
     </td></tr>
   </table>
@@ -775,7 +789,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { success, error, hint } = await sendEmail({
       to: toEmail,
       subject: `הוזמנת לחוות את תוכניות ${settings.companyName} 🎯`,
-      html: buildPortalEmailHtml(lead.name, portalUrl, settings.companyName),
+      html: buildPortalEmailHtml(lead.name, portalUrl, settings.companyName, `leadId=${encodeURIComponent(leadId)}`),
     });
     if (!success) throw new Error(formatSendEmailError(error, hint));
     addActivity('email', `מייל עם קישור לפורטל נשלח ל-${lead.name} (${toEmail})`);
@@ -936,7 +950,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { success, error, hint } = await sendEmail({
       to: toEmail,
       subject: `הוזמנת לחוות את תוכניות ${settings.companyName} 🎯`,
-      html: buildPortalEmailHtml(customer.name, portalUrl, settings.companyName),
+      html: buildPortalEmailHtml(customer.name, portalUrl, settings.companyName, `customerId=${encodeURIComponent(customerId)}`),
     });
     if (!success) throw new Error(formatSendEmailError(error, hint));
     addActivity('email', `מייל פורטל נשלח ללקוח ${customer.name} (${toEmail})`);
@@ -999,7 +1013,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         newCusts.push(c);
       }
       const customerId = c?.id ?? '';
-      const title = name || pick(row, 'title', 'Title', 'שם לחשבונית') || 'אירוע';
+      const invoiceName = pick(row, 'שם לחשבונית', 'invoiceName', 'invoice_name');
+      const title = name || pick(row, 'title', 'Title') || invoiceName || 'אירוע';
       const dateStr = pick(row, 'תאריך קיום האירוע', 'date', 'Date', 'timestamp');
       const date = parseDate(dateStr);
       const amount = Number(pick(row, 'סכום סופי לתשלום', 'סכום לתשלום', 'amount', 'Amount', 'סכום', 'sum') || 0) || 0;
@@ -1059,6 +1074,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         category: categoryStr || undefined,
         phone: phoneRaw || undefined,
         email: email || undefined,
+        invoiceName: invoiceName || undefined,
         hebrewDate: pick(row, 'תאריך אירוע עברי', 'תאריך עברי', 'hebrewDate'),
         notes: pick(row, 'הערות', 'notes'),
         externalId: pick(row, 'Item ID', 'Item ID (auto generated)', 'externalId', 'id', 'ID'),
@@ -1148,12 +1164,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let debt = 0, projected = 0, total = 0, reservedClickers = 0;
     const todayKey = todayDateKey();
+    const dashboardYear = currentYearKey();
 
     events.forEach(ev => {
+      const evYear = eventYearKey(ev);
+      const incomeYear = incomeDateKey(ev)?.slice(0, 4);
+      if (evYear !== dashboardYear && incomeYear !== dashboardYear) return;
+
       const paidAmt = numMoney(ev.paidAmount);
-      total += paidAmt;
+      if (incomeYear === dashboardYear) total += paidAmt;
 
       if (excludeEventFromKpis(ev)) return;
+      if (evYear !== dashboardYear) return;
 
       const evKey = parseEventDateKey(ev.date);
       const isPastEvent = !!evKey && evKey < todayKey;

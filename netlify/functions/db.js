@@ -8,7 +8,7 @@ const EVENTS_PAYLOAD_KEYS = new Set([
   'id', 'customerId', 'title', 'date', 'startTime', 'endTime', 'amount', 'paidAmount',
   'status', 'paymentStatus', 'eventType', 'clickersNeeded', 'location', 'reminderDateTime',
   'tag', 'category', 'hebrewDate', 'paymentMethod', 'notes', 'externalId', 'phone', 'email',
-  'termsAccepted', 'taskId', 'paymentDate',
+  'termsAccepted', 'taskId', 'paymentDate', 'invoiceName',
   // Green Invoice document tracking
   'giDocId', 'giDocNumber', 'giDocType', 'giDocDate', 'giDocUrl',
   // סטטוס שליחת חשבונית

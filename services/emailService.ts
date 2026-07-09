@@ -16,8 +16,22 @@ export interface SendEmailParams {
   html?: string;
 }
 
+/**
+ * ניקוי כתובת מייל מתווים בלתי-נראים (סימני כיווניות RTL/LTR וכו')
+ * שנדבקים בהעתקה מוואטסאפ/מסמכים וגורמים לדומיין להישלח כ-Punycode שגוי (xn--...).
+ */
+export function sanitizeEmailAddress(value: string): string {
+  return String(value || '')
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\u061C\uFEFF\u00A0]/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
 export async function sendEmail(params: SendEmailParams): Promise<{ success: boolean; error?: string; hint?: string }> {
   try {
+    const cleanTo = Array.isArray(params.to)
+      ? params.to.map(sanitizeEmailAddress).filter(Boolean)
+      : sanitizeEmailAddress(params.to);
     // ב-Production משתמשים ב-Vercel Function, בפיתוח (אם רץ server מקומי) ניתן להשתמש ב-localhost
     const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
     const url = isProduction ? '/.netlify/functions/send-email' : 'http://localhost:4000/api/send-email';
@@ -26,7 +40,7 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        to: params.to,
+        to: cleanTo,
         subject: params.subject,
         text: params.text,
         html: params.html,

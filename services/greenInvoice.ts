@@ -49,6 +49,30 @@ export interface GreenInvoiceResult {
   details?: unknown;
 }
 
+export interface GreenInvoiceIncomeDocument {
+  id: string;
+  number?: number | string;
+  type?: number;
+  date?: string;
+  paymentDate?: string;
+  clientName?: string;
+  description?: string;
+  amount: number;
+  netAmount?: number;
+  vatAmount?: number;
+  status?: number;
+  amountOpened?: number;
+  currency?: string;
+  url?: { origin?: string; he?: string; en?: string } | string;
+}
+
+export interface SearchGreenInvoiceDocumentsResult extends GreenInvoiceResult {
+  fromDate?: string;
+  toDate?: string;
+  count?: number;
+  documents?: GreenInvoiceIncomeDocument[];
+}
+
 async function postGreenInvoice(body: Record<string, unknown>): Promise<GreenInvoiceResult> {
   const res = await fetch(API_PATH, {
     method: 'POST',
@@ -69,6 +93,19 @@ async function postGreenInvoice(body: Record<string, unknown>): Promise<GreenInv
 
 export async function pingGreenInvoice(): Promise<GreenInvoiceResult> {
   return postGreenInvoice({ action: 'ping' });
+}
+
+export async function searchGreenInvoiceIncomeDocuments(params: {
+  fromDate: string;
+  toDate: string;
+  type?: number[];
+}): Promise<SearchGreenInvoiceDocumentsResult> {
+  return postGreenInvoice({
+    action: 'searchDocuments',
+    fromDate: params.fromDate,
+    toDate: params.toDate,
+    type: params.type || [305, 320, 400],
+  }) as Promise<SearchGreenInvoiceDocumentsResult>;
 }
 
 export async function createGreenInvoiceDocument(params: CreateGreenInvoiceParams): Promise<GreenInvoiceResult> {
@@ -139,7 +176,7 @@ export function buildGreenInvoiceParamsFromEvent(
   const itemDesc = itemParts.join(' | ') || docDescription;
 
   return {
-    clientName: customerName.trim(),
+    clientName: (event.invoiceName?.trim() || customerName).trim(),
     clientEmail: event.email?.trim() || undefined,
     clientPhone: event.phone?.trim() || undefined,
     description: docDescription,

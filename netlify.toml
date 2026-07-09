@@ -6,9 +6,16 @@
 [build.environment]
   NODE_VERSION = "18"
 
+[functions]
+  node_bundler = "esbuild"
+
 # פעם ביום (UTC): שאילתה קלה ל-Supabase — עוזר למנוע השהיית פרויקט Free מחוסר שימוש
 [functions."supabase-keepalive"]
   schedule = "@daily"
+
+# תזכורת אוטומטית ללקוחות יומיים לפני האירוע — רץ כל בוקר ב-06:00 UTC (≈09:00 ישראל)
+[functions."event-reminders"]
+  schedule = "0 6 * * *"
 
 # Route /api/send-email → Netlify Function
 [[redirects]]

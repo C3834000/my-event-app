@@ -11,7 +11,7 @@ const TERMS_TEXT = `אישור תנאי הזמנה
 
 3. הכנת החידון תתבצע באתר הייעודי של חברת קליכיף. מאתר זה גם תתבצע הורדת התוכנה. קישור להורדת החידון והפעלת התוכנה יישלח במייל עם ביצוע התשלום ושליחת אסמכתא. האחריות על תוכן השאלות וסימון התשובות היא על מכין החידון, כולל השאלות שנמצאות במאגר השאלות שלנו.
 
-4. בעת הזמנת האירוע תקבלו קישור להורדת חוברת הוראות וסרטון הדרכה. בהשכרת ערכה, חובה על השוכר לבדוק ולוודא לפחות 12 שעות לפני האירוע שהכל עובד כראוי.
+4. בעת הזמנת האירוע תקבלו קישור להורדת חוברת הוראות וסרטון הדרכה. בהשכרת ערכה, חובה על השוכר לבדוק ולוודא 24 שעות לפני קיום האירוע, או לפחות בטווח זמן סביר לפני האירוע, שהכול עובד כראוי.
 
 5. תשלום: בהשכרת ערכות קליק פור יו תתאפשר הורדת החידון רק עם ביצוע התשלום ושליחת אסמכתא. בקליכיף אירועים במוסדות חינוך התשלום יבוצע מיד עם סיום האירוע.
 
@@ -25,7 +25,7 @@ const TERMS_TEXT = `אישור תנאי הזמנה
 
 10. אם מיקום האירוע הינו במקום שיש שם בעיות חניה נא ציינו זאת בטופס.
 
-11. השוכר מתחייב להחזיר את הערכה למחרת האירוע עד השעה 11:00.
+11. השוכר מתחייב להחזיר את הערכה למחרת האירוע עד השעה 11:00. כל יום איחור בהחזרת הערכה, ללא אישור ותיאום מראש, יחייב את השוכר בקנס של 100 ₪ ליום.
 
 12. המחירים אינם כוללים מע"מ.
 
@@ -61,6 +61,7 @@ const BookingForm: React.FC = () => {
       if (source) {
         formConfig.fields.forEach(f => {
             if (f.mapping === 'name') initial[f.id] = source.name;
+            if (f.mapping === 'invoiceName') initial[f.id] = 'companyName' in source ? source.companyName || '' : '';
             if (f.mapping === 'phone') initial[f.id] = source.phone;
             if (f.mapping === 'email') initial[f.id] = source.email || '';
         });
@@ -145,6 +146,7 @@ const BookingForm: React.FC = () => {
     const eventData = {
       id: submittedEventId,
       name: formData[formConfig.fields.find(f=>f.mapping==='name')?.id || ''] || '',
+      invoiceName: formData[formConfig.fields.find(f=>f.mapping==='invoiceName')?.id || ''] || '',
       email: formData[formConfig.fields.find(f=>f.mapping==='email')?.id || ''] || '',
       phone: formData[formConfig.fields.find(f=>f.mapping==='phone')?.id || ''] || '',
       date: formData[formConfig.fields.find(f=>f.mapping==='date')?.id || ''] || '',
@@ -200,6 +202,12 @@ const BookingForm: React.FC = () => {
                       <td className="p-4 text-slate-600 font-bold border-b border-slate-200">👤 שם המזמין:</td>
                       <td className="p-4 text-slate-900 font-black text-lg border-b border-slate-200">{eventData.name}</td>
                     </tr>
+                    {eventData.invoiceName && (
+                      <tr className="bg-slate-50 rounded-xl">
+                        <td className="p-4 text-slate-600 font-bold border-b border-slate-200">🧾 שם לחשבונית:</td>
+                        <td className="p-4 text-slate-900 font-black text-lg border-b border-slate-200">{eventData.invoiceName}</td>
+                      </tr>
+                    )}
                     <tr className="bg-slate-50 rounded-xl">
                       <td className="p-4 text-slate-600 font-bold border-b border-slate-200">📞 טלפון:</td>
                       <td className="p-4 text-slate-900 font-bold border-b border-slate-200">{eventData.phone}</td>
@@ -399,6 +407,11 @@ const BookingForm: React.FC = () => {
                         className="w-6 h-6 accent-purple-600 rounded-lg cursor-pointer"
                       />
                       <label htmlFor="terms" className="text-sm font-bold text-slate-600 cursor-pointer italic">קראתי את התנאים ואני מאשר אותם</label>
+                  </div>
+                  <div className="bg-orange-50 border-r-4 border-orange-400 rounded-xl p-4">
+                    <p className="text-xs text-orange-900 font-bold leading-relaxed">
+                      מילוי טופס הזמנת האירוע ואישור תנאי ההזמנה הם חלק מתהליך השריון. במידה והאירוע מתקדם ללא מילוי הטופס, המשך התהליך וקיום האירוע ייחשבו כאישור מצד המזמין לתנאי ההזמנה.
+                    </p>
                   </div>
               </div>
 
