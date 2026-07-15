@@ -127,6 +127,7 @@ const DEFAULT_FORM: CustomForm = {
     { id: 'f_end', type: 'time', label: 'שעת סיום', required: true, mapping: 'endTime' },
     { id: 'f8', type: 'number', label: 'כמות משתתפים משוערת', required: true, mapping: 'clickersNeeded', placeholder: 'לדוגמה: 50' },
     { id: 'f_amount', type: 'number', label: 'סכום סופי לתשלום', required: true, mapping: 'amount' },
+    { id: 'f_payment_date', type: 'date', label: 'תאריך תשלום מוסכם', required: true, mapping: 'paymentDate' },
     { id: 'f_pay', type: 'select', label: 'אופן תשלום מועדף', required: true, mapping: 'paymentMethod', options: ['העברה בנקאית', 'כ. אשראי', 'צ\'ק', 'מזומן'] },
     { id: 'f7', type: 'text', label: 'מיקום האירוע', required: true, mapping: 'location' },
     { id: 'f11', type: 'textarea', label: 'הערות חניה וגישה', required: false, mapping: 'notes' },
@@ -509,6 +510,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       clickersNeeded: Number(data.clickersNeeded || 0),
       notes: data.notes || '',
       hebrewDate: data.hebrewDate || '',
+      paymentDate: data.paymentDate || '',
       invoiceName: data.invoiceName || '',
     };
 
@@ -561,6 +563,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   <tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">🎯 סוג האירוע:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${event.eventType}</td></tr>
                   ${event.clickersNeeded > 0 ? `<tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">🖱️ מספר קליקרים:</td><td style="padding: 12px 16px; color: #7c3aed; font-weight: 800; font-size: 18px; border-bottom: 1px solid #e2e8f0;">${event.clickersNeeded} קליקרים</td></tr>` : ''}
                   <tr style="background: #dcfce7;"><td style="padding: 14px 16px; color: #166534; font-weight: 700;">💰 סכום לתשלום:</td><td style="padding: 14px 16px; color: #166534; font-weight: 900; font-size: 22px;">₪${event.amount.toLocaleString()}</td></tr>
+                  ${event.paymentDate ? `<tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">💳 תאריך תשלום מוסכם:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${new Date(event.paymentDate).toLocaleDateString('he-IL')}</td></tr>` : ''}
                   ${event.notes ? `<tr style="background: #fef3c7;"><td colspan="2" style="padding: 14px 16px; color: #92400e; font-weight: 700; vertical-align: top;">📝 הערות: <br/><span style="font-weight: 600;">${event.notes}</span></td></tr>` : ''}
                 </table>
               </div>

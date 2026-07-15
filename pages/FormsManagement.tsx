@@ -225,6 +225,7 @@ const FormsManagement: React.FC = () => {
                                      <option value="email">אימייל לקוח</option>
                                      <option value="eventTitle">שם האירוע</option>
                                      <option value="date">תאריך</option>
+                                     <option value="paymentDate">תאריך תשלום</option>
                                      <option value="startTime">שעת התחלה</option>
                                      <option value="location">מיקום</option>
                                      <option value="clickersNeeded">כמות קליקרים</option>

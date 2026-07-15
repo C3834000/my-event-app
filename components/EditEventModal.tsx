@@ -76,6 +76,10 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
   }, [customers, customerSearch]);
 
   const handleSave = async () => {
+    if (Number(formData.amount || 0) > 0 && !formData.paymentDate) {
+      alert('יש למלא תאריך תשלום מוסכם. ככלל התשלום לפני האירוע, ואם סוכם אחרת חשוב שיהיה תאריך ברור.');
+      return;
+    }
     if (isNew) {
       addEvent(formData);
     } else {
@@ -363,13 +367,17 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-400">תאריך תשלום בפועל</label>
+            <label className="text-xs font-bold text-slate-400">תאריך תשלום מוסכם / בפועל <span className="text-rose-500">*</span></label>
             <input
               type="date"
+              required
               className="w-full p-2 bg-slate-50 border rounded-lg"
               value={formData.paymentDate || ''}
               onChange={e => setFormData({ ...formData, paymentDate: e.target.value || undefined })}
             />
+            <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
+              ככלל התשלום לפני האירוע. אם סוכם אחרת, חשוב לקבוע תאריך תשלום ברור ולא להשאיר באוויר.
+            </p>
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-400">סוג חשבונית שנשלחה</label>

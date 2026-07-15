@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Send, Sparkles, ShieldCheck, Heart, Mail, Check, AlertTriangle, X, FileText, Calendar, Clock, MapPin, CreditCard, User } from 'lucide-react';
@@ -13,7 +13,7 @@ const TERMS_TEXT = `אישור תנאי הזמנה
 
 4. בעת הזמנת האירוע תקבלו קישור להורדת חוברת הוראות וסרטון הדרכה. בהשכרת ערכה, חובה על השוכר לבדוק ולוודא 24 שעות לפני קיום האירוע, או לפחות בטווח זמן סביר לפני האירוע, שהכול עובד כראוי.
 
-5. תשלום: בהשכרת ערכות קליק פור יו תתאפשר הורדת החידון רק עם ביצוע התשלום ושליחת אסמכתא. בקליכיף אירועים במוסדות חינוך התשלום יבוצע מיד עם סיום האירוע.
+5. תשלום: ככלל, התשלום עבור האירוע יוסדר לפני מועד האירוע. במקרים שבהם אין אפשרות להסדיר את התשלום מראש, ניתן לתאם מראש מועד תשלום מוסכם וברור, ובתנאי שנקבע תאריך תשלום מסודר ולא השארת התשלום ללא מועד. בהשכרת ערכות קליק פור יו תתאפשר הורדת החידון רק עם ביצוע התשלום ושליחת אסמכתא. בקליכיף אירועים במוסדות חינוך התשלום יבוצע בהתאם לסיכום מראש ובכפוף לתאריך התשלום שנקבע.
 
 6. ניתן לשלם בכ.א. בתוספת של 1.5% מהסך הכללי לתשלום בתיאום מראש בלבד.
 
@@ -25,11 +25,15 @@ const TERMS_TEXT = `אישור תנאי הזמנה
 
 10. אם מיקום האירוע הינו במקום שיש שם בעיות חניה נא ציינו זאת בטופס.
 
-11. השוכר מתחייב להחזיר את הערכה למחרת האירוע עד השעה 11:00. כל יום איחור בהחזרת הערכה, ללא אישור ותיאום מראש, יחייב את השוכר בקנס של 100 ₪ ליום.
+11. משלוחים ואיסוף: האחריות לדאוג למשלוח הלוך וחזור, או לאיסוף והחזרה של הערכה, היא על הלקוח. עם זאת, אנו משתדלים לבוא לקראת הלקוחות ולסייע ככל האפשר בתיאום ובהוזלת עלויות המשלוח, בהתאם לזמינות ולאזור.
 
-12. המחירים אינם כוללים מע"מ.
+12. השוכר מתחייב להחזיר את הערכה למחרת האירוע עד השעה 11:00. כל יום איחור בהחזרת הערכה, ללא אישור ותיאום מראש, יחייב את השוכר בקנס של 100 ₪ ליום.
 
-13. הלקוח אחראי לוודא את תוכן השאלות. וודאו שיש לכם גיבוי.`;
+13. המחירים אינם כוללים מע"מ.
+
+14. הלקוח אחראי לוודא את תוכן השאלות. וודאו שיש לכם גיבוי.`;
+
+const PAYMENT_DATE_NOTE = 'ככלל התשלום לפני האירוע. אם נדרש תיאום אחר, יש לציין כאן תאריך תשלום מוסכם וברור.';
 
 const BookingForm: React.FC = () => {
   const { handlePublicBookingSubmit, leads, customers, customForms } = useApp();
@@ -45,21 +49,41 @@ const BookingForm: React.FC = () => {
   const prefDate = searchParams.get('prefDate');
   const prefTime = searchParams.get('prefTime');
   const prefParticipants = searchParams.get('prefParticipants');
-  const formConfig = customForms[0]; 
+  const formConfig = customForms[0];
+  const bookingFields = useMemo(() => {
+    if (!formConfig) return [];
+    const existingPaymentDate = formConfig.fields.some(f => f.mapping === 'paymentDate');
+    if (existingPaymentDate) {
+      return formConfig.fields.map(f => f.mapping === 'paymentDate' ? { ...f, required: true } : f);
+    }
+    const paymentMethodIndex = formConfig.fields.findIndex(f => f.mapping === 'paymentMethod');
+    const insertAt = paymentMethodIndex >= 0 ? paymentMethodIndex : formConfig.fields.length;
+    return [
+      ...formConfig.fields.slice(0, insertAt),
+      {
+        id: 'f_payment_date_required',
+        type: 'date' as const,
+        label: 'תאריך תשלום מוסכם',
+        required: true,
+        mapping: 'paymentDate',
+      },
+      ...formConfig.fields.slice(insertAt),
+    ];
+  }, [formConfig]);
 
   const [formData, setFormData] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (formConfig) {
       const initial: Record<string, any> = {};
-      formConfig.fields.forEach(f => {
+      bookingFields.forEach(f => {
         initial[f.id] = '';
       });
       const lead = leadId ? leads.find(l => l.id === leadId) : null;
       const customer = customerId ? customers.find(c => c.id === customerId) : null;
       const source = lead || customer;
       if (source) {
-        formConfig.fields.forEach(f => {
+        bookingFields.forEach(f => {
             if (f.mapping === 'name') initial[f.id] = source.name;
             if (f.mapping === 'invoiceName') initial[f.id] = 'companyName' in source ? source.companyName || '' : '';
             if (f.mapping === 'phone') initial[f.id] = source.phone;
@@ -67,11 +91,11 @@ const BookingForm: React.FC = () => {
         });
       }
       if (prefDate) {
-        const df = formConfig.fields.find(f => f.mapping === 'date');
+        const df = bookingFields.find(f => f.mapping === 'date');
         if (df) initial[df.id] = prefDate;
       }
       if (prefTime) {
-        const tf = formConfig.fields.find(f => f.mapping === 'startTime');
+        const tf = bookingFields.find(f => f.mapping === 'startTime');
         if (tf) {
           initial[tf.id] = prefTime;
           const [h, m] = prefTime.split(':').map(Number);
@@ -83,17 +107,17 @@ const BookingForm: React.FC = () => {
           const finalM = roundedM === 60 ? 0 : roundedM;
           const finalH = roundedM === 60 ? endH + 1 : endH;
           const endTimeStr = `${String(Math.min(finalH, 23)).padStart(2, '0')}:${String(finalM).padStart(2, '0')}`;
-          const endField = formConfig.fields.find(f => f.mapping === 'endTime');
+          const endField = bookingFields.find(f => f.mapping === 'endTime');
           if (endField) initial[endField.id] = endTimeStr;
         }
       }
       if (prefParticipants) {
-        const nf = formConfig.fields.find(f => f.mapping === 'clickersNeeded');
+        const nf = bookingFields.find(f => f.mapping === 'clickersNeeded');
         if (nf) initial[nf.id] = prefParticipants;
       }
       setFormData(initial);
     }
-  }, [formConfig, leads, customers, leadId, customerId, prefDate, prefTime, prefParticipants]);
+  }, [bookingFields, formConfig, leads, customers, leadId, customerId, prefDate, prefTime, prefParticipants]);
 
   const handleInputChange = (fieldId: string, mapping: string | undefined, value: any) => {
     setFormData(prev => {
@@ -108,7 +132,7 @@ const BookingForm: React.FC = () => {
             const finalM = roundedM === 60 ? 0 : roundedM;
             const finalH = roundedM === 60 ? endH + 1 : endH;
             const endTimeStr = `${String(Math.min(finalH, 23)).padStart(2, '0')}:${String(finalM).padStart(2, '0')}`;
-            const endField = formConfig.fields.find(f => f.mapping === 'endTime');
+            const endField = bookingFields.find(f => f.mapping === 'endTime');
             if (endField) next[endField.id] = endTimeStr;
         }
         return next;
@@ -127,7 +151,7 @@ const BookingForm: React.FC = () => {
     setIsLoading(true);
     try {
       const payload: any = {};
-      formConfig.fields.forEach(f => {
+      bookingFields.forEach(f => {
           if (f.mapping) payload[f.mapping] = formData[f.id];
       });
       const result = await handlePublicBookingSubmit(payload, leadId || undefined, customerId || undefined);
@@ -145,19 +169,20 @@ const BookingForm: React.FC = () => {
   if (isSubmitted) {
     const eventData = {
       id: submittedEventId,
-      name: formData[formConfig.fields.find(f=>f.mapping==='name')?.id || ''] || '',
-      invoiceName: formData[formConfig.fields.find(f=>f.mapping==='invoiceName')?.id || ''] || '',
-      email: formData[formConfig.fields.find(f=>f.mapping==='email')?.id || ''] || '',
-      phone: formData[formConfig.fields.find(f=>f.mapping==='phone')?.id || ''] || '',
-      date: formData[formConfig.fields.find(f=>f.mapping==='date')?.id || ''] || '',
-      hebrewDate: formData[formConfig.fields.find(f=>f.mapping==='hebrewDate')?.id || ''] || '',
-      startTime: formData[formConfig.fields.find(f=>f.mapping==='startTime')?.id || ''] || '',
-      endTime: formData[formConfig.fields.find(f=>f.mapping==='endTime')?.id || ''] || '',
-      location: formData[formConfig.fields.find(f=>f.mapping==='location')?.id || ''] || '',
-      eventType: formData[formConfig.fields.find(f=>f.mapping==='eventType')?.id || ''] || '',
-      clickersNeeded: formData[formConfig.fields.find(f=>f.mapping==='clickersNeeded')?.id || ''] || 0,
-      amount: formData[formConfig.fields.find(f=>f.mapping==='amount')?.id || ''] || 0,
-      notes: formData[formConfig.fields.find(f=>f.mapping==='notes')?.id || ''] || '',
+      name: formData[bookingFields.find(f=>f.mapping==='name')?.id || ''] || '',
+      invoiceName: formData[bookingFields.find(f=>f.mapping==='invoiceName')?.id || ''] || '',
+      email: formData[bookingFields.find(f=>f.mapping==='email')?.id || ''] || '',
+      phone: formData[bookingFields.find(f=>f.mapping==='phone')?.id || ''] || '',
+      date: formData[bookingFields.find(f=>f.mapping==='date')?.id || ''] || '',
+      hebrewDate: formData[bookingFields.find(f=>f.mapping==='hebrewDate')?.id || ''] || '',
+      startTime: formData[bookingFields.find(f=>f.mapping==='startTime')?.id || ''] || '',
+      endTime: formData[bookingFields.find(f=>f.mapping==='endTime')?.id || ''] || '',
+      location: formData[bookingFields.find(f=>f.mapping==='location')?.id || ''] || '',
+      eventType: formData[bookingFields.find(f=>f.mapping==='eventType')?.id || ''] || '',
+      clickersNeeded: formData[bookingFields.find(f=>f.mapping==='clickersNeeded')?.id || ''] || 0,
+      amount: formData[bookingFields.find(f=>f.mapping==='amount')?.id || ''] || 0,
+      paymentDate: formData[bookingFields.find(f=>f.mapping==='paymentDate')?.id || ''] || '',
+      notes: formData[bookingFields.find(f=>f.mapping==='notes')?.id || ''] || '',
     };
 
     return (
@@ -254,6 +279,14 @@ const BookingForm: React.FC = () => {
                       <td className="p-5 text-green-700 font-black text-lg">💰 סכום לתשלום:</td>
                       <td className="p-5 text-green-700 font-black text-3xl">₪{Number(eventData.amount).toLocaleString()}</td>
                     </tr>
+                    {eventData.paymentDate && (
+                      <tr className="bg-white rounded-xl">
+                        <td className="p-4 text-slate-600 font-bold border-b border-slate-200">💳 תאריך תשלום מוסכם:</td>
+                        <td className="p-4 text-slate-900 font-black border-b border-slate-200">
+                          {new Date(eventData.paymentDate).toLocaleDateString('he-IL')}
+                        </td>
+                      </tr>
+                    )}
                     {eventData.notes && (
                       <tr className="bg-amber-50 rounded-xl">
                         <td colSpan={2} className="p-4 text-amber-900 font-bold">
@@ -325,7 +358,7 @@ const BookingForm: React.FC = () => {
         <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-slate-100">
            <form onSubmit={handleSubmit} className="p-8 md:p-14 space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {formConfig?.fields.map(field => (
+                {bookingFields.map(field => (
                     <div key={field.id} className={`space-y-2 ${field.type === 'textarea' ? 'md:col-span-2' : ''}`}>
                         <label className="text-sm font-black text-slate-700 block flex items-center gap-2">
                             {field.label} {field.required && <span className="text-red-500">*</span>}
@@ -380,6 +413,11 @@ const BookingForm: React.FC = () => {
                                 onChange={e => handleInputChange(field.id, field.mapping, e.target.value)} 
                                 className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-purple-500 transition-all font-bold"
                             />
+                        )}
+                        {field.mapping === 'paymentDate' && (
+                          <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+                            {PAYMENT_DATE_NOTE}
+                          </p>
                         )}
                     </div>
                 ))}
