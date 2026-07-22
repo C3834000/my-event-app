@@ -1,18 +1,33 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskCategory, TaskPriority, TaskFrequency } from '../types';
-import { Check, Trash2, Plus, Edit, X, Upload, Search, Filter } from 'lucide-react';
+import { Task, TaskCategory, TaskPriority, TaskFrequency, SubTask } from '../types';
+import { Check, Trash2, Plus, Edit, X, Upload, Search, Filter, ChevronDown, ChevronLeft, ListTree } from 'lucide-react';
 import { parseCSV } from '../services/utils';
+import { TASK_CATEGORIES, TASK_CATEGORY_ORDER, buildTasksSeed } from '../data/tasksSeed';
 
-const CATEGORIES: TaskCategory[] = ['קליכיף', 'אישי', 'בית', 'תוכנית מדע', 'שיווק', 'כללי', 'דחוף / לסיווג'];
+const CATEGORIES: TaskCategory[] = TASK_CATEGORIES;
 
 const CATEGORY_COLORS: Record<string, string> = {
   'קליכיף': 'text-indigo-700',
+  'קליקלייט': 'text-blue-700',
   'אישי': 'text-amber-700',
   'בית': 'text-emerald-700',
+  'משפחה': 'text-pink-700',
   'תוכנית מדע': 'text-sky-700',
+  'תוכנית קיץ': 'text-cyan-700',
   'שיווק': 'text-violet-700',
+  'תוכן': 'text-fuchsia-700',
+  'תוכנה': 'text-indigo-800',
+  'וידאו': 'text-sky-800',
+  'משחקים': 'text-teal-700',
+  'אירועים': 'text-orange-700',
+  'כספים': 'text-lime-800',
+  'תפעול': 'text-stone-700',
+  'ציוד': 'text-yellow-800',
+  'שיחות': 'text-blue-600',
+  'מערכת': 'text-slate-700',
   'כללי': 'text-slate-600',
+  'דחוף': 'text-rose-700',
   'דחוף / לסיווג': 'text-rose-700',
 };
 
@@ -65,7 +80,7 @@ const cellInput =
   'w-full bg-transparent border-0 outline-none text-sm py-1 px-1 rounded focus:bg-white focus:ring-1 focus:ring-sky-300 placeholder:text-slate-300';
 
 const TasksBoard: React.FC = () => {
-  const { tasks, addTask, updateTask, toggleTask, deleteTask, importTasks } = useApp();
+  const { tasks, addTask, updateTask, toggleTask, deleteTask, importTasks, importTaskObjects } = useApp();
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showSubTasksForm, setShowSubTasksForm] = useState(false);
   const [editingSubTask, setEditingSubTask] = useState<{ parentTaskId: string; subTaskIndex: number; subTask: any } | null>(null);
@@ -74,13 +89,22 @@ const TasksBoard: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('open');
   const [quickTitle, setQuickTitle] = useState('');
   const [quickCategory, setQuickCategory] = useState<TaskCategory>('כללי');
+  const [expandedSubs, setExpandedSubs] = useState<Record<string, boolean>>({});
+  const [addingSubFor, setAddingSubFor] = useState<string | null>(null);
+  const [newSubTitle, setNewSubTitle] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const quickInputRef = useRef<HTMLInputElement>(null);
 
   const filteredTasks = useMemo(() => {
+    const catRank = (c: string) => {
+      const i = TASK_CATEGORY_ORDER.indexOf(c as TaskCategory);
+      return i === -1 ? 999 : i;
+    };
     return tasks
       .filter((task) => {
-        const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch =
+          task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (task.subTasks || []).some((st) => st.title.toLowerCase().includes(searchTerm.toLowerCase()));
         const matchesCategory = filterCategory === 'all' || task.category === filterCategory;
         const matchesStatus =
           filterStatus === 'all' ||
@@ -88,6 +112,8 @@ const TasksBoard: React.FC = () => {
         return matchesSearch && matchesCategory && matchesStatus;
       })
       .sort((a, b) => {
+        const catDiff = catRank(a.category) - catRank(b.category);
+        if (catDiff !== 0) return catDiff;
         if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
         const aOverdue = !!(a.dueDate && new Date(a.dueDate) < new Date() && !a.isCompleted);
         const bOverdue = !!(b.dueDate && new Date(b.dueDate) < new Date() && !b.isCompleted);
@@ -97,6 +123,61 @@ const TasksBoard: React.FC = () => {
         return b.priority - a.priority;
       });
   }, [tasks, searchTerm, filterCategory, filterStatus]);
+
+  const toggleSubExpand = (taskId: string) => {
+    setExpandedSubs((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
+  };
+
+  const patchSubTasks = (task: Task, subTasks: SubTask[]) => {
+    updateTask(task.id, { subTasks });
+  };
+
+  const addSubTask = (task: Task, title: string) => {
+    const t = title.trim();
+    if (!t) return;
+    const sub: SubTask = {
+      id: `st_${Date.now()}`,
+      title: t,
+      isCompleted: false,
+      priority: TaskPriority.Medium,
+      estimatedTimeMin: 15,
+      progress: 0,
+    };
+    patchSubTasks(task, [...(task.subTasks || []), sub]);
+    setExpandedSubs((prev) => ({ ...prev, [task.id]: true }));
+    setNewSubTitle('');
+  };
+
+  const toggleSubTask = (task: Task, idx: number) => {
+    const updated = [...(task.subTasks || [])];
+    const st = updated[idx];
+    updated[idx] = { ...st, isCompleted: !st.isCompleted, progress: !st.isCompleted ? 100 : 0 };
+    patchSubTasks(task, updated);
+  };
+
+  const renameSubTask = (task: Task, idx: number, title: string) => {
+    const t = title.trim();
+    if (!t) return;
+    const updated = [...(task.subTasks || [])];
+    updated[idx] = { ...updated[idx], title: t };
+    patchSubTasks(task, updated);
+  };
+
+  const removeSubTask = (task: Task, idx: number) => {
+    patchSubTasks(task, (task.subTasks || []).filter((_, i) => i !== idx));
+  };
+
+  const handleLoadSeed = () => {
+    const existing = new Set(tasks.map((t) => t.title.trim()));
+    const toAdd = buildTasksSeed(existing);
+    if (!toAdd.length) {
+      alert('כל המשימות מהרשימה כבר קיימות.');
+      return;
+    }
+    if (!confirm(`להוסיף ${toAdd.length} משימות מהרשימה?`)) return;
+    const n = importTaskObjects(toAdd);
+    alert(`נוספו ${n} משימות. אפשר עכשיו לפצל לתתי-משימות עם כפתור העץ ליד כל שורה.`);
+  };
 
   const totalCount = tasks.length;
   const completedCount = tasks.filter((t) => t.isCompleted).length;
@@ -164,6 +245,13 @@ const TasksBoard: React.FC = () => {
               className="hidden"
               accept=".csv"
             />
+            <button
+              onClick={handleLoadSeed}
+              className="bg-white/10 hover:bg-white/20 border border-white/20 px-3 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition-all"
+              title="טוען את ~54 המשימות מהרשימה"
+            >
+              <ListTree size={16} /> טען רשימה
+            </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               className="bg-white/10 hover:bg-white/20 border border-white/20 px-3 py-2 rounded-xl flex items-center gap-2 text-sm font-bold transition-all"
@@ -270,9 +358,12 @@ const TasksBoard: React.FC = () => {
               {filteredTasks.map((task, idx) => {
                 const overdue = !!(task.dueDate && new Date(task.dueDate) < new Date() && !task.isCompleted);
                 const dayLabel = formatDayLabel(task);
+                const subs = task.subTasks || [];
+                const doneSubs = subs.filter((s) => s.isCompleted).length;
+                const isExpanded = !!expandedSubs[task.id] || addingSubFor === task.id;
                 return (
+                  <React.Fragment key={task.id}>
                   <tr
-                    key={task.id}
                     className={`border-b border-slate-100 group hover:bg-sky-50/50 transition-colors ${
                       task.isCompleted ? 'opacity-50' : idx % 2 === 1 ? 'bg-slate-50/60' : 'bg-white'
                     } ${overdue ? 'bg-rose-50/70' : ''}`}
@@ -292,19 +383,36 @@ const TasksBoard: React.FC = () => {
                     </td>
 
                     <td className="p-1 align-middle">
-                      <input
-                        className={`${cellInput} font-semibold ${task.isCompleted ? 'line-through text-slate-400' : 'text-slate-800'}`}
-                        defaultValue={task.title}
-                        key={`title-${task.id}-${task.title}`}
-                        onBlur={(e) => {
-                          const v = e.target.value.trim();
-                          if (v && v !== task.title) patchTask(task.id, { title: v });
-                          else if (!v) e.target.value = task.title;
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                        }}
-                      />
+                      <div className="flex items-center gap-1 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => toggleSubExpand(task.id)}
+                          className={`shrink-0 p-0.5 rounded transition-colors ${
+                            subs.length ? 'text-sky-600 hover:bg-sky-50' : 'text-slate-300 hover:text-sky-500 hover:bg-sky-50'
+                          }`}
+                          title={subs.length ? `${doneSubs}/${subs.length} תתי-משימות` : 'הוסף תתי-משימות'}
+                        >
+                          {isExpanded ? <ChevronDown size={14} /> : <ChevronLeft size={14} />}
+                        </button>
+                        <input
+                          className={`${cellInput} font-semibold ${task.isCompleted ? 'line-through text-slate-400' : 'text-slate-800'}`}
+                          defaultValue={task.title}
+                          key={`title-${task.id}-${task.title}`}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v && v !== task.title) patchTask(task.id, { title: v });
+                            else if (!v) e.target.value = task.title;
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                          }}
+                        />
+                        {subs.length > 0 && (
+                          <span className="shrink-0 text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-100 px-1.5 py-0.5 rounded">
+                            {doneSubs}/{subs.length}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     <td className="p-1 align-middle">
@@ -458,8 +566,19 @@ const TasksBoard: React.FC = () => {
                       <div className="flex items-center justify-center gap-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => {
+                            setAddingSubFor(task.id);
+                            setExpandedSubs((prev) => ({ ...prev, [task.id]: true }));
+                            setNewSubTitle('');
+                          }}
+                          className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-lg"
+                          title="הוסף תת-משימה"
+                        >
+                          <ListTree size={14} />
+                        </button>
+                        <button
+                          onClick={() => {
                             setEditingTask(task);
-                            setShowSubTasksForm(false);
+                            setShowSubTasksForm(true);
                           }}
                           className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-lg"
                           title="פרטים נוספים"
@@ -478,6 +597,89 @@ const TasksBoard: React.FC = () => {
                       </div>
                     </td>
                   </tr>
+
+                  {isExpanded &&
+                    subs.map((st, sIdx) => (
+                      <tr key={st.id} className="bg-slate-50/80 border-b border-slate-100">
+                        <td className="p-1 text-center">
+                          <button
+                            onClick={() => toggleSubTask(task, sIdx)}
+                            className={`w-4 h-4 mx-auto rounded border-2 flex items-center justify-center ${
+                              st.isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white'
+                            }`}
+                          >
+                            {st.isCompleted && <Check size={10} strokeWidth={3} />}
+                          </button>
+                        </td>
+                        <td className="p-1" colSpan={6}>
+                          <div className="flex items-center gap-2 pr-6">
+                            <span className="text-slate-300 text-xs">└</span>
+                            <input
+                              className={`${cellInput} text-sm ${st.isCompleted ? 'line-through text-slate-400' : 'text-slate-700'}`}
+                              defaultValue={st.title}
+                              key={`st-${st.id}-${st.title}`}
+                              onBlur={(e) => {
+                                const v = e.target.value.trim();
+                                if (v && v !== st.title) renameSubTask(task, sIdx, v);
+                                else if (!v) e.target.value = st.title;
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                              }}
+                            />
+                          </div>
+                        </td>
+                        <td className="p-1 text-center">
+                          <button
+                            onClick={() => removeSubTask(task, sIdx)}
+                            className="p-1 text-slate-400 hover:text-red-500 rounded"
+                            title="מחק תת-משימה"
+                          >
+                            <X size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                  {isExpanded && (
+                    <tr className="bg-sky-50/50 border-b border-sky-100">
+                      <td />
+                      <td className="p-1" colSpan={7}>
+                        <div className="flex items-center gap-2 pr-6">
+                          <Plus size={12} className="text-sky-500 shrink-0" />
+                          <input
+                            autoFocus={addingSubFor === task.id}
+                            className={`${cellInput} text-sm placeholder:text-sky-400/80`}
+                            placeholder="תת-משימה חדשה — Enter להוספה"
+                            value={addingSubFor === task.id ? newSubTitle : ''}
+                            onFocus={() => setAddingSubFor(task.id)}
+                            onChange={(e) => {
+                              setAddingSubFor(task.id);
+                              setNewSubTitle(e.target.value);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                addSubTask(task, newSubTitle);
+                              }
+                              if (e.key === 'Escape') {
+                                setAddingSubFor(null);
+                                setNewSubTitle('');
+                              }
+                            }}
+                            onBlur={() => {
+                              if (newSubTitle.trim() && addingSubFor === task.id) {
+                                addSubTask(task, newSubTitle);
+                              }
+                              setAddingSubFor(null);
+                            }}
+                          />
+                        </div>
+                      </td>
+                      <td />
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
 
@@ -534,7 +736,7 @@ const TasksBoard: React.FC = () => {
           </table>
         </div>
         <div className="px-3 py-2 border-t border-slate-100 text-[11px] text-slate-400 font-medium">
-          כל שדה ניתן לעריכה · השינויים נשמרים אוטומטית
+          כל שדה ניתן לעריכה · השינויים נשמרים אוטומטית · לחץ על החץ / אייקון העץ ליד משימה כדי לפצל לתתי-משימות
         </div>
       </div>
 

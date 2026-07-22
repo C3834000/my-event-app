@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { AppEvent, Customer, Lead, Task, EventStatus, PaymentStatus, EventType, TaskPriority, LeadStatus, CustomForm, FormField, TaskCategory, PaymentMethod } from '../types';
 import { mockCustomers, mockEvents, mockLeads, mockTasks } from '../services/mockData';
 import { sendEmail, formatSendEmailError } from '../services/emailService';
@@ -15,23 +15,91 @@ import {
 import { buildPaymentDateUpdates } from '../services/paymentDateImport';
 import { currentYearKey, eventYearKey, incomeDateKey, parseEventDateKey, todayDateKey, numMoney, isPaidForKpi, excludeEventFromKpis } from '../services/eventKpi';
 
-/** כשמספר הרשומות בענן לא גדול מהמקומי — לא מחליפים רשימה שלמה (הענן עלול להיות ישן ולדרוס עריכה). רק מוסיפים שורות חדשות לפי id (למשל אירוע מהפורטל). */
-function mergeNewRowsFromCloud<T extends { id: string }>(local: T[], cloud: T[]): T[] {
-  const localIds = new Set(local.map((e) => e.id));
-  const newOnes = cloud.filter((e) => !localIds.has(e.id));
-  if (newOnes.length === 0) return local;
-  return [...newOnes, ...local];
+/** נרמול ערכים מיובאים / ישנים כדי שיופיעו בלוח ובסינונים */
+function normalizeEventRecord<T extends { status?: string; paymentStatus?: string }>(ev: T): T {
+  let paymentStatus = ev.paymentStatus;
+  if (paymentStatus === 'לא שולם' || paymentStatus === 'לא שולם ') {
+    paymentStatus = PaymentStatus.NotPaid;
+  }
+  return paymentStatus !== ev.paymentStatus ? { ...ev, paymentStatus } : ev;
 }
 
-/** איחוד ענן + מקומי: כל מה שבענן + מה שיש רק מקומית; אם אותו id — נתוני המקומי דורסים (שינויים אחרונים בדפדפן). מונע החלפת רשימה מלאה כשהענן "גדול יותר" ואיבוד אירועים מקומיים. */
-function mergeUnionCloudWithLocalOverlay<T extends { id: string }>(local: T[], cloud: T[]): T[] {
+/**
+ * הענן הוא מקור האמת.
+ * - לכל id שקיים בענן: נתוני הענן (מנורמלים)
+ * - ids שקיימים רק מקומית: נשמרים זמנית (ויעלו לענן ברקע) כדי לא לאבד יצירה שעדיין לא הספיקה להישמר
+ */
+function applyCloudAsSourceOfTruth<T extends { id: string }>(
+  local: T[],
+  cloud: T[],
+  normalize: (row: T) => T = (r) => r
+): T[] {
+  if (!cloud.length) return local.map(normalize);
   const byId = new Map<string, T>();
-  for (const e of cloud) byId.set(e.id, e);
+  for (const e of cloud) byId.set(e.id, normalize(e));
   for (const e of local) {
-    const cur = byId.get(e.id);
-    byId.set(e.id, cur ? ({ ...cur, ...e } as T) : e);
+    if (!byId.has(e.id)) byId.set(e.id, normalize(e));
   }
   return Array.from(byId.values());
+}
+
+/**
+ * "מצבות" (tombstones) של רשומות שנמחקו — נשמרות מקומית כדי שהסנכרון:
+ * 1. לא יעלה מחדש לענן רשומה מקומית שכבר נמחקה.
+ * 2. ימחק מהענן רשומה שמכשיר אחר החזיר בטעות.
+ * כך מחיקה נשארת אמינה ועקבית ולא "מתחייה".
+ */
+const DELETED_IDS_KEY = 'crm_deleted_ids_v1';
+type DeletedIdsKind = 'events' | 'customers' | 'leads' | 'tasks';
+type DeletedIds = Record<DeletedIdsKind, string[]>;
+
+function loadDeletedIds(): DeletedIds {
+  try {
+    const raw = localStorage.getItem(DELETED_IDS_KEY);
+    if (raw) {
+      const p = JSON.parse(raw) || {};
+      return {
+        events: Array.isArray(p.events) ? p.events : [],
+        customers: Array.isArray(p.customers) ? p.customers : [],
+        leads: Array.isArray(p.leads) ? p.leads : [],
+        tasks: Array.isArray(p.tasks) ? p.tasks : [],
+      };
+    }
+  } catch (e) {
+    console.warn('קריאת מצבות מחיקה נכשלה:', e);
+  }
+  return { events: [], customers: [], leads: [], tasks: [] };
+}
+
+function recordDeletedIds(kind: DeletedIdsKind, ids: Array<string | undefined | null>) {
+  const clean = ids.filter((x): x is string => !!x);
+  if (!clean.length) return;
+  const cur = loadDeletedIds();
+  const set = new Set(cur[kind]);
+  clean.forEach((id) => set.add(id));
+  // תקרה כדי שהמטמון לא יגדל ללא גבול
+  cur[kind] = Array.from(set).slice(-3000);
+  try {
+    localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(cur));
+  } catch (e) {
+    console.warn('שמירת מצבות מחיקה נכשלה:', e);
+  }
+}
+
+/** נרמול טלפון להשוואת ליד↔לקוח (972… → 0…) */
+function normalizePhoneKey(phone: string | undefined | null): string {
+  let d = String(phone || '').replace(/[^0-9]/g, '');
+  if (d.startsWith('972') && d.length >= 11) d = '0' + d.slice(3);
+  if (d.length === 9 && d.startsWith('5')) d = '0' + d;
+  return d;
+}
+
+function normalizeEmailKey(email: string | undefined | null): string {
+  return String(email || '').trim().toLowerCase();
+}
+
+function normalizeNameKey(name: string | undefined | null): string {
+  return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 interface Activity {
@@ -69,6 +137,8 @@ interface AppContextType {
   updateLead: (id: string, updates: Partial<Lead>) => void;
   convertLeadToCustomer: (leadId: string) => void;
   handlePublicBookingSubmit: (data: any, leadId?: string, customerId?: string) => Promise<{ eventId: string; customerId: string }>;
+  /** מוחק לידים שכבר לקוחות / מילאו הזמנה — לפי טלפון, מייל או שם */
+  cleanupConvertedLeads: () => Promise<number>;
   sendBookingEmail: (leadId: string) => Promise<{ success: boolean; email: string; url: string }>;
   sendPortalEmail: (leadId: string) => Promise<{ success: boolean; email: string; url: string }>;
   sendEventUpdateEmail: (event: AppEvent) => Promise<void>;
@@ -82,10 +152,17 @@ interface AppContextType {
   applyPaymentDatesFromImport: (rows: Record<string, unknown>[]) => number;
   importCustomers: (data: any[]) => void;
   importTasks: (data: any[]) => void;
+  /** מוסיף משימות מוכנות (מדלג על כותרות שכבר קיימות). מחזיר כמה נוספו. */
+  importTaskObjects: (tasks: Task[]) => number;
   importLeads: (data: Lead[]) => void;
   getCustomerById: (id: string) => Customer | undefined;
   syncAllEventsWithCustomers: () => void;
   syncRemoteBookings: () => Promise<number>;
+  /** טעינה מחדש מהענן — הענן הוא מקור האמת */
+  reloadFromCloud: () => Promise<void>;
+  /** האם הסנכרון האחרון מהענן הצליח */
+  cloudSyncOk: boolean;
+  lastCloudSyncAt: string | null;
   addCustomForm: (form: CustomForm) => void;
   updateCustomForm: (id: string, updates: Partial<CustomForm>) => void;
   deleteCustomForm: (id: string) => void;
@@ -150,34 +227,118 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [integrations, setIntegrations] = useState({ googleCalendar: true, outlookCalendar: false });
   const [kpis, setKpis] = useState({ openDebt: 0, projectedIncome: 0, totalRevenue: 0, availableClickers: 500 });
+  const [cloudSyncOk, setCloudSyncOk] = useState(false);
+  const [lastCloudSyncAt, setLastCloudSyncAt] = useState<string | null>(null);
 
   // Fire-and-forget cloud sync helper – never blocks the UI
   const cloudSync = <T,>(fn: () => Promise<T>) => {
     fn().catch(err => console.warn('☁️ sync:', (err as Error).message));
   };
 
+  /** מושך מהענן ומחיל כמקור אמת; מעלה לענן רשומות שקיימות רק מקומית */
+  const pullCloudAsSourceOfTruth = async (localSnapshot?: {
+    events: AppEvent[];
+    customers: Customer[];
+    leads: Lead[];
+    tasks: Task[];
+  }) => {
+    const [cloudEvents, cloudCustomers, cloudLeads, cloudTasks] = await Promise.all([
+      eventsService.getAll(),
+      customersService.getAll(),
+      leadsService.getAll(),
+      tasksService.getAll(),
+    ]);
+
+    const localEvents = localSnapshot?.events ?? [];
+    const localCust = localSnapshot?.customers ?? [];
+    const localLeadsArr = localSnapshot?.leads ?? [];
+    const localTasksArr = localSnapshot?.tasks ?? [];
+
+    // מצבות מחיקה — רשומות שנמחקו לא יעלו מחדש ולא יוצגו
+    const deleted = loadDeletedIds();
+    const delEv = new Set(deleted.events);
+    const delCust = new Set(deleted.customers);
+    const delLead = new Set(deleted.leads);
+    const delTask = new Set(deleted.tasks);
+
+    const nextEvents = applyCloudAsSourceOfTruth(localEvents, cloudEvents as AppEvent[], normalizeEventRecord)
+      .filter((e) => !delEv.has(e.id));
+    const nextCustomers = applyCloudAsSourceOfTruth(localCust, cloudCustomers as Customer[])
+      .filter((c) => !delCust.has(c.id));
+    const nextLeads = applyCloudAsSourceOfTruth(localLeadsArr, cloudLeads as Lead[])
+      .filter((l) => !delLead.has(l.id));
+    const nextTasks = applyCloudAsSourceOfTruth(localTasksArr, cloudTasks as Task[])
+      .filter((t) => !delTask.has(t.id));
+
+    // אם מכשיר אחר החזיר רשומה שנמחקה — נמחק אותה שוב מהענן (המצבה גוברת)
+    (cloudEvents as AppEvent[]).filter((e) => delEv.has(e.id)).forEach((e) => cloudSync(() => eventsService.delete(e.id)));
+    (cloudCustomers as Customer[]).filter((c) => delCust.has(c.id)).forEach((c) => cloudSync(() => customersService.delete(c.id)));
+    (cloudLeads as Lead[]).filter((l) => delLead.has(l.id)).forEach((l) => cloudSync(() => leadsService.delete(l.id)));
+    (cloudTasks as Task[]).filter((t) => delTask.has(t.id)).forEach((t) => cloudSync(() => tasksService.delete(t.id)));
+
+    // העלאת רשומות שקיימות רק מקומית — כדי שלא יישארו "תקועות" מחוץ לענן (ולא כאלה שנמחקו)
+    const cloudEventIds = new Set((cloudEvents as AppEvent[]).map((e) => e.id));
+    const localOnlyEvents = localEvents.filter((e) => e?.id && !cloudEventIds.has(e.id) && !delEv.has(e.id));
+    if (localOnlyEvents.length > 0) {
+      cloudSync(() => eventsService.bulkInsert(localOnlyEvents));
+    }
+    const cloudCustIds = new Set((cloudCustomers as Customer[]).map((c) => c.id));
+    const localOnlyCust = localCust.filter((c) => c?.id && !cloudCustIds.has(c.id) && !delCust.has(c.id));
+    if (localOnlyCust.length > 0) {
+      cloudSync(() => customersService.bulkInsert(localOnlyCust));
+    }
+    const cloudLeadIds = new Set((cloudLeads as Lead[]).map((l) => l.id));
+    const localOnlyLeads = localLeadsArr.filter((l) => l?.id && !cloudLeadIds.has(l.id) && !delLead.has(l.id));
+    if (localOnlyLeads.length > 0) {
+      cloudSync(() => leadsService.bulkInsert(localOnlyLeads));
+    }
+    const cloudTaskIds = new Set((cloudTasks as Task[]).map((t) => t.id));
+    const localOnlyTasks = localTasksArr.filter((t) => t?.id && !cloudTaskIds.has(t.id) && !delTask.has(t.id));
+    if (localOnlyTasks.length > 0) {
+      cloudSync(() => tasksService.bulkInsert(localOnlyTasks));
+    }
+
+    if (cloudEvents.length > 0 || nextEvents.length > 0) setEvents(nextEvents);
+    if (cloudCustomers.length > 0 || nextCustomers.length > 0) setCustomers(nextCustomers);
+    if (cloudLeads.length > 0 || nextLeads.length > 0) setLeads(nextLeads);
+    if (cloudTasks.length > 0 || nextTasks.length > 0) setTasks(nextTasks);
+
+    setCloudSyncOk(true);
+    setLastCloudSyncAt(new Date().toISOString());
+    console.log('☁️ סנכרון הושלם (ענן = מקור אמת):', {
+      events: nextEvents.length,
+      customers: nextCustomers.length,
+      leads: nextLeads.length,
+      tasks: nextTasks.length,
+      uploadedLocalOnly: {
+        events: localOnlyEvents.length,
+        customers: localOnlyCust.length,
+        leads: localOnlyLeads.length,
+        tasks: localOnlyTasks.length,
+      },
+    });
+  };
+
   const loadFromStorage = async () => {
-    console.log('💾 טוען נתונים מ-localStorage...');
+    console.log('💾 טוען מטמון מקומי ואז מסנכרן מהענן...');
+    let localEvents: AppEvent[] = [];
+    let localCust: Customer[] = [];
+    let localLeadsArr: Lead[] = [];
+    let localTasksArr: Task[] = [];
+
     const savedData = localStorage.getItem(STORAGE_KEY);
     if (savedData) {
       const parsed = JSON.parse(savedData);
-      setEvents(parsed.events || []);
-      setCustomers(parsed.customers || []);
-      setLeads(parsed.leads || []);
-      setTasks(parsed.tasks || []);
+      localEvents = (parsed.events || []).map((e: AppEvent) => normalizeEventRecord(e));
+      localCust = parsed.customers || [];
+      localLeadsArr = parsed.leads || [];
+      localTasksArr = parsed.tasks || [];
+      setEvents(localEvents);
+      setCustomers(localCust);
+      setLeads(localLeadsArr);
+      setTasks(localTasksArr);
       if (parsed.settings) setSettings(parsed.settings);
       if (parsed.customForms?.length) setCustomForms(parsed.customForms);
-      console.log('✅ נתונים נטענו מ-localStorage:', {
-        events: parsed.events?.length || 0,
-        customers: parsed.customers?.length || 0,
-        leads: parsed.leads?.length || 0,
-        tasks: parsed.tasks?.length || 0
-      });
-    } else {
-      setEvents(mockEvents);
-      setCustomers(mockCustomers);
-      setLeads(mockLeads);
-      setTasks(mockTasks);
     }
 
     const savedActivities = localStorage.getItem('ME_CFM_ACTIVITIES_V1');
@@ -192,61 +353,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsLoaded(true);
 
-    // Load activities from cloud
     settingsService.get().then(s => {
       if (s?.data?.activities && Array.isArray(s.data.activities) && s.data.activities.length > 0) {
         setActivities(s.data.activities.map((a: any) => ({ ...a, timestamp: new Date(a.timestamp) })));
       }
     }).catch(() => {});
 
-    // Try to load from cloud (non-blocking); only replace local data if cloud has MORE records
     try {
-      const savedData = localStorage.getItem(STORAGE_KEY);
-      const local = savedData ? JSON.parse(savedData) : {};
-      const localCounts = {
-        events: (local.events || []).length,
-        customers: (local.customers || []).length,
-        leads: (local.leads || []).length,
-        tasks: (local.tasks || []).length,
-      };
-
-      const [cloudEvents, cloudCustomers, cloudLeads, cloudTasks] = await Promise.all([
-        eventsService.getAll(),
-        customersService.getAll(),
-        leadsService.getAll(),
-        tasksService.getAll(),
-      ]);
-
-      console.log('☁️ נטען מהענן:', { events: cloudEvents.length, customers: cloudCustomers.length, leads: cloudLeads.length, tasks: cloudTasks.length });
-      console.log('💾 מקומי:', localCounts);
-
-      const localEvents = local.events || [];
-      const localCust = local.customers || [];
-      const localLeadsArr = local.leads || [];
-      const localTasksArr = local.tasks || [];
-
-      if (cloudEvents.length > 0) {
-        if (cloudEvents.length > localCounts.events) {
-          setEvents(mergeUnionCloudWithLocalOverlay(localEvents as AppEvent[], cloudEvents as AppEvent[]));
-        } else {
-          setEvents(mergeNewRowsFromCloud(localEvents, cloudEvents));
-        }
-      }
-      if (cloudCustomers.length > 0) {
-        if (cloudCustomers.length > localCounts.customers) setCustomers(cloudCustomers);
-        else setCustomers(mergeNewRowsFromCloud(localCust, cloudCustomers));
-      }
-      if (cloudLeads.length > 0) {
-        if (cloudLeads.length > localCounts.leads) setLeads(cloudLeads);
-        else setLeads(mergeNewRowsFromCloud(localLeadsArr, cloudLeads));
-      }
-      if (cloudTasks.length > 0) {
-        if (cloudTasks.length > localCounts.tasks) setTasks(cloudTasks);
-        else setTasks(mergeNewRowsFromCloud(localTasksArr, cloudTasks));
-      }
-
+      await pullCloudAsSourceOfTruth({
+        events: localEvents,
+        customers: localCust,
+        leads: localLeadsArr,
+        tasks: localTasksArr,
+      });
     } catch (err) {
-      console.warn('☁️ שגיאה בטעינה מהענן, ממשיך עם localStorage:', (err as Error).message);
+      setCloudSyncOk(false);
+      console.warn('☁️ שגיאה בטעינה מהענן, ממשיך עם מטמון מקומי:', (err as Error).message);
+      if (!savedData) {
+        setEvents(mockEvents);
+        setCustomers(mockCustomers);
+        setLeads(mockLeads);
+        setTasks(mockTasks);
+      }
     }
   };
 
@@ -254,80 +382,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     void loadFromStorage();
   }, []);
 
-  // Auto-sync from cloud every 30 seconds (disabled on public pages like /book and /portal)
+  const dataRef = useRef({ events, customers, leads, tasks });
+  dataRef.current = { events, customers, leads, tasks };
+
+  // סנכרון מהענן כל 20 שניות — הענן תמיד מקור האמת (לא בדפי פורטל ציבוריים)
   useEffect(() => {
     if (!isLoaded) return;
-    const isPublicPage = window.location.hash.startsWith('#/book') || window.location.hash.startsWith('#/portal') || window.location.hash.startsWith('#/add-event');
-    if (isPublicPage) return;
+    const isPublicPage = () => {
+      const h = window.location.hash;
+      return h.startsWith('#/book') || h.startsWith('#/portal') || h.startsWith('#/add-event');
+    };
+    if (isPublicPage()) return;
 
     const syncFromCloud = async () => {
-      const currentHash = window.location.hash;
-      if (currentHash.startsWith('#/book') || currentHash.startsWith('#/portal') || currentHash.startsWith('#/add-event')) return;
+      if (isPublicPage()) return;
       try {
-        const [cloudEvents, cloudCustomers, cloudLeads, cloudTasks] = await Promise.all([
-          eventsService.getAll(),
-          customersService.getAll(),
-          leadsService.getAll(),
-          tasksService.getAll(),
-        ]);
-        // אל תדרוס רשימה שלמה כשאותו אורך — הענן עלול להיות לפני commit; רק אם יש יותר שורות בענן או מזג ids חדשים
-        setCustomers((prev) => {
-          if (cloudCustomers.length === 0) return prev;
-          if (cloudCustomers.length > prev.length) return mergeUnionCloudWithLocalOverlay(prev, cloudCustomers);
-          return mergeNewRowsFromCloud(prev, cloudCustomers);
-        });
-        setEvents((prev) => {
-          if (cloudEvents.length === 0) return prev;
-          if (cloudEvents.length > prev.length) return mergeUnionCloudWithLocalOverlay(prev, cloudEvents);
-          return mergeNewRowsFromCloud(prev, cloudEvents);
-        });
-        setLeads((prev) => {
-          if (cloudLeads.length === 0) return prev;
-          if (cloudLeads.length > prev.length) return mergeUnionCloudWithLocalOverlay(prev, cloudLeads);
-          return mergeNewRowsFromCloud(prev, cloudLeads);
-        });
-        setTasks((prev) => {
-          if (cloudTasks.length === 0) return prev;
-          if (cloudTasks.length > prev.length) return mergeUnionCloudWithLocalOverlay(prev, cloudTasks);
-          return mergeNewRowsFromCloud(prev, cloudTasks);
-        });
-
-        // Sync activities from cloud settings
+        await pullCloudAsSourceOfTruth(dataRef.current);
         const cloudSettings = await settingsService.get();
         if (cloudSettings?.data?.activities?.length > 0) {
           setActivities(cloudSettings.data.activities.map((a: any) => ({ ...a, timestamp: new Date(a.timestamp) })));
         }
       } catch {
-        // silent fail - no network or function error
+        setCloudSyncOk(false);
       }
     };
-    const interval = setInterval(syncFromCloud, 30000);
+    const interval = setInterval(syncFromCloud, 20000);
     return () => clearInterval(interval);
   }, [isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    
-    const autoRefresh = () => {
-      const savedData = localStorage.getItem(STORAGE_KEY);
-      if (savedData) {
-        const parsed = JSON.parse(savedData);
-        const currentEventsCount = events.length;
-        const newEventsCount = parsed.events?.length || 0;
-        
-        if (newEventsCount > currentEventsCount) {
-          console.log('🔄 נתונים חדשים זוהו! מעדכן...');
-          setEvents(parsed.events || []);
-          setCustomers(parsed.customers || []);
-          setLeads(parsed.leads || []);
-          setTasks(parsed.tasks || []);
-        }
-      }
-    };
-    
-    const interval = setInterval(autoRefresh, 10000);
-    return () => clearInterval(interval);
-  }, [isLoaded, events.length]);
 
   useEffect(() => {
     if (isLoaded) {
@@ -466,10 +547,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     let finalCustomerId = customerId;
-    if (!customerId && !leadId && data.name && data.phone) {
-      // אם כבר קיים לקוח עם אותו טלפון — נשתמש בו במקום ליצור כפילות
+    // יצירת / איתור לקוח גם כשמגיעים מליד (leadId) — כדי שההזמנה תהפוך ללקוח והליד יימחק
+    if (!finalCustomerId && data.name && data.phone) {
       const existingCustomer = customers.find(c =>
-        String(c.phone || '').replace(/[^0-9]/g, '') === normPhone
+        normalizePhoneKey(c.phone) === normPhone && normPhone.length >= 9
       );
       if (existingCustomer) {
         finalCustomerId = existingCustomer.id;
@@ -480,6 +561,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           name: data.name,
           phone: data.phone,
           email: data.email || '',
+          notes: leadId ? `הגיע מליד ${leadId}` : undefined,
         };
         await customersService.create(newCustomer);
         finalCustomerId = newCustomer.id;
@@ -586,7 +668,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               <div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
                 <p style="color: white; margin: 0 0 16px; font-size: 18px; font-weight: 800; line-height: 1.6;">✨ זה הזמן להתקדם לשלב הכנת החידון שלכם!</p>
                 <p style="color: white; margin: 0 0 20px; font-size: 15px; font-weight: 600; opacity: 0.95;">לחצו על הכפתור להמשך מרגש 🎉</p>
-                <a href="https://myecrm2026.netlify.app/#/portal/${leadId || finalCustomerId || event.id}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 19px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: all 0.3s;">🎯 כניסה לפורטל האישי שלכם ←</a>
+                <a href="https://myecrm2026.netlify.app/#/portal/${finalCustomerId || leadId || event.id}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 19px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: all 0.3s;">🎯 כניסה לפורטל האישי שלכם ←</a>
               </div>
 
               <div style="background: #fef3c7; border-right: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 24px 0;">
@@ -669,6 +751,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         </div>
       `,
     });
+
+    // אחרי הזמנה — מוחקים לידים תואמים (לפי leadId / טלפון / מייל / שם)
+    try {
+      await removeLeadsMatchingContact({
+        leadId,
+        phone: data.phone,
+        email: data.email,
+        name: data.name,
+      });
+    } catch (e) {
+      console.warn('ניקוי לידים אחרי הזמנה נכשל:', e);
+    }
 
     return { eventId: event.id, customerId: finalCustomerId || '' };
   };
@@ -800,9 +894,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addEvent = (event: AppEvent) => {
-    setEvents(prev => [event, ...prev]);
-    cloudSync(() => eventsService.create(event));
-    console.log('✅ אירוע נוסף:', event.title);
+    // הבטחת מזהה ייחודי + externalId לכל אירוע — כולל כאלה שמגיעים מקישור במייל
+    const id = event.id || `e_${Date.now()}`;
+    const externalId = event.externalId || `H-${String(id).replace(/^e_/, '')}`;
+    const stamped: AppEvent = { ...event, id, externalId };
+
+    // הגנת כפילות: אותו מזהה / externalId, או אותו טלפון + תאריך + שעת התחלה
+    const normPhone = String(stamped.phone || '').replace(/[^0-9]/g, '');
+    const dup = events.find(e =>
+      e.id === stamped.id ||
+      (!!e.externalId && !!stamped.externalId && e.externalId === stamped.externalId) ||
+      (!!normPhone && String(e.phone || '').replace(/[^0-9]/g, '') === normPhone &&
+        e.date === stamped.date && (e.startTime || '') === (stamped.startTime || ''))
+    );
+    if (dup) {
+      console.warn('🛑 אירוע כפול נחסם ב-addEvent — האירוע הקיים:', dup.id);
+      addActivity('system', `נחסמה כפילות אירוע: ${stamped.title} (קיים כבר ${dup.id})`);
+      return;
+    }
+
+    setEvents(prev => [stamped, ...prev]);
+    cloudSync(() => eventsService.create(stamped));
+    console.log('✅ אירוע נוסף:', stamped.title);
   };
   const updateEventStatus = (id: string, status: EventStatus) => {
     setEvents(prev => prev.map(e => e.id === id ? { ...e, status } : e));
@@ -825,6 +938,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     cloudSync(() => eventsService.update(id, updates));
   };
   const deleteEvent = (id: string) => {
+    recordDeletedIds('events', [id]);
     setEvents(prev => prev.filter(e => e.id !== id));
     cloudSync(() => eventsService.delete(id));
   };
@@ -840,7 +954,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const getCustomerById = (id: string) => customers.find(c => c.id === id);
   const addLead = (lead: Lead) => {
     const stamped: Lead = { ...lead, lastUpdatedAt: lead.lastUpdatedAt || new Date().toISOString() };
-    setLeads(prev => [...prev, stamped]);
+    setLeads(prev => [stamped, ...prev]);
     cloudSync(() => leadsService.create(stamped));
     addActivity('system', `ליד חדש נוסף: ${lead.name}`);
   };
@@ -854,15 +968,104 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
     cloudSync(() => leadsService.update(id, patch));
   };
+
+  /** מוחק לידים לפי מזהה או התאמת טלפון/מייל/שם */
+  const removeLeadsMatchingContact = async (opts: {
+    leadId?: string;
+    phone?: string;
+    email?: string;
+    name?: string;
+  }): Promise<number> => {
+    const p = normalizePhoneKey(opts.phone);
+    const em = normalizeEmailKey(opts.email);
+    const n = normalizeNameKey(opts.name);
+    const ids = new Set<string>();
+    if (opts.leadId) ids.add(opts.leadId);
+    for (const l of leads) {
+      if (opts.leadId && l.id === opts.leadId) {
+        ids.add(l.id);
+        continue;
+      }
+      const lp = normalizePhoneKey(l.phone);
+      const le = normalizeEmailKey(l.email);
+      const ln = normalizeNameKey(l.name);
+      if (p && lp && p === lp) ids.add(l.id);
+      else if (em && le && em === le) ids.add(l.id);
+      else if (n && ln && n === ln && n.length >= 2) ids.add(l.id);
+    }
+    if (ids.size === 0) return 0;
+    recordDeletedIds('leads', Array.from(ids));
+    setLeads(prev => prev.filter(l => !ids.has(l.id)));
+    await Promise.all(
+      Array.from(ids).map((id) =>
+        leadsService.delete(id).catch((err) => console.warn('מחיקת ליד נכשלה:', id, err))
+      )
+    );
+    return ids.size;
+  };
+
+  /** לידים שהפכו ללקוחות או שכבר יש להם הזמנה — נמחקים מהלוח */
+  const cleanupConvertedLeads = async (): Promise<number> => {
+    const phoneSet = new Set<string>();
+    const emailSet = new Set<string>();
+    const nameSet = new Set<string>();
+
+    for (const c of customers) {
+      const p = normalizePhoneKey(c.phone);
+      if (p.length >= 9) phoneSet.add(p);
+      const em = normalizeEmailKey(c.email);
+      if (em) emailSet.add(em);
+      const n = normalizeNameKey(c.name);
+      if (n.length >= 2) nameSet.add(n);
+    }
+    for (const e of events) {
+      const p = normalizePhoneKey(e.phone);
+      if (p.length >= 9) phoneSet.add(p);
+      const em = normalizeEmailKey(e.email);
+      if (em) emailSet.add(em);
+    }
+
+    const toRemove = leads.filter((l) => {
+      if (l.status === LeadStatus.Converted) return true;
+      const p = normalizePhoneKey(l.phone);
+      const em = normalizeEmailKey(l.email);
+      const n = normalizeNameKey(l.name);
+      if (p.length >= 9 && phoneSet.has(p)) return true;
+      if (em && emailSet.has(em)) return true;
+      if (n.length >= 2 && nameSet.has(n)) return true;
+      return false;
+    });
+
+    if (toRemove.length === 0) return 0;
+
+    const ids = new Set(toRemove.map((l) => l.id));
+    recordDeletedIds('leads', Array.from(ids));
+    setLeads((prev) => prev.filter((l) => !ids.has(l.id)));
+    await Promise.all(
+      toRemove.map((l) =>
+        leadsService.delete(l.id).catch((err) => console.warn('מחיקת ליד נכשלה:', l.id, err))
+      )
+    );
+    addActivity('system', `נוקו ${toRemove.length} לידים שכבר לקוחות / הזמינו אירוע`);
+    return toRemove.length;
+  };
+
   const convertLeadToCustomer = (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
-    const newCustomer: Customer = { id: `c_${Date.now()}`, name: lead.name, phone: lead.phone, email: lead.email || '', notes: `הגיע מליד` };
-    setCustomers(prev => [...prev, newCustomer]);
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: LeadStatus.Converted } : l));
-    cloudSync(() => customersService.create(newCustomer));
-    cloudSync(() => leadsService.update(leadId, { status: LeadStatus.Converted }));
-    addActivity('system', `ליד ${lead.name} הומר ללקוח בהצלחה`);
+    const existing = customers.find(c =>
+      (normalizePhoneKey(c.phone) && normalizePhoneKey(c.phone) === normalizePhoneKey(lead.phone)) ||
+      (normalizeEmailKey(c.email) && normalizeEmailKey(c.email) === normalizeEmailKey(lead.email))
+    );
+    if (!existing) {
+      const newCustomer: Customer = { id: `c_${Date.now()}`, name: lead.name, phone: lead.phone, email: lead.email || '', notes: `הגיע מליד` };
+      setCustomers(prev => [...prev, newCustomer]);
+      cloudSync(() => customersService.create(newCustomer));
+    }
+    recordDeletedIds('leads', [leadId]);
+    setLeads(prev => prev.filter(l => l.id !== leadId));
+    cloudSync(() => leadsService.delete(leadId));
+    addActivity('system', `ליד ${lead.name} הומר ללקוח ונמחק מהלוח`);
   };
   const addTask = (task: Task) => {
     setTasks(prev => [task, ...prev]);
@@ -891,6 +1094,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     cloudSync(() => tasksService.update(id, { progress, isCompleted: progress === 100 }));
   };
   const deleteTask = (id: string) => {
+    recordDeletedIds('tasks', [id]);
     setTasks(prev => prev.filter(t => t.id !== id));
     cloudSync(() => tasksService.delete(id));
   };
@@ -919,6 +1123,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return { success: true, email: toEmail, url: bookUrl };
   };
+  const reloadFromCloud = async () => {
+    await pullCloudAsSourceOfTruth(dataRef.current);
+  };
+
   const syncRemoteBookings = async () => 0;
   const toggleIntegration = async (service: any) => {
     setIntegrations(prev => ({ ...prev, [service === 'google' ? 'googleCalendar' : 'outlookCalendar']: !prev[service === 'google' ? 'googleCalendar' : 'outlookCalendar'] }));
@@ -1164,6 +1372,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addActivity('system', `יובאו ${toAdd.length} משימות`);
   };
 
+  const importTaskObjects = (incoming: Task[]) => {
+    const existing = new Set(tasks.map((t) => t.title.trim()));
+    const toAdd = incoming.filter((t) => t.title?.trim() && !existing.has(t.title.trim()));
+    if (!toAdd.length) return 0;
+    setTasks((prev) => [...toAdd, ...prev]);
+    cloudSync(() => tasksService.bulkInsert(toAdd));
+    addActivity('system', `יובאו ${toAdd.length} משימות מהרשימה`);
+    return toAdd.length;
+  };
+
   useEffect(() => {
     let debt = 0, projected = 0, total = 0, reservedClickers = 0;
     const todayKey = todayDateKey();
@@ -1221,9 +1439,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{ 
       userEmail, events, customers, leads, tasks, customForms, activities, settings, updateSettings, sendPortalEmailForCustomer, addEvent, updateEventStatus, updateEvent, deleteEvent,
-      addCustomer, updateCustomer, getCustomerById, addLead, updateLeadStatus, updateLead, convertLeadToCustomer, handlePublicBookingSubmit,
-      sendBookingEmail, sendPortalEmail, sendEventUpdateEmail, addTask, updateTask, toggleTask, updateTaskProgress, deleteTask, importEvents, applyPaymentDatesFromImport, importCustomers, importTasks, importLeads, kpis, integrations, toggleIntegration, syncRemoteBookings,
-      addCustomForm, updateCustomForm, deleteCustomForm, getFormById, syncAllEventsWithCustomers, uploadAllToCloud
+      addCustomer, updateCustomer, getCustomerById, addLead, updateLeadStatus, updateLead, convertLeadToCustomer, cleanupConvertedLeads, handlePublicBookingSubmit,
+      sendBookingEmail, sendPortalEmail, sendEventUpdateEmail, addTask, updateTask, toggleTask, updateTaskProgress, deleteTask, importEvents, applyPaymentDatesFromImport, importCustomers, importTasks, importTaskObjects, importLeads, kpis, integrations, toggleIntegration, syncRemoteBookings,
+      addCustomForm, updateCustomForm, deleteCustomForm, getFormById, syncAllEventsWithCustomers, uploadAllToCloud, reloadFromCloud,
+      cloudSyncOk, lastCloudSyncAt
     }}>
       {children}
     </AppContext.Provider>
