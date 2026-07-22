@@ -1,6 +1,7 @@
 
 export enum EventStatus {
   QuoteSent = 'הצעת מחיר נשלחה',
+  PreliminaryApproval = 'אישור ראשוני',
   Booked = 'שוריין',
   DoneUnpaid = 'בוצע ולא שולם',
   Paid = 'שולם מלא',
@@ -154,6 +155,8 @@ export interface Task {
   potentialRevenue?: number;
   easeOfExecution?: number;
   requiredResources?: string;
+  /** מי יעזור במשימה */
+  helper?: string;
   frequency?: TaskFrequency;
   subTasks?: SubTask[];
 }
