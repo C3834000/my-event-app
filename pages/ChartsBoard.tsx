@@ -3,9 +3,39 @@ import { useApp } from '../context/AppContext';
 import { settingsService } from '../services/supabase';
 import { searchGreenInvoiceIncomeDocuments, type GreenInvoiceIncomeDocument } from '../services/greenInvoice';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, DollarSign, Calendar, Tag, RefreshCw, Wallet, Clock, AlertCircle, CalendarClock, Users, Phone, Plus, Trash2, Heart, ReceiptText, Percent, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
+import { TrendingUp, DollarSign, Calendar, Tag, RefreshCw, Wallet, Clock, AlertCircle, CalendarClock, Users, Phone, Plus, Trash2, Heart, ReceiptText, Percent, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, Pencil, X } from 'lucide-react';
 import { AppEvent, EventStatus, EventType, PaymentStatus } from '../types';
-import { eventCategoryKey, eventYearKey, incomeDateKey, incomeYearKey, parseEventDateKey } from '../services/eventKpi';
+import {
+  eventCategoryKey,
+  eventYearKey,
+  incomeDateKey,
+  incomeYearKey,
+  parseEventDateKey,
+  excludeEventFromKpis,
+  numMoney,
+  eventOpenAmount,
+} from '../services/eventKpi';
+import EditEventModal from '../components/EditEventModal';
+
+type CashflowWeekKind = 'received' | 'expected' | 'eventValue';
+
+type CashflowWeekItem = {
+  key: string;
+  eventId: string;
+  eventTitle: string;
+  customerName: string;
+  phone: string;
+  amount: number;
+  kind: CashflowWeekKind;
+  date: string;
+  paymentStatus: string;
+};
+
+type CashflowDrilldown = {
+  weekKey: string;
+  label: string;
+  series: 'all' | CashflowWeekKind;
+};
 
 const COLORS = ['#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#06b6d4', '#84cc16'];
 
@@ -184,8 +214,9 @@ const MiniMultiSelect: React.FC<{
 };
 
 export default function ChartsBoard() {
-  const { events, customers } = useApp();
+  const { events, customers, reloadFromCloud } = useApp();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const [financeEntries, setFinanceEntries] = useState<FinanceEntry[]>([]);
   const [greenInvoiceIncome, setGreenInvoiceIncome] = useState<GreenInvoiceIncomeDocument[]>([]);
   const [greenInvoiceSyncing, setGreenInvoiceSyncing] = useState(false);
@@ -216,6 +247,8 @@ export default function ChartsBoard() {
   const [selectedReportPaymentStatuses, setSelectedReportPaymentStatuses] = useState<Set<string>>(new Set());
   const [selectedReportEventStatuses, setSelectedReportEventStatuses] = useState<Set<string>>(new Set());
   const [cashflowWindowOffset, setCashflowWindowOffset] = useState(0);
+  const [cashflowDrilldown, setCashflowDrilldown] = useState<CashflowDrilldown | null>(null);
+  const [editingEvent, setEditingEvent] = useState<AppEvent | null>(null);
   const [selectedFinanceMonthIndex, setSelectedFinanceMonthIndex] = useState(() => new Date().getMonth());
   const [financeLoaded, setFinanceLoaded] = useState(false);
 
@@ -343,9 +376,8 @@ export default function ChartsBoard() {
     }
   }, [financeLoaded, greenInvoiceLastSync]);
 
-  const getActualRevenue = (ev: any): number => {
-    return Math.max(ev.paidAmount || 0, 0);
-  };
+  const getActualRevenue = (ev: AppEvent): number => Math.max(numMoney(ev.paidAmount), 0);
+  const getOpenBalance = (ev: AppEvent): number => eventOpenAmount(ev);
 
   const reportFilterOptions = useMemo(() => {
     const years = new Set<string>();
@@ -386,55 +418,131 @@ export default function ChartsBoard() {
       if (selectedReportPaymentStatuses.size > 0 && !selectedReportPaymentStatuses.has(ev.paymentStatus || '')) return false;
       if (selectedReportEventStatuses.size > 0 && !selectedReportEventStatuses.has(ev.status || '')) return false;
 
-      const dateForFilter = reportFilters.dateMode === 'payment' ? incomeDateKey(ev) : eventDateKey(ev);
-      if (!dateForFilter) return false;
-      if (reportFilters.dateFrom && dateForFilter < reportFilters.dateFrom) return false;
-      if (reportFilters.dateTo && dateForFilter > reportFilters.dateTo) return false;
-      return true;
+      const inRange = (d: string | null | undefined) => {
+        if (!d) return false;
+        if (reportFilters.dateFrom && d < reportFilters.dateFrom) return false;
+        if (reportFilters.dateTo && d > reportFilters.dateTo) return false;
+        return true;
+      };
+
+      const eventDate = eventDateKey(ev) || null;
+      const payDate = incomeDateKey(ev);
+      const paid = numMoney(ev.paidAmount);
+
+      if (reportFilters.dateMode === 'payment') {
+        return inRange(payDate);
+      }
+      // במצב תאריך אירוע: גם תשלום שנכנס בטווח (גם אם האירוע עתידי) ייכנס לגרפים
+      return inRange(eventDate) || (paid > 0 && inRange(payDate));
     });
   }, [events, reportFilters, selectedReportYears, selectedReportCategories, selectedReportEventTypes, selectedReportPaymentStatuses, selectedReportEventStatuses]);
 
-  // הכנסות לפי חודש
+  // הכנסות לפי חודש — שולם + יתרה פתוחה (כדי שאירועים שלא שולמו לא ייעלמו מהגרף)
   const revenueByMonth = useMemo(() => {
-    const monthMap: Record<string, number> = {};
+    const monthMap: Record<string, { paid: number; open: number }> = {};
     reportEvents.forEach(ev => {
-      const revenue = getActualRevenue(ev);
-      if (revenue > 0) {
-        const monthKey = monthKeyFromIso(incomeDateKey(ev) || ev.date);
-        monthMap[monthKey] = (monthMap[monthKey] || 0) + revenue;
-      }
+      if (excludeEventFromKpis(ev)) return;
+      const paid = getActualRevenue(ev);
+      const open = getOpenBalance(ev);
+      if (paid <= 0 && open <= 0) return;
+      const monthKey = monthKeyFromIso(
+        (paid > 0 ? incomeDateKey(ev) : null) ||
+          parseEventDateKey(ev.paymentDate) ||
+          eventDateKey(ev) ||
+          ev.date
+      );
+      if (!monthKey) return;
+      if (!monthMap[monthKey]) monthMap[monthKey] = { paid: 0, open: 0 };
+      monthMap[monthKey].paid += paid;
+      monthMap[monthKey].open += open;
     });
     return Object.entries(monthMap)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, revenue]) => ({
+      .map(([month, vals]) => ({
         month: new Date(month + '-01').toLocaleDateString('he-IL', { month: 'short', year: 'numeric' }),
-        revenue
+        paid: Math.round(vals.paid),
+        open: Math.round(vals.open),
+        revenue: Math.round(vals.paid + vals.open),
       }));
   }, [reportEvents]);
 
   // הכנסות לפי סוג אירוע
   const revenueByType = useMemo(() => {
-    const typeMap: Record<string, number> = {};
+    const typeMap: Record<string, { paid: number; open: number }> = {};
     reportEvents.forEach(ev => {
-      const revenue = getActualRevenue(ev);
-      if (revenue > 0) {
-        typeMap[ev.eventType] = (typeMap[ev.eventType] || 0) + revenue;
-      }
+      if (excludeEventFromKpis(ev)) return;
+      const paid = getActualRevenue(ev);
+      const open = getOpenBalance(ev);
+      if (paid <= 0 && open <= 0) return;
+      const type = ev.eventType || 'ללא סוג';
+      if (!typeMap[type]) typeMap[type] = { paid: 0, open: 0 };
+      typeMap[type].paid += paid;
+      typeMap[type].open += open;
     });
-    return Object.entries(typeMap).map(([type, revenue]) => ({ type, revenue }));
+    return Object.entries(typeMap).map(([type, vals]) => ({
+      type,
+      paid: Math.round(vals.paid),
+      open: Math.round(vals.open),
+      revenue: Math.round(vals.paid + vals.open),
+    }));
   }, [reportEvents]);
 
   // הכנסות לפי תג
   const revenueByTag = useMemo(() => {
-    const tagMap: Record<string, number> = {};
+    const tagMap: Record<string, { paid: number; open: number }> = {};
     reportEvents.forEach(ev => {
-      const revenue = getActualRevenue(ev);
-      if (revenue > 0 && ev.tag) {
-        tagMap[ev.tag] = (tagMap[ev.tag] || 0) + revenue;
-      }
+      if (excludeEventFromKpis(ev)) return;
+      const paid = getActualRevenue(ev);
+      const open = getOpenBalance(ev);
+      if (paid <= 0 && open <= 0) return;
+      const tag = (ev.tag || ev.category || 'כללי').trim() || 'כללי';
+      if (!tagMap[tag]) tagMap[tag] = { paid: 0, open: 0 };
+      tagMap[tag].paid += paid;
+      tagMap[tag].open += open;
     });
-    return Object.entries(tagMap).map(([tag, revenue]) => ({ tag, revenue }));
+    return Object.entries(tagMap).map(([tag, vals]) => ({
+      tag,
+      paid: Math.round(vals.paid),
+      open: Math.round(vals.open),
+      revenue: Math.round(vals.paid + vals.open),
+    }));
   }, [reportEvents]);
+
+  /** כל האירועים עם יתרה פתוחה — בלי להסתיר בגלל תאריך תשלום שעבר */
+  const openBalanceEvents = useMemo(() => {
+    return events
+      .filter((ev) => {
+        if (excludeEventFromKpis(ev)) return false;
+        if (selectedReportCategories.size > 0 && !selectedReportCategories.has(eventCategoryKey(ev))) return false;
+        if (selectedReportEventTypes.size > 0 && !selectedReportEventTypes.has(ev.eventType || '')) return false;
+        if (selectedReportPaymentStatuses.size > 0 && !selectedReportPaymentStatuses.has(ev.paymentStatus || '')) return false;
+        if (selectedReportEventStatuses.size > 0 && !selectedReportEventStatuses.has(ev.status || '')) return false;
+        return getOpenBalance(ev) > 0;
+      })
+      .map((ev) => {
+        const customer = customers.find((c) => c.id === ev.customerId);
+        const open = getOpenBalance(ev);
+        const payKey = parseEventDateKey(ev.paymentDate) || '';
+        const todayKey = todayIso();
+        const bucket = !payKey ? 'undated' : payKey < todayKey ? 'overdue' : 'upcoming';
+        return {
+          event: ev,
+          customerName: customer?.name || ev.title || 'ללא שם',
+          phone: customer?.phone || ev.phone || '',
+          open,
+          bucket,
+          sortDate: payKey || eventDateKey(ev) || '9999',
+        };
+      })
+      .sort((a, b) => a.sortDate.localeCompare(b.sortDate) || b.open - a.open);
+  }, [
+    events,
+    customers,
+    selectedReportCategories,
+    selectedReportEventTypes,
+    selectedReportPaymentStatuses,
+    selectedReportEventStatuses,
+  ]);
 
   // מספר אירועים לפי חודש
   const eventsByMonth = useMemo(() => {
@@ -454,28 +562,35 @@ export default function ChartsBoard() {
   // סטטיסטיקות כלליות
   const stats = useMemo(() => {
     let totalRevenue = 0;
+    let totalOpen = 0;
     let paidEventsCount = 0;
-    
+    let openEventsCount = 0;
+
     reportEvents.forEach(ev => {
+      if (excludeEventFromKpis(ev)) return;
       const revenue = getActualRevenue(ev);
+      const open = getOpenBalance(ev);
       if (revenue > 0) {
         totalRevenue += revenue;
         paidEventsCount++;
       }
+      if (open > 0) {
+        totalOpen += open;
+        openEventsCount++;
+      }
     });
-    
+
     const totalEvents = reportEvents.length;
     const avgRevenue = paidEventsCount > 0 ? totalRevenue / paidEventsCount : 0;
-    
-    console.log('📊 דוחות - סטטיסטיקות:', {
+
+    return {
       totalRevenue,
+      totalOpen,
       totalEvents,
-      paidEventsCount,
       avgRevenue,
-      sampleEvents: reportEvents.slice(0, 3).map(e => ({ id: e.id, amount: e.amount, paidAmount: e.paidAmount, paymentStatus: e.paymentStatus }))
-    });
-    
-    return { totalRevenue, totalEvents, avgRevenue, paidEvents: paidEventsCount };
+      paidEvents: paidEventsCount,
+      openEvents: openEventsCount,
+    };
   }, [reportEvents]);
 
   const financeSnapshot = useMemo(() => {
@@ -826,7 +941,8 @@ export default function ChartsBoard() {
   const cashflow = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
+    // תאריך מקומי (לא UTC) — חשוב להפרדה בין «צפוי» ל«באיחור»
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
     const startMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
@@ -871,9 +987,17 @@ export default function ChartsBoard() {
     const startWindow = weekStart(addMonths(centerMonth, -1));
     const endWindow = new Date(centerMonth.getFullYear(), centerMonth.getMonth() + 2, 0);
     endWindow.setHours(23, 59, 59, 999);
-    const weekBuckets: Record<string, { received: number; expected: number; eventValue: number; eventCount: number }> = {};
+    const weekBuckets: Record<string, {
+      received: number;
+      expected: number;
+      eventValue: number;
+      eventCount: number;
+      items: CashflowWeekItem[];
+    }> = {};
     const ensureCashflowWeek = (wk: string) => {
-      if (!weekBuckets[wk]) weekBuckets[wk] = { received: 0, expected: 0, eventValue: 0, eventCount: 0 };
+      if (!weekBuckets[wk]) {
+        weekBuckets[wk] = { received: 0, expected: 0, eventValue: 0, eventCount: 0, items: [] };
+      }
       return weekBuckets[wk];
     };
 
@@ -935,6 +1059,17 @@ export default function ChartsBoard() {
         const bucket = ensureCashflowWeek(weekKey(evDate));
         bucket.eventCount += 1;
         bucket.eventValue += total;
+        bucket.items.push({
+          key: `${ev.id}-v`,
+          eventId: ev.id,
+          eventTitle: ev.title,
+          customerName,
+          phone,
+          amount: total,
+          kind: 'eventValue',
+          date: ev.date,
+          paymentStatus: ev.paymentStatus,
+        });
       }
 
       // ===== חלק ששולם בפועל =====
@@ -943,7 +1078,19 @@ export default function ChartsBoard() {
         if (recDateStr) {
           const recDate = new Date(recDateStr);
           if (recDate >= startWindow && recDate <= endWindow) {
-            ensureCashflowWeek(weekKey(recDate)).received += paid;
+            const bucket = ensureCashflowWeek(weekKey(recDate));
+            bucket.received += paid;
+            bucket.items.push({
+              key: `${ev.id}-r`,
+              eventId: ev.id,
+              eventTitle: ev.title,
+              customerName,
+              phone,
+              amount: paid,
+              kind: 'received',
+              date: recDateStr,
+              paymentStatus: ev.paymentStatus,
+            });
           }
           if (recDate >= startMonth && recDate <= endMonth) receivedThisMonth += paid;
           if (recDate >= startWeek && recDate <= endWeek) receivedThisWeek += paid;
@@ -973,9 +1120,9 @@ export default function ChartsBoard() {
           expectedDate = addDaysIso(ev.date, 30);
         } else if (ev.paymentStatus === PaymentStatus.Net60 && ev.date) {
           expectedDate = addDaysIso(ev.date, 60);
-        } else if (ev.date && ev.date >= todayStr) {
-          expectedDate = ev.date;
         }
+        // אין השלמה אוטומטית לפי תאריך האירוע:
+        // מחיקת תאריך תשלום = «חוב ללא תאריך» (לפי בקשת המשתמש)
 
         // אגירה לסיכום הלקוח
         if (!customerMap[customerKey]) {
@@ -993,7 +1140,19 @@ export default function ChartsBoard() {
         if (expectedDate) {
           const ed = new Date(expectedDate);
           if (ed >= startWindow && ed <= endWindow) {
-            ensureCashflowWeek(weekKey(ed)).expected += outstanding;
+            const bucket = ensureCashflowWeek(weekKey(ed));
+            bucket.expected += outstanding;
+            bucket.items.push({
+              key: `${ev.id}-e`,
+              eventId: ev.id,
+              eventTitle: ev.title,
+              customerName,
+              phone,
+              amount: outstanding,
+              kind: 'expected',
+              date: expectedDate,
+              paymentStatus: ev.paymentStatus,
+            });
           }
           if (ed >= startMonth && ed <= endMonth) expectedThisMonth += outstanding;
           if (ed >= startWeek && ed <= endWeek) expectedThisWeek += outstanding;
@@ -1031,11 +1190,18 @@ export default function ChartsBoard() {
       .filter(c => c.total > 0)
       .sort((a, b) => b.total - a.total);
 
-    // רק תקבולים מהיום ואילך
+    // תקבולים מהיום ואילך (כולל שולם/צפי)
     const futureInflows = inflows
       .filter(x => x.date >= todayStr)
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 120);
+
+    // חוב פתוח שתאריך התשלום שלו כבר עבר — לא נעלם מהמסך
+    const overdueInflows = inflows
+      .filter(x => x.status === 'expected' && x.date < todayStr)
+      .sort((a, b) => a.date.localeCompare(b.date) || b.amount - a.amount)
+      .slice(0, 200);
+    const overdueTotal = overdueInflows.reduce((sum, x) => sum + x.amount, 0);
 
     undatedItems.sort((a, b) => b.amount - a.amount);
 
@@ -1051,6 +1217,7 @@ export default function ChartsBoard() {
         expected: Math.round(vals.expected),
         eventValue: Math.round(vals.eventValue),
         eventCount: vals.eventCount,
+        items: vals.items,
       };
       });
     const activeWeeks = weeklyData.length || 1;
@@ -1066,6 +1233,7 @@ export default function ChartsBoard() {
       expectedThisMonth,
       expectedThisWeek,
       undatedTotal,
+      overdueTotal,
       totalOutstanding,
       weeklyData,
       averageWeeklyIncome,
@@ -1074,10 +1242,58 @@ export default function ChartsBoard() {
       windowLabel: `${startWindow.toLocaleDateString('he-IL')} - ${endWindow.toLocaleDateString('he-IL')}`,
       centerMonthLabel: centerMonth.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' }),
       futureInflows,
+      overdueInflows,
       undatedItems,
       byCustomer,
     };
   }, [events, customers, cashflowWindowOffset]);
+
+  useEffect(() => {
+    setCashflowDrilldown(null);
+  }, [cashflowWindowOffset]);
+
+  // בפתיחת המסך — משיכת אירועים מהענן כדי שלא יישארו חסרים מקומית
+  useEffect(() => {
+    void reloadFromCloud().catch(() => {});
+    // רק בטעינה ראשונה של המסך
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const cashflowDrillItems = useMemo(() => {
+    if (!cashflowDrilldown) return [];
+    const row = cashflow.weeklyData.find((w) => w.weekKey === cashflowDrilldown.weekKey);
+    if (!row?.items?.length) return [];
+    const filtered =
+      cashflowDrilldown.series === 'all'
+        ? row.items
+        : row.items.filter((i) => i.kind === cashflowDrilldown.series);
+    return [...filtered].sort((a, b) => b.amount - a.amount || a.date.localeCompare(b.date));
+  }, [cashflow.weeklyData, cashflowDrilldown]);
+
+  const openCashflowWeek = (row: any, series: CashflowDrilldown['series'] = 'all') => {
+    const payload = row?.payload || row;
+    if (!payload?.weekKey) return;
+    setCashflowDrilldown({
+      weekKey: payload.weekKey,
+      label: payload.label || payload.weekKey,
+      series,
+    });
+  };
+
+  const openEventEditor = (eventId: string) => {
+    const ev = events.find((e) => e.id === eventId);
+    if (ev) setEditingEvent(ev);
+  };
+
+  const kindLabel = (kind: CashflowWeekKind) =>
+    kind === 'received' ? 'נכנס' : kind === 'expected' ? 'צפי' : 'שווי אירוע';
+
+  const kindChipClass = (kind: CashflowWeekKind) =>
+    kind === 'received'
+      ? 'bg-emerald-100 text-emerald-700'
+      : kind === 'expected'
+        ? 'bg-amber-100 text-amber-800'
+        : 'bg-sky-100 text-sky-700';
 
   return (
     <div className="p-8 space-y-8" dir="rtl">
@@ -1092,8 +1308,23 @@ export default function ChartsBoard() {
             <p className="text-slate-500 font-bold">ניתוח פיננסי מעמיק</p>
           </div>
         </div>
-        <button onClick={() => setRefreshKey(k => k + 1)} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg hover:bg-purple-700 transition-all">
-          <RefreshCw size={18} /> רענן נתונים
+        <button
+          type="button"
+          disabled={refreshing}
+          onClick={async () => {
+            setRefreshing(true);
+            try {
+              await reloadFromCloud();
+              setRefreshKey((k) => k + 1);
+            } catch (e) {
+              alert((e as Error).message || 'רענון מהענן נכשל');
+            } finally {
+              setRefreshing(false);
+            }
+          }}
+          className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg hover:bg-purple-700 transition-all disabled:opacity-60"
+        >
+          <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} /> {refreshing ? 'מרענן…' : 'רענן מהענן'}
         </button>
       </div>
 
@@ -1176,20 +1407,108 @@ export default function ChartsBoard() {
         </div>
       </div>
 
-      {stats.totalEvents === 0 ? (
+      {events.length === 0 ? (
         <div className="bg-gradient-to-br from-slate-50 to-purple-50 p-12 rounded-2xl border-2 border-purple-100 text-center">
           <p className="text-xl font-bold text-slate-500">אין אירועים במערכת עדיין</p>
-          <p className="text-sm text-slate-400 mt-2">הוסף אירועים כדי לראות דוחות וגרפים</p>
+          <p className="text-sm text-slate-400 mt-2">לחצו «רענן מהענן» או הוסיפו אירועים</p>
         </div>
       ) : (
         <>
           <div className="bg-gradient-to-br from-slate-50 to-purple-50 p-6 rounded-2xl border-2 border-purple-100 mb-4">
             <p className="text-sm text-slate-600 font-bold text-center">
-              הדוחות מבוססים על <span className="text-purple-700 font-black">{stats.totalEvents}</span> אירועים במערכת, 
-              מתוכם <span className="text-green-700 font-black">{stats.paidEvents}</span> אירועים ששולמו 
-              בסכום כולל של <span className="text-purple-700 font-black">₪{stats.totalRevenue.toLocaleString()}</span>
+              במערכת <span className="text-purple-700 font-black">{events.length}</span> אירועים
+              {' · '}בסינון הנוכחי <span className="text-purple-700 font-black">{stats.totalEvents}</span>
+              {' · '}שולמו <span className="text-green-700 font-black">{stats.paidEvents}</span>
+              {' · '}יתרה פתוחה <span className="text-rose-700 font-black">₪{openBalanceEvents.reduce((s, x) => s + x.open, 0).toLocaleString()}</span>
+              {' '}({openBalanceEvents.length} אירועים)
             </p>
           </div>
+
+      {/* חובות פתוחים — בראש הדף, לא רק בתחתית התזרים */}
+      <div className="bg-white p-5 rounded-2xl shadow-md border-2 border-red-200 mb-6" key={`open-${refreshKey}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div>
+            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+              <AlertCircle size={20} className="text-red-500" />
+              כל האירועים עם יתרה פתוחה
+            </h3>
+            <p className="text-[11px] font-bold text-slate-500">
+              {openBalanceEvents.length} אירועים · באיחור / צפוי / ללא תאריך · כולל דורון, מוריה וכו׳ אם יש יתרה
+            </p>
+          </div>
+          <div className="text-sm font-black text-rose-700">
+            סה״כ ₪{openBalanceEvents.reduce((s, x) => s + x.open, 0).toLocaleString()}
+          </div>
+        </div>
+        {openBalanceEvents.length === 0 ? (
+          <p className="text-sm text-slate-400 font-bold py-6 text-center">
+            אין יתרות פתוחות בנתונים שנטענו. נסו «רענן מהענן».
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-slate-200 max-h-[22rem]">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-slate-50 text-[11px] font-black text-slate-500">
+                <tr>
+                  <th className="text-right px-3 py-2">מצב</th>
+                  <th className="text-right px-3 py-2">ת. תשלום</th>
+                  <th className="text-right px-3 py-2">ת. אירוע</th>
+                  <th className="text-right px-3 py-2">לקוח / כותרת</th>
+                  <th className="text-right px-3 py-2 hidden md:table-cell">אירוע</th>
+                  <th className="text-right px-3 py-2">סטטוס</th>
+                  <th className="text-right px-3 py-2">יתרה</th>
+                  <th className="text-right px-3 py-2">פעולה</th>
+                </tr>
+              </thead>
+              <tbody>
+                {openBalanceEvents.map((row) => (
+                  <tr key={row.event.id} className="border-t border-slate-100 hover:bg-slate-50/80">
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-block px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                          row.bucket === 'overdue'
+                            ? 'bg-red-100 text-red-700'
+                            : row.bucket === 'upcoming'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-rose-100 text-rose-700'
+                        }`}
+                      >
+                        {row.bucket === 'overdue' ? 'באיחור' : row.bucket === 'upcoming' ? 'צפוי' : 'ללא תאריך'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 font-bold text-slate-700 whitespace-nowrap">
+                      {row.event.paymentDate
+                        ? new Date(row.event.paymentDate + 'T12:00:00').toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                        : '—'}
+                    </td>
+                    <td className="px-3 py-2 font-bold text-slate-700 whitespace-nowrap">
+                      {row.event.date
+                        ? new Date(row.event.date + 'T12:00:00').toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                        : '—'}
+                    </td>
+                    <td className="px-3 py-2 font-black text-slate-800 max-w-[160px] truncate" title={row.customerName}>
+                      {row.customerName}
+                    </td>
+                    <td className="px-3 py-2 text-slate-500 max-w-[180px] truncate hidden md:table-cell" title={row.event.title}>
+                      {row.event.title}
+                    </td>
+                    <td className="px-3 py-2"><StatusChip status={row.event.paymentStatus} /></td>
+                    <td className="px-3 py-2 font-black text-rose-700 whitespace-nowrap">₪{row.open.toLocaleString()}</td>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => openEventEditor(row.event.id)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 text-white text-[10px] font-black hover:bg-slate-700"
+                      >
+                        <Pencil size={11} /> עריכה
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6" key={refreshKey}>
         <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-2xl border-2 border-purple-200">
@@ -1219,13 +1538,13 @@ export default function ChartsBoard() {
           <p className="text-xs text-green-600 mt-2 font-bold">מחושב מאירועים ששולמו</p>
         </div>
 
-        <div className="bg-gradient-to-br from-pink-50 to-pink-100 p-6 rounded-2xl border-2 border-pink-200">
+        <div className="bg-gradient-to-br from-rose-50 to-rose-100 p-6 rounded-2xl border-2 border-rose-200">
           <div className="flex items-center gap-3 mb-2">
-            <Tag size={24} className="text-pink-600" />
-            <span className="text-sm font-black text-pink-600">אירועים ששולמו</span>
+            <AlertCircle size={24} className="text-rose-600" />
+            <span className="text-sm font-black text-rose-600">יתרה פתוחה</span>
           </div>
-          <p className="text-3xl font-black text-pink-800">{stats.paidEvents}</p>
-          <p className="text-xs text-pink-600 mt-2 font-bold">{Math.round((stats.paidEvents / stats.totalEvents) * 100)}% מכלל האירועים</p>
+          <p className="text-3xl font-black text-rose-800">₪{stats.totalOpen.toLocaleString()}</p>
+          <p className="text-xs text-rose-600 mt-2 font-bold">{stats.openEvents} אירועים עדיין לא שולמו במלואם</p>
         </div>
       </div>
 
@@ -1765,7 +2084,16 @@ export default function ChartsBoard() {
             <p className="text-[10px] text-purple-600 font-bold mt-1">כולל יתרות ללא תאריך</p>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl border-2 border-rose-200 shadow-md col-span-2 lg:col-span-2">
+          <div className="bg-white p-4 rounded-2xl border-2 border-red-300 shadow-md">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertCircle size={16} className="text-red-600" />
+              <span className="text-xs font-black text-red-600">באיחור</span>
+            </div>
+            <p className="text-2xl font-black text-red-800">₪{cashflow.overdueTotal.toLocaleString()}</p>
+            <p className="text-[10px] text-red-600 font-bold mt-1">{cashflow.overdueInflows.length} אירועים — תאריך תשלום עבר</p>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border-2 border-rose-200 shadow-md">
             <div className="flex items-center gap-2 mb-1">
               <AlertCircle size={16} className="text-rose-600" />
               <span className="text-xs font-black text-rose-600">יתרה ללא תאריך</span>
@@ -1777,17 +2105,30 @@ export default function ChartsBoard() {
 
         {/* גרף עמודות לפי שבוע */}
         <div className="bg-white p-5 rounded-2xl shadow-md border border-slate-100 mb-6">
-          <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+          <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2">
             <CalendarClock size={22} className="text-emerald-500" />
             תזרים שבועי – 3 חודשים מול העיניים
             <span className="text-xs text-slate-500 font-bold mr-2">חודש קודם, חודש נוכחי וחודש הבא לפי שבוע</span>
           </h3>
-          <ResponsiveContainer width="100%" height={520}>
-            <BarChart data={cashflow.weeklyData} margin={{ bottom: 35, right: 10, left: 10 }}>
+          <p className="text-xs text-slate-500 font-bold mb-3">
+            לחצו על קוביית שבוע מתחת לגרף (או על העמודה עצמה) כדי לפתוח את טבלת האירועים
+          </p>
+
+          <ResponsiveContainer width="100%" height={420}>
+            <BarChart
+              data={cashflow.weeklyData}
+              margin={{ bottom: 8, right: 8, left: 8, top: 8 }}
+              onClick={(state: any) => {
+                const row = state?.activePayload?.[0]?.payload;
+                if (row?.weekKey) openCashflowWeek(row, 'all');
+              }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="label" tick={{ fontSize: 13, fontWeight: 'bold' }} angle={-35} textAnchor="end" interval={0} height={70} />
+              {/* תוויות האלכסון הוחלפו בקוביות לחיצות מתחת לגרף */}
+              <XAxis dataKey="label" tick={false} axisLine={false} tickLine={false} height={4} />
               <YAxis
-                tick={{ fontSize: 13, fontWeight: 'bold' }}
+                width={48}
+                tick={{ fontSize: 12, fontWeight: 'bold' }}
                 tickFormatter={(v) => `₪${(v / 1000).toFixed(0)}K`}
               />
               <Tooltip
@@ -1797,6 +2138,7 @@ export default function ChartsBoard() {
                   borderRadius: '12px',
                   fontWeight: 'bold',
                   direction: 'rtl',
+                  pointerEvents: 'none',
                 }}
                 formatter={(value: number, name: string) => [
                   `₪${value.toLocaleString()}`,
@@ -1807,7 +2149,7 @@ export default function ChartsBoard() {
                 ]}
                 labelFormatter={(label, payload) => {
                   const row = payload?.[0]?.payload;
-                  return `שבוע: ${label}${row?.eventCount ? ` · ${row.eventCount} אירועים` : ''}`;
+                  return `שבוע: ${label}${row?.eventCount ? ` · ${row.eventCount} אירועים` : ''} · בחרו קוביה מתחת לגרף`;
                 }}
               />
               <Legend
@@ -1818,25 +2160,261 @@ export default function ChartsBoard() {
                 )}
                 wrapperStyle={{ fontWeight: 'bold' }}
               />
-              <Bar dataKey="received" stackId="cash" fill="#10b981" />
-              <Bar dataKey="expected" stackId="cash" fill="#f59e0b" radius={[8, 8, 0, 0]} />
-              <Bar dataKey="eventValue" fill="#38bdf8" radius={[8, 8, 0, 0]} />
+              <Bar
+                dataKey="received"
+                stackId="cash"
+                fill="#10b981"
+                cursor="pointer"
+                onClick={(data: any) => openCashflowWeek(data, 'received')}
+              />
+              <Bar
+                dataKey="expected"
+                stackId="cash"
+                fill="#f59e0b"
+                radius={[8, 8, 0, 0]}
+                cursor="pointer"
+                onClick={(data: any) => openCashflowWeek(data, 'expected')}
+              />
+              <Bar
+                dataKey="eventValue"
+                fill="#38bdf8"
+                radius={[8, 8, 0, 0]}
+                cursor="pointer"
+                onClick={(data: any) => openCashflowWeek(data, 'eventValue')}
+              />
             </BarChart>
           </ResponsiveContainer>
+
+          {/* קוביות שבוע במקום התוויות האלכסוניות — מיושרות לעמודות הגרף */}
+          <div className="mt-1 flex items-start gap-0" dir="ltr">
+            <div className="w-12 shrink-0" aria-hidden />
+            <div
+              className="flex-1 grid gap-1"
+              style={{ gridTemplateColumns: `repeat(${Math.max(cashflow.weeklyData.length, 1)}, minmax(0, 1fr))` }}
+            >
+              {cashflow.weeklyData.map((week) => {
+                const active = cashflowDrilldown?.weekKey === week.weekKey;
+                const hasData = (week.items?.length || 0) > 0 || week.received > 0 || week.expected > 0 || week.eventValue > 0;
+                const [startLabel = '', endLabel = ''] = String(week.label || '').split('-');
+                return (
+                  <button
+                    key={week.weekKey}
+                    type="button"
+                    title={`שבוע ${week.label}${hasData ? ` · ${week.items?.length || 0} שורות` : ' · ללא נתונים'}`}
+                    onClick={() => openCashflowWeek(week, 'all')}
+                    className={`min-h-[3.25rem] px-0.5 py-1.5 rounded-lg border text-center transition-colors leading-tight ${
+                      active
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
+                        : hasData
+                          ? 'bg-white text-slate-700 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50'
+                          : 'bg-slate-50 text-slate-300 border-slate-100 hover:border-slate-200'
+                    }`}
+                  >
+                    <div className={`text-[10px] sm:text-[11px] font-black ${active ? 'text-white' : hasData ? 'text-slate-800' : 'text-slate-300'}`}>
+                      {startLabel}
+                    </div>
+                    <div className={`text-[9px] sm:text-[10px] font-bold ${active ? 'text-emerald-100' : hasData ? 'text-slate-400' : 'text-slate-200'}`}>
+                      {endLabel}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="w-2 shrink-0" aria-hidden />
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-bold text-slate-400">כל קוביה = שבוע אחד מתחת לעמודה שלה בגרף</p>
+            {cashflowDrilldown && (
+              <button
+                type="button"
+                onClick={() => setCashflowDrilldown(null)}
+                className="text-[11px] font-black text-slate-500 hover:text-slate-800"
+              >
+                נקה בחירה
+              </button>
+            )}
+          </div>
+
           <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-bold">
             <div className="bg-emerald-50 text-emerald-700 rounded-xl px-3 py-2">ממוצע הכנסה שבועית: ₪{Math.round(cashflow.averageWeeklyIncome).toLocaleString()}</div>
             <div className="bg-purple-50 text-purple-700 rounded-xl px-3 py-2">ממוצע הכנסה חודשית: ₪{Math.round(cashflow.averageMonthlyIncome).toLocaleString()}</div>
             <div className="bg-sky-50 text-sky-700 rounded-xl px-3 py-2">ממוצע שווי אירועים שבועי: ₪{Math.round(cashflow.averageWeeklyEventValue).toLocaleString()}</div>
           </div>
+
+          {cashflowDrilldown && (
+            <div className="mt-5 border-2 border-emerald-200 rounded-2xl bg-emerald-50/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <div>
+                  <h4 className="text-base font-black text-slate-800">
+                    אירועי השבוע {cashflowDrilldown.label}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 font-bold">
+                    {cashflowDrillItems.length} שורות · לחצו «עריכה» לפתיחת כרטיס האירוע
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCashflowDrilldown(null)}
+                  className="inline-flex items-center gap-1 text-xs font-black text-slate-500 hover:text-slate-800 bg-white border border-slate-200 px-3 py-1.5 rounded-lg"
+                >
+                  <X size={14} /> סגור
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2 mb-3">
+                {([
+                  ['all', 'הכל'],
+                  ['received', 'נכנס בפועל'],
+                  ['expected', 'צפי להיכנס'],
+                  ['eventValue', 'שווי אירועים'],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setCashflowDrilldown((prev) => prev ? { ...prev, series: key } : prev)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black border transition-colors ${
+                      cashflowDrilldown.series === key
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {cashflowDrillItems.length === 0 ? (
+                <p className="text-sm text-slate-400 font-bold py-6 text-center">אין אירועים בסינון הזה לשבוע שנבחר</p>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white max-h-80">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-slate-50 text-[11px] font-black text-slate-500">
+                      <tr>
+                        <th className="text-right px-3 py-2">תאריך</th>
+                        <th className="text-right px-3 py-2">סוג</th>
+                        <th className="text-right px-3 py-2">לקוח</th>
+                        <th className="text-right px-3 py-2 hidden md:table-cell">אירוע</th>
+                        <th className="text-right px-3 py-2">סטטוס</th>
+                        <th className="text-right px-3 py-2">סכום</th>
+                        <th className="text-right px-3 py-2">פעולה</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cashflowDrillItems.map((item) => (
+                        <tr key={item.key} className="border-t border-slate-100 hover:bg-slate-50/80">
+                          <td className="px-3 py-2 font-bold text-slate-700 whitespace-nowrap">
+                            {item.date
+                              ? new Date(item.date + 'T12:00:00').toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' })
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className={`inline-block px-1.5 py-0.5 rounded-md text-[10px] font-black ${kindChipClass(item.kind)}`}>
+                              {kindLabel(item.kind)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 font-black text-slate-800 max-w-[140px] truncate" title={item.customerName}>
+                            {item.customerName}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500 max-w-[180px] truncate hidden md:table-cell" title={item.eventTitle}>
+                            {item.eventTitle}
+                          </td>
+                          <td className="px-3 py-2"><StatusChip status={item.paymentStatus} /></td>
+                          <td className="px-3 py-2 font-black text-slate-800 whitespace-nowrap">₪{item.amount.toLocaleString()}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1">
+                              {item.phone && (
+                                <a
+                                  href={`tel:${item.phone}`}
+                                  title={item.phone}
+                                  className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50"
+                                >
+                                  <Phone size={12} />
+                                </a>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => openEventEditor(item.eventId)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 text-white text-[10px] font-black hover:bg-slate-700"
+                              >
+                                <Pencil size={11} /> עריכה
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* רשימות פירוט */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-4 gap-6">
+          {/* באיחור — תאריך תשלום עבר ועדיין לא שולם */}
+          <div className="bg-white p-5 rounded-2xl shadow-md border-2 border-red-200">
+            <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2">
+              <AlertCircle size={20} className="text-red-500" />
+              באיחור – תאריך תשלום עבר
+            </h3>
+            <p className="text-[11px] font-bold text-red-600 mb-3">
+              סה״כ ₪{cashflow.overdueTotal.toLocaleString()} · {cashflow.overdueInflows.length} אירועים
+            </p>
+            {cashflow.overdueInflows.length === 0 ? (
+              <p className="text-sm text-slate-400 font-bold py-8 text-center">
+                אין חובות באיחור 🎉
+              </p>
+            ) : (
+              <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
+                {cashflow.overdueInflows.map((item) => (
+                  <div
+                    key={item.key}
+                    className="flex items-center gap-2 p-2 rounded-lg border bg-red-50 border-red-200"
+                  >
+                    <div className="text-[11px] font-black text-red-700 shrink-0 w-14 text-center bg-white rounded-md py-1 border border-red-200">
+                      {new Date(item.date + 'T12:00:00').toLocaleDateString('he-IL', {
+                        day: '2-digit',
+                        month: '2-digit',
+                      })}
+                    </div>
+                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                      <span className="text-sm font-black text-slate-800 truncate">{item.customerName}</span>
+                      <span className="text-xs text-slate-400 truncate hidden sm:inline" title={item.eventTitle}>
+                        · {item.eventTitle}
+                      </span>
+                      <StatusChip status={item.paymentStatus} />
+                    </div>
+                    {item.phone && (
+                      <a
+                        href={`tel:${item.phone}`}
+                        title={item.phone}
+                        className="shrink-0 w-7 h-7 rounded-full bg-white border border-red-200 flex items-center justify-center text-red-600 hover:bg-red-50"
+                      >
+                        <Phone size={12} />
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => openEventEditor(item.eventId)}
+                      className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 text-white text-[10px] font-black hover:bg-slate-700"
+                    >
+                      <Pencil size={11} /> עריכה
+                    </button>
+                    <div className="shrink-0 text-sm font-black text-red-700 whitespace-nowrap">
+                      ₪{item.amount.toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* תקבולים צפויים */}
           <div className="bg-white p-5 rounded-2xl shadow-md border border-slate-100">
             <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
               <Clock size={20} className="text-amber-500" />
-              תקבולים צפויים – הימים הקרובים
+              תקבולים צפויים – מהיום והלאה
             </h3>
             {cashflow.futureInflows.length === 0 ? (
               <p className="text-sm text-slate-400 font-bold py-8 text-center">
@@ -1853,14 +2431,12 @@ export default function ChartsBoard() {
                         : 'bg-amber-50 border-amber-200'
                     }`}
                   >
-                    {/* תאריך */}
                     <div className="text-[11px] font-black text-slate-700 shrink-0 w-14 text-center bg-white rounded-md py-1 border border-slate-200">
-                      {new Date(item.date).toLocaleDateString('he-IL', {
+                      {new Date(item.date + 'T12:00:00').toLocaleDateString('he-IL', {
                         day: '2-digit',
                         month: '2-digit',
                       })}
                     </div>
-                    {/* שם + אירוע + סטטוס – שורה אחת */}
                     <div className="min-w-0 flex-1 flex items-center gap-2">
                       <span className="text-sm font-black text-slate-800 truncate">{item.customerName}</span>
                       <span className="text-xs text-slate-400 truncate hidden sm:inline" title={item.eventTitle}>
@@ -1868,17 +2444,22 @@ export default function ChartsBoard() {
                       </span>
                       <StatusChip status={item.paymentStatus} />
                     </div>
-                    {/* טלפון – אייקון בלבד */}
                     {item.phone && (
                       <a
                         href={`tel:${item.phone}`}
                         title={item.phone}
-                        className="shrink-0 w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-purple-600 hover:bg-purple-50 hover:border-purple-400 transition-colors"
+                        className="shrink-0 w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50"
                       >
                         <Phone size={12} />
                       </a>
                     )}
-                    {/* סכום */}
+                    <button
+                      type="button"
+                      onClick={() => openEventEditor(item.eventId)}
+                      className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 text-white text-[10px] font-black hover:bg-slate-700"
+                    >
+                      <Pencil size={11} /> עריכה
+                    </button>
                     <div
                       className={`shrink-0 text-sm font-black whitespace-nowrap ${
                         item.status === 'received' ? 'text-emerald-700' : 'text-amber-700'
@@ -2001,12 +2582,17 @@ export default function ChartsBoard() {
         {/* פוטר סיכום */}
         <div className="mt-6 bg-white/60 backdrop-blur p-4 rounded-2xl border border-emerald-200 text-center">
           <p className="text-sm font-bold text-slate-700">
-            סה"כ יתרה פתוחה (כל החובות):{' '}
+            סה"כ יתרה פתוחה:{' '}
             <span className="text-lg font-black text-rose-700">
               ₪{cashflow.totalOutstanding.toLocaleString()}
             </span>
             {' · '}
-            מתוכה ללא תאריך מוגדר:{' '}
+            באיחור:{' '}
+            <span className="text-lg font-black text-red-700">
+              ₪{cashflow.overdueTotal.toLocaleString()}
+            </span>
+            {' · '}
+            ללא תאריך:{' '}
             <span className="text-lg font-black text-rose-700">
               ₪{cashflow.undatedTotal.toLocaleString()}
             </span>
@@ -2018,10 +2604,11 @@ export default function ChartsBoard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* הכנסות לפי חודש */}
         <div className="bg-white p-6 rounded-2xl shadow-lg border-2 border-slate-100">
-          <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
+          <h2 className="text-xl font-black text-slate-800 mb-2 flex items-center gap-3">
             <Calendar size={24} className="text-purple-500" />
             הכנסות לפי חודש
           </h2>
+          <p className="text-xs font-bold text-slate-500 mb-4">סגול = שולם · כתום = יתרה פתוחה (כולל אירועים שטרם שולמו)</p>
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={revenueByMonth} margin={{ bottom: 20, right: 10, left: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -2044,10 +2631,18 @@ export default function ChartsBoard() {
                   fontWeight: 'bold',
                   direction: 'rtl'
                 }}
-                formatter={(value: number) => [`₪${value.toLocaleString()}`, 'הכנסה']}
+                formatter={(value: number, name: string) => [
+                  `₪${Number(value || 0).toLocaleString()}`,
+                  name === 'paid' ? 'שולם' : name === 'open' ? 'יתרה פתוחה' : name,
+                ]}
                 labelFormatter={(label) => `חודש: ${label}`}
               />
-              <Bar dataKey="revenue" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+              <Legend
+                formatter={(v) => (v === 'paid' ? 'שולם' : v === 'open' ? 'יתרה פתוחה' : v)}
+                wrapperStyle={{ fontWeight: 'bold' }}
+              />
+              <Bar dataKey="paid" stackId="rev" fill="#8b5cf6" />
+              <Bar dataKey="open" stackId="rev" fill="#f59e0b" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -2124,7 +2719,12 @@ export default function ChartsBoard() {
                 <div key={index} className="flex items-center gap-3 text-sm">
                   <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
                   <span className="font-bold text-slate-700 flex-1 min-w-0 truncate">{entry.type}</span>
-                  <span className="font-black text-slate-900 shrink-0">₪{entry.revenue.toLocaleString()}</span>
+                  <span className="font-black text-slate-900 shrink-0 text-left">
+                    ₪{entry.revenue.toLocaleString()}
+                    {entry.open > 0 && (
+                      <span className="block text-[10px] text-amber-600 font-bold">מתוכם פתוח ₪{entry.open.toLocaleString()}</span>
+                    )}
+                  </span>
                 </div>
               ))}
             </div>
@@ -2166,6 +2766,13 @@ export default function ChartsBoard() {
         )}
       </div>
         </>
+      )}
+
+      {editingEvent && (
+        <EditEventModal
+          event={editingEvent}
+          onClose={() => setEditingEvent(null)}
+        />
       )}
     </div>
   );
