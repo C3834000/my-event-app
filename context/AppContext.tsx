@@ -926,16 +926,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (event && updates.paymentStatus && updates.paymentStatus !== event.paymentStatus) {
       addActivity('system', `סטטוס אירוע עודכן: ${event.title} - ${updates.paymentStatus}`);
     }
-    setEvents(prev => prev.map(e => {
-      if (e.id !== id) return e;
-      const updated = { ...e, ...updates };
-      const isPaidStatus = [PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck, PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider].includes(updated.paymentStatus);
-      if (isPaidStatus && updates.paymentStatus && updated.paidAmount < updated.amount) {
-        updated.paidAmount = updated.amount;
+
+    // חשוב: אם מסמנים "שולם" בלי paidAmount — משלימים סכום + תאריך תשלום גם לענן,
+    // אחרת הגרפים נשענים על paidAmount=0 / סנכרון מוחק את המילוי המקומי.
+    const patch: Partial<AppEvent> = { ...updates };
+    if (event) {
+      const nextStatus = (patch.paymentStatus ?? event.paymentStatus) as PaymentStatus;
+      const isPaidStatus = isPaidForKpi(nextStatus);
+      const nextAmount = numMoney(patch.amount !== undefined ? patch.amount : event.amount);
+      const nextPaid = numMoney(patch.paidAmount !== undefined ? patch.paidAmount : event.paidAmount);
+      if (patch.paymentStatus && isPaidStatus && nextPaid < nextAmount) {
+        patch.paidAmount = nextAmount;
       }
-      return updated;
-    }));
-    cloudSync(() => eventsService.update(id, updates));
+      const nextPaymentDate = patch.paymentDate !== undefined ? patch.paymentDate : event.paymentDate;
+      if (patch.paymentStatus && isPaidStatus && !nextPaymentDate) {
+        patch.paymentDate = todayDateKey();
+      }
+    }
+
+    setEvents(prev => prev.map(e => (e.id === id ? { ...e, ...patch } : e)));
+    cloudSync(() => eventsService.update(id, patch));
   };
   const deleteEvent = (id: string) => {
     recordDeletedIds('events', [id]);
