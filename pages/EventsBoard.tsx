@@ -10,7 +10,10 @@ import { EVENT_TAGS } from '../constants/eventBoard';
 import { giDocTypeName } from '../services/greenInvoice';
 import { eventHasOpenBalance, eventYearKey } from '../services/eventKpi';
 
-const TODAY_KEY = () => new Date().toISOString().slice(0, 10);
+const TODAY_KEY = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const YEAR_START_KEY = () => `${new Date().getFullYear()}-01-01`;
 const normalizeEventTag = (tag?: string) => {
   const raw = (tag || 'קליכיף').trim() || 'קליכיף';
@@ -344,7 +347,7 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
 };
 
 const EventsBoard: React.FC = () => {
-  const { events, customers, getCustomerById, importEvents, addTask, updateEvent, applyPaymentDatesFromImport } = useApp();
+  const { events, customers, getCustomerById, importEvents, addTask, updateEvent, applyPaymentDatesFromImport, reloadFromCloud } = useApp();
   const [searchParams] = useSearchParams();
   const highlightEventId = searchParams.get('eventId');
   const [searchTerm, setSearchTerm] = useState('');
@@ -364,6 +367,7 @@ const EventsBoard: React.FC = () => {
   const [dateFrom, setDateFrom] = useState(YEAR_START_KEY());
   const [dateTo, setDateTo] = useState(TODAY_KEY());
   const [newTask, setNewTask] = useState({ title: '', category: 'כללי' as any, priority: 3 });
+  const [cloudRefreshing, setCloudRefreshing] = useState(false);
   
   const ALL_EVENT_TYPE_VALUES = Object.values(EventType);
 
@@ -372,6 +376,23 @@ const EventsBoard: React.FC = () => {
     events.forEach(e => { if (e.eventType) types.add(e.eventType); });
     return Array.from(types);
   }, [events]);
+
+  const allPaymentStatuses = useMemo(() => {
+    const s = new Set<string>(Object.values(PaymentStatus));
+    events.forEach(e => { if (e.paymentStatus) s.add(e.paymentStatus); });
+    return Array.from(s);
+  }, [events]);
+
+  const allEventStatuses = useMemo(() => {
+    const s = new Set<string>(Object.values(EventStatus));
+    events.forEach(e => { if (e.status) s.add(e.status); });
+    return Array.from(s);
+  }, [events]);
+
+  useEffect(() => {
+    void reloadFromCloud().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     try {
@@ -408,20 +429,55 @@ const EventsBoard: React.FC = () => {
     setSelectedEventTypes(new Set());
     setSelectedPaymentStatuses(new Set());
     setSelectedEventStatuses(new Set());
-    setDateFrom(YEAR_START_KEY());
-    setDateTo(TODAY_KEY());
+    // בלי טווח תאריכים — אחרת אירועים משנים קודמות / מעבר להיום נשארים מוסתרים
+    setDateFrom('');
+    setDateTo('');
+    setViewMode('all');
     localStorage.removeItem(EVENT_FILTERS_STORAGE_KEY);
+  };
+
+  /** מנקה סינונים ופותח קבוצות כדי להציג תוצאות חיפוש מוסתרות */
+  const revealHiddenSearchResults = () => {
+    clearAllFilters();
+    setCollapsedGroups((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        next[k] = false;
+      });
+      return next;
+    });
+    const firstId = hiddenByFilters[0]?.id;
+    if (firstId) {
+      window.setTimeout(() => {
+        const el = document.getElementById(`event-row-${firstId}`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el?.classList.add('ring-4', 'ring-amber-400', 'ring-offset-2', 'rounded-xl');
+        window.setTimeout(() => el?.classList.remove('ring-4', 'ring-amber-400', 'ring-offset-2', 'rounded-xl'), 2500);
+      }, 150);
+    }
   };
 
   const filtered = useMemo(() => {
       return events.filter(e => {
-        const cust = getCustomerById(e.customerId);
+        const cust = e.customerId ? getCustomerById(e.customerId) : undefined;
         const s = searchTerm.toLowerCase();
-        const match = e.title.toLowerCase().includes(s) || cust?.name.toLowerCase().includes(s) || (e.externalId || '').toLowerCase().includes(s);
+        const title = String(e.title || '').toLowerCase();
+        const match =
+          !s ||
+          title.includes(s) ||
+          (cust?.name || '').toLowerCase().includes(s) ||
+          String(e.externalId || '').toLowerCase().includes(s) ||
+          String(e.phone || '').includes(searchTerm.trim()) ||
+          String(e.email || '').toLowerCase().includes(s);
         const yearMatch = selectedYears.size === 0 || selectedYears.has(eventYearKey(e));
         const categoryMatch = selectedCategories.size === 0 || selectedCategories.has(getBusinessCategory(e));
         const typeMatch = selectedEventTypes.size === 0 || selectedEventTypes.has(e.eventType || '');
-        const paymentStatusMatch = selectedPaymentStatuses.size === 0 || selectedPaymentStatuses.has(e.paymentStatus || '');
+        // תאימות לסינון ישן: «לא שולם» ≡ «טרם שולם»
+        const paymentStatusMatch =
+          selectedPaymentStatuses.size === 0 ||
+          selectedPaymentStatuses.has(e.paymentStatus || '') ||
+          (e.paymentStatus === PaymentStatus.NotPaid && selectedPaymentStatuses.has('לא שולם')) ||
+          (e.paymentStatus === 'לא שולם' && selectedPaymentStatuses.has(PaymentStatus.NotPaid));
         const eventStatusMatch = selectedEventStatuses.size === 0 || selectedEventStatuses.has(e.status || '');
         const eventDate = dateKey(e.date);
         const dateMatch = isFutureEvent(e) || ((!dateFrom || eventDate >= dateFrom) && (!dateTo || eventDate <= dateTo));
@@ -429,6 +485,23 @@ const EventsBoard: React.FC = () => {
         return match && yearMatch && categoryMatch && typeMatch && paymentStatusMatch && eventStatusMatch && dateMatch && modeMatch;
       });
   }, [events, searchTerm, getCustomerById, viewMode, selectedYears, selectedCategories, selectedEventTypes, selectedPaymentStatuses, selectedEventStatuses, dateFrom, dateTo]);
+
+  /** אירועים שתואמים לחיפוש אבל מוסתרים בגלל סינון פעיל */
+  const hiddenByFilters = useMemo(() => {
+    const s = searchTerm.trim().toLowerCase();
+    if (!s) return [] as AppEvent[];
+    const filteredIds = new Set(filtered.map(e => e.id));
+    return events.filter(e => {
+      if (filteredIds.has(e.id)) return false;
+      const title = String(e.title || '').toLowerCase();
+      const cust = e.customerId ? getCustomerById(e.customerId) : undefined;
+      return (
+        title.includes(s) ||
+        (cust?.name || '').toLowerCase().includes(s) ||
+        String(e.phone || '').includes(searchTerm.trim())
+      );
+    });
+  }, [searchTerm, events, filtered, getCustomerById]);
 
   const groupedEvents = useMemo(() => {
       const groups: Record<string, AppEvent[]> = {};
@@ -575,6 +648,23 @@ const EventsBoard: React.FC = () => {
           >
             <Plus size={18} /> הוסף אירוע
           </button>
+          <button
+            type="button"
+            disabled={cloudRefreshing}
+            onClick={async () => {
+              setCloudRefreshing(true);
+              try {
+                await reloadFromCloud();
+              } catch (e) {
+                alert((e as Error).message || 'רענון מהענן נכשל');
+              } finally {
+                setCloudRefreshing(false);
+              }
+            }}
+            className="bg-white border px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-slate-50 transition-all disabled:opacity-60"
+          >
+            <Download size={18} /> {cloudRefreshing ? 'מרענן…' : 'רענן מהענן'}
+          </button>
           <button type="button" onClick={() => fileInputRef.current?.click()} className="bg-white border px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-slate-50 transition-all"><Upload size={18} /> ייבוא</button>
           <button type="button" title="קובץ נתוני אירועים: Item ID + תאריך תשלום" onClick={() => paymentCsvRef.current?.click()} className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-amber-100 transition-all"><CalendarIcon size={18} /> תאריכי תשלום</button>
           <button onClick={() => setViewMode(v => v === 'all' ? 'unpaid' : 'all')} className={`px-4 py-2 rounded-xl font-bold transition-all shadow-sm ${viewMode === 'unpaid' ? 'bg-red-500 text-white' : 'bg-white text-slate-700 border'}`}>
@@ -652,15 +742,15 @@ const EventsBoard: React.FC = () => {
               />
               <MultiSelectFilter
                 label="סטטוס תשלום"
-                options={Object.values(PaymentStatus)}
+                options={allPaymentStatuses}
                 selected={selectedPaymentStatuses}
                 onChange={setSelectedPaymentStatuses}
                 onSave={saveFilters}
-                getCount={(status) => events.filter(e => e.paymentStatus === status).length}
+                getCount={(status) => events.filter(e => e.paymentStatus === status || (status === PaymentStatus.NotPaid && e.paymentStatus === 'לא שולם')).length}
               />
               <MultiSelectFilter
                 label="סטטוס אירוע"
-                options={Object.values(EventStatus)}
+                options={allEventStatuses}
                 selected={selectedEventStatuses}
                 onChange={setSelectedEventStatuses}
                 onSave={saveFilters}
@@ -674,7 +764,7 @@ const EventsBoard: React.FC = () => {
                     value={dateFrom}
                     onChange={e => setDateFrom(e.target.value)}
                     className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-purple-100"
-                    title="מתאריך"
+                    title="מתאריך (ריק = ללא הגבלה)"
                   />
                   <span className="text-xs text-slate-400">עד</span>
                   <input
@@ -682,8 +772,17 @@ const EventsBoard: React.FC = () => {
                     value={dateTo}
                     onChange={e => setDateTo(e.target.value)}
                     className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-purple-100"
-                    title="עד תאריך"
+                    title="עד תאריך (ריק = ללא הגבלה)"
                   />
+                  {(dateFrom || dateTo) && (
+                    <button
+                      type="button"
+                      onClick={() => { setDateFrom(''); setDateTo(''); }}
+                      className="text-[10px] font-black text-slate-500 hover:text-slate-800 underline"
+                    >
+                      נקה תאריכים
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -694,6 +793,33 @@ const EventsBoard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {hiddenByFilters.length > 0 && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1">
+            <p className="text-sm font-black text-amber-900">
+              נמצאו {hiddenByFilters.length} אירועים שתואמים לחיפוש אבל מוסתרים בגלל הסינון הפעיל
+            </p>
+            <p className="text-xs font-bold text-amber-800 mt-1">
+              {hiddenByFilters.slice(0, 5).map(e => e.title).join(' · ')}
+              {hiddenByFilters.length > 5 ? '…' : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={revealHiddenSearchResults}
+            className="shrink-0 bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-amber-700"
+          >
+            נקה סינונים והצג
+          </button>
+        </div>
+      )}
+
+      {searchTerm.trim() && filtered.length === 0 && hiddenByFilters.length === 0 && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm font-bold text-slate-600">
+          לא נמצא אירוע תואם בנתונים שנטענו. נסו «רענן מהענן» או בדקו את החיפוש.
+        </div>
+      )}
 
       <div className="space-y-4">
         {Object.entries(groupedEvents).map(([group, list]: [string, any]) => {
