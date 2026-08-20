@@ -5,7 +5,7 @@ import { LayoutDashboard, Calendar, Users, Briefcase, CheckSquare, Settings, Fil
 import { useApp } from '../context/AppContext';
 
 const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
-  const { userEmail } = useApp();
+  const { userEmail, cloudSyncOk, lastCloudSyncAt, reloadFromCloud } = useApp();
 
   const navItems = [
     { to: '/', label: 'דאשבורד', icon: LayoutDashboard },
@@ -61,6 +61,25 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
 
       {/* Footer - Fixed */}
       <div className="p-4 border-t border-slate-700 bg-slate-800/50 shrink-0">
+        {!cloudSyncOk && (
+          <button
+            type="button"
+            onClick={() => void reloadFromCloud().catch(() => {})}
+            className="w-full mb-3 px-2 py-2 rounded-lg bg-slate-900/80 border border-amber-500/40 hover:border-amber-400 text-right transition-colors"
+            title="לחצו לסנכרון מיידי מהענן"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span className="text-[11px] font-black text-amber-300">לא מסונכרן — לחצו לרענון</span>
+            </div>
+            {lastCloudSyncAt && (
+              <p className="text-[10px] text-slate-500 mt-1 font-bold">
+                עדכון אחרון:{' '}
+                {new Date(lastCloudSyncAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
+          </button>
+        )}
         <div className="flex items-center gap-3 mb-4 px-2">
            <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center font-bold text-white shadow-lg border border-purple-400">
               {userEmail.charAt(0).toUpperCase()}
