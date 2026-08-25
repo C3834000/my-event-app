@@ -942,6 +942,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (patch.paymentStatus && isPaidStatus && !nextPaymentDate) {
         patch.paymentDate = todayDateKey();
       }
+      // "טרם שולם" = לא התקבל כסף בפועל: מאפסים את paidAmount כדי שלא יישאר סכום ישן
+      // שגורם לאירוע להיראות סגור/שולם (למשל אחרי שסומן בעבר "שולם"). תאריך התשלום נשמר כתאריך צפוי.
+      if (patch.paymentStatus === PaymentStatus.NotPaid) {
+        patch.paidAmount = 0;
+      }
     }
 
     setEvents(prev => prev.map(e => (e.id === id ? { ...e, ...patch } : e)));
