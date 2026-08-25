@@ -230,7 +230,7 @@ export default function ChartsBoard() {
   const [financeFilters, setFinanceFilters] = useState({
     dateFrom: yearStartIso(),
     dateTo: todayIso(),
-    source: 'gi' as 'gi' | 'systemAndGi',
+    source: 'systemAndGi' as 'gi' | 'systemAndGi',
     includePaid: true,
     includeDated: true,
     includeFuture: true,
@@ -663,12 +663,26 @@ export default function ChartsBoard() {
         }
       });
 
-      // במקור "מערכת + חשבונית ירוקה": מוסיפים גם תשלומים שנרשמו באירועים במערכת
+      // במקור "מערכת + חשבונית ירוקה": מוסיפים גם תשלומים שנרשמו באירועים במערכת —
+      // אך מדלגים על אירוע שכבר יש לו מסמך חשבונית ירוקה מסונכרן, כדי למנוע ספירה כפולה.
       if (financeFilters.source === 'systemAndGi') {
+        const giDocIds = new Set(
+          greenInvoiceIncome.map(d => String(d.id || '').trim()).filter(Boolean)
+        );
+        const giDocNumbers = new Set(
+          greenInvoiceIncome.map(d => String(d.number ?? '').trim()).filter(Boolean)
+        );
+        const alreadyInGreenInvoice = (ev: AppEvent) => {
+          const id = String(ev.giDocId || '').trim();
+          const num = String(ev.giDocNumber ?? '').trim();
+          return (!!id && giDocIds.has(id)) || (!!num && giDocNumbers.has(num));
+        };
+
         reportEvents.forEach(ev => {
           if (ev.status === EventStatus.Cancelled) return;
           const paidGross = Math.max(Number(ev.paidAmount || 0), 0);
           if (paidGross <= 0) return;
+          if (alreadyInGreenInvoice(ev)) return; // כבר נספר דרך חשבונית ירוקה
           const actualDate = ev.paymentDate || ev.date;
           const actualMonth = monthKeyFromIso(actualDate);
           if (actualMonth.startsWith(String(currentYear)) && inDateRange(actualDate)) {
@@ -1635,8 +1649,8 @@ export default function ChartsBoard() {
                 onChange={e => setFinanceFilters(prev => ({ ...prev, source: e.target.value as 'gi' | 'systemAndGi' }))}
                     className="w-full bg-white text-xs font-black border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-100 text-slate-700"
               >
+                <option value="systemAndGi">מערכת + חשבונית ירוקה (ללא כפילות)</option>
                 <option value="gi">חשבונית ירוקה בלבד</option>
-                <option value="systemAndGi">נתוני המערכת + חשבונית ירוקה</option>
               </select>
                 </div>
             </div>
