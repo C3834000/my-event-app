@@ -374,6 +374,42 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
             />
           </div>
           <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-400">סכום ששולם בפועל (₪)</label>
+            <input
+              type="number"
+              className="w-full p-2 bg-slate-50 border rounded-lg"
+              value={formData.paidAmount || 0}
+              onChange={e => setFormData({ ...formData, paidAmount: Number(e.target.value) })}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-400">סטטוס תשלום</label>
+            <select
+              className="w-full p-2 border rounded-lg font-bold"
+              value={formData.paymentStatus}
+              onChange={e => setFormData({ ...formData, paymentStatus: e.target.value as PaymentStatus })}
+            >
+              {Object.values(PaymentStatus).map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
+              בחירת סטטוס «שולם…» תעדכן אוטומטית את הסכום ששולם ותשקף בדוחות ובגרפים.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-400">סטטוס אירוע</label>
+            <select
+              className="w-full p-2 border rounded-lg font-bold"
+              value={formData.status}
+              onChange={e => setFormData({ ...formData, status: e.target.value as EventStatus })}
+            >
+              {Object.values(EventStatus).map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
             <label className="text-xs font-bold text-slate-400">תאריך</label>
             <input
               type="date"
