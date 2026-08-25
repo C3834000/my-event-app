@@ -1018,11 +1018,6 @@ export default function ChartsBoard() {
       x.setDate(x.getDate() + days);
       return x;
     };
-    const addMonths = (d: Date, months: number) => {
-      const x = new Date(d);
-      x.setMonth(x.getMonth() + months);
-      return x;
-    };
     const isoFromDate = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const monthKey = (d: Date) =>
@@ -1036,8 +1031,9 @@ export default function ChartsBoard() {
     };
 
     const centerMonth = new Date(today.getFullYear(), today.getMonth() + cashflowWindowOffset, 1);
-    const startWindow = weekStart(addMonths(centerMonth, -1));
-    const endWindow = new Date(centerMonth.getFullYear(), centerMonth.getMonth() + 2, 0);
+    // תצוגת חודש בודד: מתחילת השבוע של ה-1 בחודש ועד סוף אותו חודש
+    const startWindow = weekStart(centerMonth);
+    const endWindow = new Date(centerMonth.getFullYear(), centerMonth.getMonth() + 1, 0);
     endWindow.setHours(23, 59, 59, 999);
     const weekBuckets: Record<string, {
       received: number;
