@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import { Task, TaskCategory, TaskPriority, TaskFrequency, SubTask } from '../types';
 import { Check, Trash2, Plus, Edit, X, Upload, Search, Filter, ChevronDown, ChevronLeft, ListTree } from 'lucide-react';
 import { parseCSV } from '../services/utils';
-import { TASK_CATEGORIES, TASK_CATEGORY_ORDER, buildTasksSeed } from '../data/tasksSeed';
+import { TASK_CATEGORIES, buildTasksSeed } from '../data/tasksSeed';
 
 const CATEGORIES: TaskCategory[] = TASK_CATEGORIES;
 
@@ -76,6 +76,117 @@ const endOfWeekDate = () => {
   return d.toISOString().slice(0, 10);
 };
 
+const DAY_NAMES = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'שבת'];
+
+const startOfDay = (d: Date) => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+
+const toDateKey = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+/** תחילת השבוע (יום ראשון) לתאריך נתון */
+const startOfWeekSunday = (d: Date) => {
+  const x = startOfDay(d);
+  x.setDate(x.getDate() - x.getDay());
+  return x;
+};
+
+const addDays = (d: Date, n: number) => {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+};
+
+const formatShortDate = (d: Date) => `${d.getDate()}.${d.getMonth() + 1}`;
+
+type TaskTimeGroup = {
+  key: string;
+  label: string;
+  kind: 'day' | 'week' | 'other';
+  tasks: Task[];
+};
+
+const buildTimeGroups = (list: Task[]): TaskTimeGroup[] => {
+  const today = startOfDay(new Date());
+  const thisWeekStart = startOfWeekSunday(today);
+  const thisWeekEnd = addDays(thisWeekStart, 6);
+
+  type Bucket = { key: string; label: string; kind: TaskTimeGroup['kind']; sort: number; tasks: Task[] };
+  const buckets = new Map<string, Bucket>();
+
+  const ensure = (key: string, label: string, kind: TaskTimeGroup['kind'], sort: number) => {
+    let b = buckets.get(key);
+    if (!b) {
+      b = { key, label, kind, sort, tasks: [] };
+      buckets.set(key, b);
+    }
+    return b;
+  };
+
+  for (const task of list) {
+    if (!task.dueDate) {
+      ensure('nodate', 'בלי תאריך', 'other', 9_000_000).tasks.push(task);
+      continue;
+    }
+    const due = startOfDay(new Date(task.dueDate + 'T12:00:00'));
+    if (Number.isNaN(due.getTime())) {
+      ensure('nodate', 'בלי תאריך', 'other', 9_000_000).tasks.push(task);
+      continue;
+    }
+
+    const dueKey = toDateKey(due);
+    const weekStart = startOfWeekSunday(due);
+
+    if (due < thisWeekStart) {
+      // לפני השבוע הנוכחי — קיבוץ לפי שבוע
+      const weekEnd = addDays(weekStart, 6);
+      const key = `past-${toDateKey(weekStart)}`;
+      ensure(
+        key,
+        `שבוע שעבר · ${formatShortDate(weekStart)}–${formatShortDate(weekEnd)}`,
+        'week',
+        weekStart.getTime() - 1_000_000_000_000,
+      ).tasks.push(task);
+    } else if (due <= thisWeekEnd) {
+      // השבוע הנוכחי — קיבוץ לפי יום
+      const name = DAY_NAMES[due.getDay()];
+      const isToday = dueKey === toDateKey(today);
+      const label = isToday ? `היום · ${name} ${formatShortDate(due)}` : `${name} ${formatShortDate(due)}`;
+      ensure(`day-${dueKey}`, label, 'day', due.getTime()).tasks.push(task);
+    } else {
+      // שבועות הבאים
+      const weekEnd = addDays(weekStart, 6);
+      const nextWeekStart = addDays(thisWeekStart, 7);
+      const isNext = toDateKey(weekStart) === toDateKey(nextWeekStart);
+      const key = `week-${toDateKey(weekStart)}`;
+      const label = isNext
+        ? `שבוע הבא · ${formatShortDate(weekStart)}–${formatShortDate(weekEnd)}`
+        : `שבוע ${formatShortDate(weekStart)}–${formatShortDate(weekEnd)}`;
+      ensure(key, label, 'week', weekStart.getTime()).tasks.push(task);
+    }
+  }
+
+  return [...buckets.values()]
+    .sort((a, b) => a.sort - b.sort)
+    .map(({ key, label, kind, tasks }) => ({
+      key,
+      label,
+      kind,
+      tasks: [...tasks].sort((a, b) => {
+        if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
+        if ((a.dueTime || '') !== (b.dueTime || '')) return (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99');
+        return b.priority - a.priority;
+      }),
+    }));
+};
+
 const cellInput =
   'w-full bg-transparent border-0 outline-none text-sm py-1 px-1 rounded focus:bg-white focus:ring-1 focus:ring-sky-300 placeholder:text-slate-300';
 
@@ -96,33 +207,19 @@ const TasksBoard: React.FC = () => {
   const quickInputRef = useRef<HTMLInputElement>(null);
 
   const filteredTasks = useMemo(() => {
-    const catRank = (c: string) => {
-      const i = TASK_CATEGORY_ORDER.indexOf(c as TaskCategory);
-      return i === -1 ? 999 : i;
-    };
-    return tasks
-      .filter((task) => {
-        const matchesSearch =
-          task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (task.subTasks || []).some((st) => st.title.toLowerCase().includes(searchTerm.toLowerCase()));
-        const matchesCategory = filterCategory === 'all' || task.category === filterCategory;
-        const matchesStatus =
-          filterStatus === 'all' ||
-          (filterStatus === 'completed' ? task.isCompleted : !task.isCompleted);
-        return matchesSearch && matchesCategory && matchesStatus;
-      })
-      .sort((a, b) => {
-        const catDiff = catRank(a.category) - catRank(b.category);
-        if (catDiff !== 0) return catDiff;
-        if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
-        const aOverdue = !!(a.dueDate && new Date(a.dueDate) < new Date() && !a.isCompleted);
-        const bOverdue = !!(b.dueDate && new Date(b.dueDate) < new Date() && !b.isCompleted);
-        if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
-        if (!!a.dueDate !== !!b.dueDate) return a.dueDate ? -1 : 1;
-        if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
-        return b.priority - a.priority;
-      });
+    return tasks.filter((task) => {
+      const matchesSearch =
+        task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (task.subTasks || []).some((st) => st.title.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesCategory = filterCategory === 'all' || task.category === filterCategory;
+      const matchesStatus =
+        filterStatus === 'all' ||
+        (filterStatus === 'completed' ? task.isCompleted : !task.isCompleted);
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
   }, [tasks, searchTerm, filterCategory, filterStatus]);
+
+  const taskGroups = useMemo(() => buildTimeGroups(filteredTasks), [filteredTasks]);
 
   const toggleSubExpand = (taskId: string) => {
     setExpandedSubs((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
@@ -355,7 +452,33 @@ const TasksBoard: React.FC = () => {
                 </tr>
               )}
 
-              {filteredTasks.map((task, idx) => {
+              {taskGroups.map((group, gIdx) => (
+                <React.Fragment key={group.key}>
+                  <tr>
+                    <td
+                      colSpan={9}
+                      className={
+                        group.kind === 'day'
+                          ? `px-3 ${gIdx > 0 ? 'pt-4' : 'pt-2'} pb-1.5 bg-gradient-to-l from-sky-50/80 to-white border-t border-sky-100`
+                          : `px-3 ${gIdx > 0 ? 'pt-7' : 'pt-3'} pb-2 bg-gradient-to-l from-slate-100 to-white border-t-2 border-slate-200`
+                      }
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={
+                            group.kind === 'day'
+                              ? 'text-xs font-black text-sky-800'
+                              : 'text-sm font-black text-slate-700'
+                          }
+                        >
+                          {group.label}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-400">{group.tasks.length}</span>
+                        <div className={`flex-1 h-px ${group.kind === 'day' ? 'bg-sky-100' : 'bg-slate-200'}`} />
+                      </div>
+                    </td>
+                  </tr>
+                  {group.tasks.map((task, idx) => {
                 const overdue = !!(task.dueDate && new Date(task.dueDate) < new Date() && !task.isCompleted);
                 const dayLabel = formatDayLabel(task);
                 const subs = task.subTasks || [];
@@ -681,7 +804,9 @@ const TasksBoard: React.FC = () => {
                   )}
                   </React.Fragment>
                 );
-              })}
+                  })}
+                </React.Fragment>
+              ))}
 
               {/* Quick add row */}
               <tr className="bg-sky-50/40 border-t border-sky-100">

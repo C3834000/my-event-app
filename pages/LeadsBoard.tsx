@@ -1,16 +1,35 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { LeadStatus, Lead } from '../types';
 import { UserPlus, X, Phone, MessageCircle, Edit, Mail, CheckCircle, Loader2, ExternalLink, Upload } from 'lucide-react';
 
+/** מזהה זמן למיון: לידים חדשים (l_timestamp) יופיעו ראשונים */
+const leadRecencyKey = (lead: Lead): number => {
+  if (lead.lastUpdatedAt) {
+    const t = Date.parse(lead.lastUpdatedAt);
+    if (!Number.isNaN(t)) return t;
+  }
+  const m = String(lead.id || '').match(/(\d{10,})/);
+  return m ? Number(m[1]) : 0;
+};
+
 const LeadsBoard: React.FC = () => {
-  const { leads, addLead, convertLeadToCustomer, updateLead, sendPortalEmail, importLeads } = useApp();
+  const { leads, addLead, convertLeadToCustomer, updateLead, sendPortalEmail, importLeads, cleanupConvertedLeads } = useApp();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void cleanupConvertedLeads?.().then((removed) => {
+      if (removed > 0) {
+        setSuccessMsg(`נוקו ${removed} לידים שכבר הפכו ללקוחות`);
+        setTimeout(() => setSuccessMsg(null), 4000);
+      }
+    }).catch(() => {});
+  }, [cleanupConvertedLeads]);
 
   const WHATSAPP_NUMBER = '0529934000';
 
@@ -174,7 +193,10 @@ const LeadsBoard: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
            {[LeadStatus.New, LeadStatus.Contacted, LeadStatus.Qualified].map(status => {
-             const leadsInStatus = leads.filter(l => l.status === status);
+             const leadsInStatus = leads
+               .filter(l => l.status === status)
+               .slice()
+               .sort((a, b) => leadRecencyKey(b) - leadRecencyKey(a));
              return (
                <div key={status} className="bg-slate-50/50 rounded-2xl p-4 min-h-[500px] border border-slate-200">
                   <h3 className="font-bold text-slate-700 mb-5">{status} ({leadsInStatus.length})</h3>

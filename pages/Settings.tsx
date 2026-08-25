@@ -168,11 +168,39 @@ const Settings: React.FC = () => {
 
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="text-lg font-bold text-slate-800 mb-4 pb-2 border-b flex items-center gap-2">
-                  <Calendar size={20} className="text-slate-400" /> יומנים
+                  <Calendar size={20} className="text-emerald-600" /> סנכרון ליומן Google
                 </h3>
-                <div className="space-y-3">
+                <p className="text-sm text-slate-600 mb-4 leading-relaxed">
+                  המערכת מפרסמת פיד יומן חי מכל האירועים. מחברים פעם אחת בגוגל, ואז האירועים מתעדכנים אוטומטית כשגוגל מרענן את הפיד.
+                </p>
+                <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 mb-4">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">כתובת הפיד</div>
+                  <code className="block text-xs sm:text-sm font-mono text-slate-800 break-all select-all">
+                    https://myecrm2026.netlify.app/api/calendar.ics
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('https://myecrm2026.netlify.app/api/calendar.ics');
+                      alert('הכתובת הועתקה');
+                    }}
+                    className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700"
+                  >
+                    העתק כתובת
+                  </button>
+                </div>
+                <ol className="text-sm text-slate-700 space-y-2 list-decimal pr-5 mb-4 font-medium">
+                  <li>פתח <a className="text-purple-600 font-bold hover:underline" href="https://calendar.google.com/calendar/u/0/r/settings/addbyurl" target="_blank" rel="noopener noreferrer">הוספת יומן לפי כתובת</a></li>
+                  <li>הדבק את כתובת הפיד למעלה</li>
+                  <li>לחץ Add calendar / הוסף יומן</li>
+                  <li>וודא שהיומן “קליכיף - אירועים” מסומן כגלוי</li>
+                </ol>
+                <p className="text-xs text-slate-500 mb-4">
+                  גוגל לא תמיד מרענן מיד — לפעמים זה לוקח בין כמה דקות לכמה שעות. אחרי שינוי ב־CRM האירוע יופיע בפיד מיד, והיומן יימשך בעדכון הבא.
+                </p>
+                <div className="space-y-3 border-t border-slate-100 pt-4">
                   <label className="flex items-center justify-between gap-4 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 cursor-pointer">
-                    <span className="text-sm font-medium text-slate-700">Google Calendar</span>
+                    <span className="text-sm font-medium text-slate-700">Google Calendar (תצוגה בהגדרות)</span>
                     <input
                       type="checkbox"
                       className="w-5 h-5 accent-purple-600"

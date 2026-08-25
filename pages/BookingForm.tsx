@@ -9,7 +9,7 @@ const TERMS_TEXT = `אישור תנאי הזמנה
 
 2. הגברה ומקרן הכלולים במחיר מתייחסים לארוע של עד כ 200 איש. כשמס' המשתתפים גבוה יותר מחיר ההגברה וההקרנה משתנה בהתאם. בהשכרת קליק פור יו לא כלול ציוד הגברה והקרנה.
 
-3. הכנת החידון תתבצע באתר הייעודי של חברת קליכיף. מאתר זה גם תתבצע הורדת התוכנה. קישור להורדת החידון והפעלת התוכנה יישלח במייל עם ביצוע התשלום ושליחת אסמכתא. האחריות על תוכן השאלות וסימון התשובות היא על מכין החידון, כולל השאלות שנמצאות במאגר השאלות שלנו.
+3. הכנת החידון תתבצע באתר הייעודי של חברת קליכיף. מאתר זה גם תתבצע הורדת התוכנה. קישור להורדת החידון והפעלת התוכנה יישלח במייל עם ביצוע התשלום ושליחת אסמכתא. האחריות על תוכן השאלות וסימון התשובות היא על מכין החידון, כולל השאלות שנמצאות במאגר השאלות שלנו. סגירת החידון והורדתו חייבות להתבצע לכל המאוחר 24 שעות לפני האירוע, כדי למנוע תקלות ובעיות שקשה לתת להן מענה בזמן אמת.
 
 4. בעת הזמנת האירוע תקבלו קישור להורדת חוברת הוראות וסרטון הדרכה. בהשכרת ערכה, חובה על השוכר לבדוק ולוודא 24 שעות לפני קיום האירוע, או לפחות בטווח זמן סביר לפני האירוע, שהכול עובד כראוי.
 
@@ -25,7 +25,7 @@ const TERMS_TEXT = `אישור תנאי הזמנה
 
 10. אם מיקום האירוע הינו במקום שיש שם בעיות חניה נא ציינו זאת בטופס.
 
-11. משלוחים ואיסוף: האחריות לדאוג למשלוח הלוך וחזור, או לאיסוף והחזרה של הערכה, היא על הלקוח. עם זאת, אנו משתדלים לבוא לקראת הלקוחות ולסייע ככל האפשר בתיאום ובהוזלת עלויות המשלוח, בהתאם לזמינות ולאזור.
+11. משלוחים ואיסוף: המשלוח הלוך וחזור אינו כלול במחיר. מקום האיסוף וההחזרה ייקבע בתיאום לקראת האירוע ולאחריו. האחריות לדאוג למשלוח הלוך וחזור, או לאיסוף והחזרה של הערכה, היא על הלקוח. עם זאת, אנו משתדלים לבוא לקראת הלקוחות ולסייע ככל האפשר בתיאום ובהוזלת עלויות המשלוח, בהתאם לזמינות ולאזור.
 
 12. השוכר מתחייב להחזיר את הערכה למחרת האירוע עד השעה 11:00. כל יום איחור בהחזרת הערכה, ללא אישור ותיאום מראש, יחייב את השוכר בקנס של 100 ₪ ליום.
 
@@ -49,6 +49,10 @@ const BookingForm: React.FC = () => {
   const prefDate = searchParams.get('prefDate');
   const prefTime = searchParams.get('prefTime');
   const prefParticipants = searchParams.get('prefParticipants');
+  // הגיע מעורך החידונים (Quikhiv) — אחרי שליחת הטופס נסמן את הלקוח כמשלם
+  // ומגבלת 25 השאלות בעורך תשוחרר אוטומטית.
+  const quikhivUid = searchParams.get('quikhivUid');
+  const quikhivEmail = searchParams.get('quikhivEmail');
   const formConfig = customForms[0];
   const bookingFields = useMemo(() => {
     if (!formConfig) return [];
@@ -89,6 +93,10 @@ const BookingForm: React.FC = () => {
             if (f.mapping === 'phone') initial[f.id] = source.phone;
             if (f.mapping === 'email') initial[f.id] = source.email || '';
         });
+      } else if (quikhivEmail) {
+        // הגיע מעורך החידונים — ממלאים מראש את המייל של חשבון העורך
+        const ef = bookingFields.find(f => f.mapping === 'email');
+        if (ef) initial[ef.id] = quikhivEmail;
       }
       if (prefDate) {
         const df = bookingFields.find(f => f.mapping === 'date');
@@ -117,7 +125,7 @@ const BookingForm: React.FC = () => {
       }
       setFormData(initial);
     }
-  }, [bookingFields, formConfig, leads, customers, leadId, customerId, prefDate, prefTime, prefParticipants]);
+  }, [bookingFields, formConfig, leads, customers, leadId, customerId, prefDate, prefTime, prefParticipants, quikhivEmail]);
 
   const handleInputChange = (fieldId: string, mapping: string | undefined, value: any) => {
     setFormData(prev => {
@@ -159,6 +167,19 @@ const BookingForm: React.FC = () => {
       setSubmittedCustomerId(result.customerId);
       setIsSubmitted(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // שחרור מגבלת 25 השאלות בעורך החידונים (Quikhiv) — לכל מי שמילא טופס.
+      // ההתאמה: uid (כשהגיע מהעורך) → מייל → טלפון (תופס נרשמים במייל אחר).
+      // fire-and-forget: כשל כאן לא פוגע בקליטת ההזמנה.
+      fetch('/.netlify/functions/quikhiv-mark-paid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: quikhivUid || '',
+          email: payload.email || quikhivEmail || '',
+          phone: payload.phone || '',
+        }),
+      }).catch(err => console.warn('quikhiv-mark-paid failed (non-fatal):', err));
     } catch (err) {
       alert(err instanceof Error ? err.message : 'שגיאה בשליחת הטופס. נסה שוב או פנה למשרד.');
     } finally {
@@ -357,6 +378,15 @@ const BookingForm: React.FC = () => {
 
         <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-slate-100">
            <form onSubmit={handleSubmit} className="p-8 md:p-14 space-y-8">
+              <div className="bg-blue-50 border-r-4 border-blue-500 rounded-2xl p-5 flex items-start gap-3">
+                <div className="text-2xl shrink-0">📞</div>
+                <div className="text-right">
+                  <h4 className="font-black text-blue-900 mb-1">גם אירוע טלפוני (פון קליק)?</h4>
+                  <p className="text-blue-800 font-bold text-sm leading-relaxed">
+                    גם אירוע טלפוני מחייב מילוי טופס הזמנת אירוע זה. בנוסף, יש להיכנס לאתר הכנת החידון הרגיל ולהכין את החידון — בדיוק כמו בכל אירוע.
+                  </p>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {bookingFields.map(field => (
                     <div key={field.id} className={`space-y-2 ${field.type === 'textarea' ? 'md:col-span-2' : ''}`}>

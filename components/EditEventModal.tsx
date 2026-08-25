@@ -10,6 +10,8 @@ import {
   convertGreenInvoiceDocument,
   giDocTypeName,
   giAllowedConversions,
+  resolveGreenInvoiceEmail,
+  GREEN_INVOICE_ROUTE_TAG,
 } from '../services/greenInvoice';
 import { EVENT_TAGS } from '../constants/eventBoard';
 
@@ -76,18 +78,20 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
   }, [customers, customerSearch]);
 
   const handleSave = async () => {
-    if (Number(formData.amount || 0) > 0 && !formData.paymentDate) {
-      alert('יש למלא תאריך תשלום מוסכם. ככלל התשלום לפני האירוע, ואם סוכם אחרת חשוב שיהיה תאריך ברור.');
-      return;
-    }
+    // בעריכה פנימית אפשר להשאיר / למחוק תאריך תשלום (למשל אירועים ללא מועד מוסכם).
+    // בטופס הזמנה ציבורי השדה נשאר חובה בנפרד.
+    const payload = {
+      ...formData,
+      paymentDate: formData.paymentDate ? String(formData.paymentDate).slice(0, 10) : '',
+    };
     if (isNew) {
-      addEvent(formData);
+      addEvent(payload);
     } else {
-      updateEvent(formData.id, formData);
+      updateEvent(formData.id, payload);
       const customerEmail = (formData.email || getCustomerById(formData.customerId)?.email || '').trim();
       if (customerEmail && confirm(`האירוע נשמר.\nהאם לשלוח מייל עדכון ללקוח?\n\nיישלח אל: ${customerEmail}`)) {
         try {
-          await sendEventUpdateEmail(formData);
+          await sendEventUpdateEmail(payload);
         } catch (e) {
           alert((e as Error).message || 'האירוע נשמר, אבל שליחת העדכון ללקוח נכשלה.');
         }
@@ -148,14 +152,20 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
       alert('נדרש סכום חיובי (שדה סכום) להפקת מסמך.');
       return;
     }
-    if (!confirm(`להפיק מסמך בחשבונית ירוקה עבור ${clientName} בסך \u20AA${Number(formData.amount)}?`)) return;
+    const sendToEmail = resolveGreenInvoiceEmail(
+      formData as AppEvent,
+      formData.email?.trim() || cust?.email?.trim()
+    );
+    const emailNote = sendToEmail
+      ? `\nהמסמך יישלח אל: ${sendToEmail}${String(formData.tag || formData.category || '').trim() === GREEN_INVOICE_ROUTE_TAG ? ' (אוטומציה חיות דקדושה)' : ''}`
+      : '\nלא הוגדר מייל — המסמך יופק בלי שליחה.';
+    if (!confirm(`להפיק מסמך בחשבונית ירוקה עבור ${clientName} בסך \u20AA${Number(formData.amount)}?${emailNote}`)) return;
     setGreenInvoiceLoading(true);
     try {
-      const clientEmail = (formData.email?.trim() || cust?.email?.trim()) || undefined;
       const params = buildGreenInvoiceParamsFromEvent(
-        { ...(formData as AppEvent), email: clientEmail ?? formData.email },
+        formData as AppEvent,
         clientName,
-        { documentType: greenInvoiceDocType, date: greenInvoiceDocDate },
+        { documentType: greenInvoiceDocType, date: greenInvoiceDocDate, clientEmail: sendToEmail },
       );
       const r = await createGreenInvoiceDocument(params);
       if (r.success) {
@@ -165,7 +175,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
           `מסמך נוצר בהצלחה.`,
           r.number != null ? `מספר מסמך: ${r.number}` : '',
           link ? `קישור הורדה: ${link}` : '',
-          r.emailSent ? `המסמך נשלח למייל הלקוח.` : '',
+          r.emailSent ? `המסמך נשלח אל: ${sendToEmail || 'הלקוח'}.` : '',
         ].filter(Boolean);
         alert(lines.join('\n'));
       } else {
@@ -182,15 +192,21 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
     setConvertTargetType(targetType);
     const cust = formData.customerId ? getCustomerById(formData.customerId) : null;
     const clientName = (formData.invoiceName || cust?.name || '').trim();
-    const clientEmail = (formData.email?.trim() || cust?.email?.trim()) || undefined;
+    const sendToEmail = resolveGreenInvoiceEmail(
+      formData as AppEvent,
+      formData.email?.trim() || cust?.email?.trim()
+    );
     const targetLabel = giDocTypeName(targetType);
-    if (!confirm(`ליצור ${targetLabel} עבור ${clientName} בסך ₪${Number(formData.amount)}?`)) { setConvertTargetType(null); return; }
+    const emailNote = sendToEmail
+      ? `\nהמסמך יישלח אל: ${sendToEmail}${String(formData.tag || formData.category || '').trim() === GREEN_INVOICE_ROUTE_TAG ? ' (אוטומציה חיות דקדושה)' : ''}`
+      : '';
+    if (!confirm(`ליצור ${targetLabel} עבור ${clientName} בסך ₪${Number(formData.amount)}?${emailNote}`)) { setConvertTargetType(null); return; }
     setConvertLoading(true);
     try {
       const params = buildGreenInvoiceParamsFromEvent(
-        { ...(formData as AppEvent), email: clientEmail ?? formData.email },
+        formData as AppEvent,
         clientName,
-        { documentType: targetType, date: greenInvoiceDocDate },
+        { documentType: targetType, date: greenInvoiceDocDate, clientEmail: sendToEmail },
       );
       const r = await createGreenInvoiceDocument(params);
       if (r.success) {
@@ -200,7 +216,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
           `${targetLabel} נוצר בהצלחה.`,
           r.number != null ? `מספר מסמך: ${r.number}` : '',
           link ? `קישור הורדה: ${link}` : '',
-          r.emailSent ? `המסמך נשלח למייל הלקוח.` : '',
+          r.emailSent ? `המסמך נשלח אל: ${sendToEmail || 'הלקוח'}.` : '',
         ].filter(Boolean);
         alert(lines.join('\n'));
       } else {
@@ -367,16 +383,27 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-400">תאריך תשלום מוסכם / בפועל <span className="text-rose-500">*</span></label>
-            <input
-              type="date"
-              required
-              className="w-full p-2 bg-slate-50 border rounded-lg"
-              value={formData.paymentDate || ''}
-              onChange={e => setFormData({ ...formData, paymentDate: e.target.value || undefined })}
-            />
+            <label className="text-xs font-bold text-slate-400">תאריך תשלום מוסכם / בפועל</label>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                className="w-full p-2 bg-slate-50 border rounded-lg"
+                value={formData.paymentDate || ''}
+                onChange={e => setFormData({ ...formData, paymentDate: e.target.value || '' })}
+              />
+              {formData.paymentDate && (
+                <button
+                  type="button"
+                  title="מחיקת תאריך תשלום"
+                  onClick={() => setFormData({ ...formData, paymentDate: '' })}
+                  className="shrink-0 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-xs font-black"
+                >
+                  נקה
+                </button>
+              )}
+            </div>
             <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
-              ככלל התשלום לפני האירוע. אם סוכם אחרת, חשוב לקבוע תאריך תשלום ברור ולא להשאיר באוויר.
+              אופציונלי בעריכה. אפשר להשאיר ריק או לנקות כשאין מועד תשלום מיועד. בטופס ההזמנה ללקוח השדה עדיין חובה.
             </p>
           </div>
           <div className="space-y-1">

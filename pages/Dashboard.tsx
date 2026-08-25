@@ -579,16 +579,19 @@ const Dashboard: React.FC = () => {
                 return (
                   <button 
                     key={idx} onClick={() => { setSelectedDate(item.date); setDayModalDate(item.date); }}
-                    className={`aspect-square rounded text-[11px] font-bold transition-all relative ${
+                    className={`aspect-square rounded text-[11px] font-bold transition-all relative flex flex-col items-center justify-center leading-none gap-0.5 ${
                       isSelected ? 'bg-purple-600 text-white shadow-md' : 
                       hasHoliday ? 'bg-red-100 text-red-700 border border-red-300' :
                       isShabbatDay ? 'bg-blue-100 text-blue-700' :
                       hasEvents ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' : 
                       'bg-slate-50 hover:bg-slate-100 text-slate-600'
                     }`}
-                    title={item.holiday || (isShabbatDay ? 'שבת קודש' : '')}
+                    title={[item.hebrew, item.holiday || (isShabbatDay ? 'שבת קודש' : '')].filter(Boolean).join(' · ')}
                   >
-                    {item.day}
+                    <span className="text-[11px]">{item.day}</span>
+                    <span className={`text-[7px] font-semibold truncate max-w-full px-0.5 ${isSelected ? 'text-purple-100' : 'text-purple-600/90'}`}>
+                      {(item.hebrew || '').split(/\s+/)[0] || ''}
+                    </span>
                     {hasHoliday && <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full"></div>}
                   </button>
                 );

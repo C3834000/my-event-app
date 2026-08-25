@@ -17,6 +17,10 @@
 [functions."event-reminders"]
   schedule = "0 6 * * *"
 
+# ניקוי לידים שהפכו ללקוחות / הזמינו אירוע — פעם ביום ב-05:00 UTC (≈08:00 ישראל)
+[functions."leads-cleanup"]
+  schedule = "0 5 * * *"
+
 # Route /api/send-email → Netlify Function
 [[redirects]]
   from   = "/api/send-email"
@@ -34,6 +38,25 @@
   from   = "/api/green-invoice"
   to     = "/.netlify/functions/green-invoice"
   status = 200
+
+# Route /api/calendar.ics → פיד יומן Google (ICS)
+[[redirects]]
+  from   = "/api/calendar.ics"
+  to     = "/.netlify/functions/calendar-ics"
+  status = 200
+
+# Route /api/gpt-data → API לקריאה בלבד עבור GPT / כלי ניתוח
+[[redirects]]
+  from   = "/api/gpt-data"
+  to     = "/.netlify/functions/gpt-data"
+  status = 200
+
+# Route /api/cashflow → תמונת מצב כספית חיה / פער תזרימי יומי
+[[redirects]]
+  from   = "/api/cashflow"
+  to     = "/.netlify/functions/cashflow"
+  status = 200
+  force  = true
 
 # SPA fallback – all routes → index.html
 [[redirects]]

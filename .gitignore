@@ -26,3 +26,9 @@ server/.env
 *.sw?
 
 .vercel
+
+# Netlify local build artifacts / state
+.netlify/
+
+# Generated spreadsheet exports
+exports/

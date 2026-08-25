@@ -3,6 +3,18 @@ import type { AppEvent } from '../types';
 
 const API_PATH = '/api/green-invoice';
 
+/** תג/קטגוריה שמסמכי חשבונית ירוקה נשלחים אליה למייל ארגוני קבוע */
+export const GREEN_INVOICE_ROUTE_TAG = 'חיות דקדושה';
+export const GREEN_INVOICE_ROUTE_EMAIL = 'myb@livemitzvot.org';
+
+/** מייל יעד לשליחת מסמך — לחיות דקדושה תמיד המייל הארגוני */
+export function resolveGreenInvoiceEmail(event: Pick<AppEvent, 'tag' | 'category' | 'email'>, fallbackEmail?: string): string | undefined {
+  const tag = String(event.category || event.tag || '').trim();
+  if (tag === GREEN_INVOICE_ROUTE_TAG) return GREEN_INVOICE_ROUTE_EMAIL;
+  const email = (fallbackEmail || event.email || '').trim();
+  return email || undefined;
+}
+
 /** קודי אמצעי תשלום ב-API חשבונית ירוקה (תואם ל-bariew/greeninvoice Payment) */
 export function greenInvoicePaymentType(method?: PaymentMethod): number {
   switch (method) {
@@ -175,9 +187,9 @@ export function buildGreenInvoiceParamsFromEvent(
   if (event.location) itemParts.push(event.location);
   const itemDesc = itemParts.join(' | ') || docDescription;
 
-  return {
+  const base: CreateGreenInvoiceParams = {
     clientName: (event.invoiceName?.trim() || customerName).trim(),
-    clientEmail: event.email?.trim() || undefined,
+    clientEmail: resolveGreenInvoiceEmail(event),
     clientPhone: event.phone?.trim() || undefined,
     description: docDescription,
     itemDescription: itemDesc,
@@ -189,4 +201,9 @@ export function buildGreenInvoiceParamsFromEvent(
     paymentType: greenInvoicePaymentType(event.paymentMethod),
     ...overrides,
   };
+  // אחרי overrides — כפיית מייל ארגוני לחיות דקדושה (לא ניתן לדרוס בטעות)
+  if (String(event.category || event.tag || '').trim() === GREEN_INVOICE_ROUTE_TAG) {
+    base.clientEmail = GREEN_INVOICE_ROUTE_EMAIL;
+  }
+  return base;
 }

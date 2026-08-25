@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { CheckCircle, Loader } from 'lucide-react';
@@ -9,35 +9,37 @@ const AddEventFromEmail: React.FC = () => {
   const { addEvent } = useApp();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [eventTitle, setEventTitle] = useState('');
+  // מבטיח שהאירוע נוסף פעם אחת בלבד — גם אם הרכיב מתרנדר מחדש (מנע כפילויות)
+  const processedRef = useRef(false);
 
   useEffect(() => {
-    const addEventFromParams = () => {
-      try {
-        const dataStr = searchParams.get('data');
-        if (!dataStr) {
-          setStatus('error');
-          return;
-        }
+    if (processedRef.current) return;
+    processedRef.current = true;
 
-        const eventData = JSON.parse(decodeURIComponent(dataStr));
-        setEventTitle(eventData.title || 'אירוע');
-
-        addEvent(eventData);
-
-        console.log('✅ אירוע נוסף מהמייל:', eventData);
-        setStatus('success');
-
-        setTimeout(() => {
-          navigate('/events');
-        }, 2000);
-      } catch (error) {
-        console.error('❌ שגיאה בהוספת אירוע:', error);
+    try {
+      const dataStr = searchParams.get('data');
+      if (!dataStr) {
         setStatus('error');
+        return;
       }
-    };
 
-    addEventFromParams();
-  }, [searchParams, addEvent, navigate]);
+      const eventData = JSON.parse(decodeURIComponent(dataStr));
+      setEventTitle(eventData.title || 'אירוע');
+
+      addEvent(eventData);
+
+      console.log('✅ אירוע נוסף מהמייל:', eventData);
+      setStatus('success');
+
+      setTimeout(() => {
+        navigate('/events');
+      }, 2000);
+    } catch (error) {
+      console.error('❌ שגיאה בהוספת אירוע:', error);
+      setStatus('error');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center p-6">
