@@ -248,6 +248,8 @@ export default function ChartsBoard() {
   const [selectedReportEventStatuses, setSelectedReportEventStatuses] = useState<Set<string>>(new Set());
   const [cashflowWindowOffset, setCashflowWindowOffset] = useState(0);
   const [cashflowDrilldown, setCashflowDrilldown] = useState<CashflowDrilldown | null>(null);
+  const [openBalanceFilter, setOpenBalanceFilter] = useState<'all' | 'overdue' | 'upcoming' | 'undated'>('all');
+  const [openBalanceGroupByCustomer, setOpenBalanceGroupByCustomer] = useState(false);
   const [editingEvent, setEditingEvent] = useState<AppEvent | null>(null);
   const [selectedFinanceMonthIndex, setSelectedFinanceMonthIndex] = useState(() => new Date().getMonth());
   const [financeLoaded, setFinanceLoaded] = useState(false);
@@ -543,6 +545,36 @@ export default function ChartsBoard() {
     selectedReportPaymentStatuses,
     selectedReportEventStatuses,
   ]);
+
+  // סיכומי צ'יפים (מספר + סכום) לכל מצב יתרה פתוחה
+  const openBalanceStats = useMemo(() => {
+    const base = { all: { count: 0, total: 0 }, overdue: { count: 0, total: 0 }, upcoming: { count: 0, total: 0 }, undated: { count: 0, total: 0 } };
+    for (const row of openBalanceEvents) {
+      base.all.count += 1; base.all.total += row.open;
+      base[row.bucket].count += 1; base[row.bucket].total += row.open;
+    }
+    return base;
+  }, [openBalanceEvents]);
+
+  // שורות מסוננות לפי הצ'יפ הפעיל
+  const filteredOpenBalanceRows = useMemo(
+    () => (openBalanceFilter === 'all' ? openBalanceEvents : openBalanceEvents.filter(r => r.bucket === openBalanceFilter)),
+    [openBalanceEvents, openBalanceFilter],
+  );
+
+  // קיבוץ השורות המסוננות לפי לקוח (עבור מצב "קבץ לפי לקוח")
+  const openBalanceByCustomer = useMemo(() => {
+    const map = new Map<string, { customerName: string; phone: string; total: number; count: number; overdue: number; upcoming: number; undated: number }>();
+    for (const row of filteredOpenBalanceRows) {
+      const key = row.event.customerId || `evt_${row.event.id}`;
+      const entry = map.get(key) || { customerName: row.customerName, phone: row.phone, total: 0, count: 0, overdue: 0, upcoming: 0, undated: 0 };
+      entry.total += row.open;
+      entry.count += 1;
+      entry[row.bucket] += row.open;
+      map.set(key, entry);
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [filteredOpenBalanceRows]);
 
   // מספר אירועים לפי חודש
   const eventsByMonth = useMemo(() => {
@@ -1463,36 +1495,100 @@ export default function ChartsBoard() {
               כל האירועים עם יתרה פתוחה
             </h3>
             <p className="text-[11px] font-bold text-slate-500">
-              {openBalanceEvents.length} אירועים · באיחור / צפוי / ללא תאריך · כולל דורון, מוריה וכו׳ אם יש יתרה
+              מבט מאוחד: באיחור · צפוי · ללא תאריך — לחצו על תגית לסינון
             </p>
           </div>
           <div className="text-sm font-black text-rose-700">
-            סה״כ ₪{openBalanceEvents.reduce((s, x) => s + x.open, 0).toLocaleString()}
+            סה״כ ₪{Math.round(openBalanceStats.all.total).toLocaleString()}
           </div>
         </div>
-        {openBalanceEvents.length === 0 ? (
+
+        {/* צ'יפים לסינון + toggle קיבוץ לפי לקוח */}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          {([
+            { key: 'all', label: 'הכל', active: 'bg-slate-800 text-white', dot: 'text-slate-400' },
+            { key: 'overdue', label: 'באיחור', active: 'bg-red-600 text-white', dot: 'text-red-600' },
+            { key: 'upcoming', label: 'צפוי', active: 'bg-amber-500 text-white', dot: 'text-amber-600' },
+            { key: 'undated', label: 'ללא תאריך', active: 'bg-rose-500 text-white', dot: 'text-rose-600' },
+          ] as const).map((chip) => {
+            const st = openBalanceStats[chip.key];
+            const isActive = openBalanceFilter === chip.key;
+            return (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={() => setOpenBalanceFilter(chip.key)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border transition-colors ${isActive ? chip.active + ' border-transparent shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+              >
+                {chip.label}
+                <span className={`text-[10px] ${isActive ? 'text-white/80' : 'text-slate-400'}`}>{st.count}</span>
+                <span className={isActive ? '' : chip.dot}>₪{Math.round(st.total).toLocaleString()}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setOpenBalanceGroupByCustomer((v) => !v)}
+            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black border transition-colors mr-auto ${openBalanceGroupByCustomer ? 'bg-purple-600 text-white border-transparent shadow-sm' : 'bg-white text-purple-700 border-purple-200 hover:bg-purple-50'}`}
+          >
+            <Users size={13} /> קבץ לפי לקוח
+          </button>
+        </div>
+
+        {filteredOpenBalanceRows.length === 0 ? (
           <p className="text-sm text-slate-400 font-bold py-6 text-center">
-            אין יתרות פתוחות בנתונים שנטענו. נסו «רענן מהענן».
+            אין יתרות במצב הזה 🎉
           </p>
+        ) : openBalanceGroupByCustomer ? (
+          <div className="space-y-1 max-h-[22rem] overflow-y-auto pr-1">
+            {openBalanceByCustomer.map((c, idx) => (
+              <div key={`${c.customerName}-${idx}`} className="rounded-lg border border-purple-100 bg-purple-50/50 p-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black text-slate-400 w-5">{idx + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-black text-slate-800 truncate">{c.customerName}</div>
+                    <div className="text-[10px] font-bold text-slate-500">
+                      {c.count} אירועים{c.phone ? ` · ${c.phone}` : ''}
+                    </div>
+                  </div>
+                  {c.phone && (
+                    <a
+                      href={`tel:${c.phone}`}
+                      title={c.phone}
+                      className="shrink-0 w-7 h-7 rounded-full bg-white border border-purple-200 flex items-center justify-center text-purple-600 hover:bg-purple-50"
+                    >
+                      <Phone size={12} />
+                    </a>
+                  )}
+                  <div className="text-sm font-black text-purple-800 whitespace-nowrap">₪{c.total.toLocaleString()}</div>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1 text-[10px] font-black">
+                  {c.overdue > 0 && <span className="bg-red-100 text-red-700 rounded-lg px-2 py-0.5">באיחור ₪{c.overdue.toLocaleString()}</span>}
+                  {c.upcoming > 0 && <span className="bg-amber-100 text-amber-700 rounded-lg px-2 py-0.5">צפוי ₪{c.upcoming.toLocaleString()}</span>}
+                  {c.undated > 0 && <span className="bg-rose-100 text-rose-700 rounded-lg px-2 py-0.5">ללא תאריך ₪{c.undated.toLocaleString()}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-slate-200 max-h-[22rem]">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-slate-50 text-[11px] font-black text-slate-500">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-slate-50 text-[10px] font-black text-slate-500">
                 <tr>
-                  <th className="text-right px-3 py-2">מצב</th>
-                  <th className="text-right px-3 py-2">ת. תשלום</th>
-                  <th className="text-right px-3 py-2">ת. אירוע</th>
-                  <th className="text-right px-3 py-2">לקוח / כותרת</th>
-                  <th className="text-right px-3 py-2 hidden md:table-cell">אירוע</th>
-                  <th className="text-right px-3 py-2">סטטוס</th>
-                  <th className="text-right px-3 py-2">יתרה</th>
-                  <th className="text-right px-3 py-2">פעולה</th>
+                  <th className="text-right px-2 py-1.5">מצב</th>
+                  <th className="text-right px-2 py-1.5 whitespace-nowrap">ת. תשלום</th>
+                  <th className="text-right px-2 py-1.5 whitespace-nowrap hidden lg:table-cell">ת. אירוע</th>
+                  <th className="text-right px-2 py-1.5">לקוח</th>
+                  <th className="text-right px-2 py-1.5 hidden md:table-cell">אירוע</th>
+                  <th className="text-right px-2 py-1.5">סטטוס</th>
+                  <th className="text-right px-2 py-1.5">יתרה</th>
+                  <th className="text-right px-2 py-1.5">פעולה</th>
                 </tr>
               </thead>
               <tbody>
-                {openBalanceEvents.map((row) => (
+                {filteredOpenBalanceRows.map((row) => (
                   <tr key={row.event.id} className="border-t border-slate-100 hover:bg-slate-50/80">
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-1">
                       <span
                         className={`inline-block px-1.5 py-0.5 rounded-md text-[10px] font-black ${
                           row.bucket === 'overdue'
@@ -1505,32 +1601,43 @@ export default function ChartsBoard() {
                         {row.bucket === 'overdue' ? 'באיחור' : row.bucket === 'upcoming' ? 'צפוי' : 'ללא תאריך'}
                       </span>
                     </td>
-                    <td className="px-3 py-2 font-bold text-slate-700 whitespace-nowrap">
+                    <td className="px-2 py-1 font-bold text-slate-700 whitespace-nowrap">
                       {row.event.paymentDate
                         ? new Date(row.event.paymentDate + 'T12:00:00').toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
                         : '—'}
                     </td>
-                    <td className="px-3 py-2 font-bold text-slate-700 whitespace-nowrap">
+                    <td className="px-2 py-1 font-bold text-slate-700 whitespace-nowrap hidden lg:table-cell">
                       {row.event.date
                         ? new Date(row.event.date + 'T12:00:00').toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
                         : '—'}
                     </td>
-                    <td className="px-3 py-2 font-black text-slate-800 max-w-[160px] truncate" title={row.customerName}>
+                    <td className="px-2 py-1 font-black text-slate-800 max-w-[140px] truncate" title={row.customerName}>
                       {row.customerName}
                     </td>
-                    <td className="px-3 py-2 text-slate-500 max-w-[180px] truncate hidden md:table-cell" title={row.event.title}>
+                    <td className="px-2 py-1 text-slate-500 max-w-[160px] truncate hidden md:table-cell" title={row.event.title}>
                       {row.event.title}
                     </td>
-                    <td className="px-3 py-2"><StatusChip status={row.event.paymentStatus} /></td>
-                    <td className="px-3 py-2 font-black text-rose-700 whitespace-nowrap">₪{row.open.toLocaleString()}</td>
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => openEventEditor(row.event.id)}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 text-white text-[10px] font-black hover:bg-slate-700"
-                      >
-                        <Pencil size={11} /> עריכה
-                      </button>
+                    <td className="px-2 py-1"><StatusChip status={row.event.paymentStatus} /></td>
+                    <td className="px-2 py-1 font-black text-rose-700 whitespace-nowrap">₪{row.open.toLocaleString()}</td>
+                    <td className="px-2 py-1">
+                      <div className="flex items-center gap-1">
+                        {row.phone && (
+                          <a
+                            href={`tel:${row.phone}`}
+                            title={row.phone}
+                            className="shrink-0 w-6 h-6 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50"
+                          >
+                            <Phone size={11} />
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openEventEditor(row.event.id)}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 text-white text-[10px] font-black hover:bg-slate-700"
+                        >
+                          <Pencil size={11} /> עריכה
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -2382,234 +2489,8 @@ export default function ChartsBoard() {
           )}
         </div>
 
-        {/* רשימות פירוט */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-4 gap-6">
-          {/* באיחור — תאריך תשלום עבר ועדיין לא שולם */}
-          <div className="bg-white p-5 rounded-2xl shadow-md border-2 border-red-200">
-            <h3 className="text-lg font-black text-slate-800 mb-1 flex items-center gap-2">
-              <AlertCircle size={20} className="text-red-500" />
-              באיחור – תאריך תשלום עבר
-            </h3>
-            <p className="text-[11px] font-bold text-red-600 mb-3">
-              סה״כ ₪{cashflow.overdueTotal.toLocaleString()} · {cashflow.overdueInflows.length} אירועים
-            </p>
-            {cashflow.overdueInflows.length === 0 ? (
-              <p className="text-sm text-slate-400 font-bold py-8 text-center">
-                אין חובות באיחור 🎉
-              </p>
-            ) : (
-              <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
-                {cashflow.overdueInflows.map((item) => (
-                  <div
-                    key={item.key}
-                    className="flex items-center gap-2 p-2 rounded-lg border bg-red-50 border-red-200"
-                  >
-                    <div className="text-[11px] font-black text-red-700 shrink-0 w-14 text-center bg-white rounded-md py-1 border border-red-200">
-                      {new Date(item.date + 'T12:00:00').toLocaleDateString('he-IL', {
-                        day: '2-digit',
-                        month: '2-digit',
-                      })}
-                    </div>
-                    <div className="min-w-0 flex-1 flex items-center gap-2">
-                      <span className="text-sm font-black text-slate-800 truncate">{item.customerName}</span>
-                      <span className="text-xs text-slate-400 truncate hidden sm:inline" title={item.eventTitle}>
-                        · {item.eventTitle}
-                      </span>
-                      <StatusChip status={item.paymentStatus} />
-                    </div>
-                    {item.phone && (
-                      <a
-                        href={`tel:${item.phone}`}
-                        title={item.phone}
-                        className="shrink-0 w-7 h-7 rounded-full bg-white border border-red-200 flex items-center justify-center text-red-600 hover:bg-red-50"
-                      >
-                        <Phone size={12} />
-                      </a>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => openEventEditor(item.eventId)}
-                      className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 text-white text-[10px] font-black hover:bg-slate-700"
-                    >
-                      <Pencil size={11} /> עריכה
-                    </button>
-                    <div className="shrink-0 text-sm font-black text-red-700 whitespace-nowrap">
-                      ₪{item.amount.toLocaleString()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* תקבולים צפויים */}
-          <div className="bg-white p-5 rounded-2xl shadow-md border border-slate-100">
-            <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
-              <Clock size={20} className="text-amber-500" />
-              תקבולים צפויים – מהיום והלאה
-            </h3>
-            {cashflow.futureInflows.length === 0 ? (
-              <p className="text-sm text-slate-400 font-bold py-8 text-center">
-                אין תקבולים צפויים בקרוב
-              </p>
-            ) : (
-              <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
-                {cashflow.futureInflows.map((item) => (
-                  <div
-                    key={item.key}
-                    className={`flex items-center gap-2 p-2 rounded-lg border ${
-                      item.status === 'received'
-                        ? 'bg-emerald-50 border-emerald-200'
-                        : 'bg-amber-50 border-amber-200'
-                    }`}
-                  >
-                    <div className="text-[11px] font-black text-slate-700 shrink-0 w-14 text-center bg-white rounded-md py-1 border border-slate-200">
-                      {new Date(item.date + 'T12:00:00').toLocaleDateString('he-IL', {
-                        day: '2-digit',
-                        month: '2-digit',
-                      })}
-                    </div>
-                    <div className="min-w-0 flex-1 flex items-center gap-2">
-                      <span className="text-sm font-black text-slate-800 truncate">{item.customerName}</span>
-                      <span className="text-xs text-slate-400 truncate hidden sm:inline" title={item.eventTitle}>
-                        · {item.eventTitle}
-                      </span>
-                      <StatusChip status={item.paymentStatus} />
-                    </div>
-                    {item.phone && (
-                      <a
-                        href={`tel:${item.phone}`}
-                        title={item.phone}
-                        className="shrink-0 w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50"
-                      >
-                        <Phone size={12} />
-                      </a>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => openEventEditor(item.eventId)}
-                      className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 text-white text-[10px] font-black hover:bg-slate-700"
-                    >
-                      <Pencil size={11} /> עריכה
-                    </button>
-                    <div
-                      className={`shrink-0 text-sm font-black whitespace-nowrap ${
-                        item.status === 'received' ? 'text-emerald-700' : 'text-amber-700'
-                      }`}
-                    >
-                      ₪{item.amount.toLocaleString()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* יתרות ללא תאריך */}
-          <div className="bg-white p-5 rounded-2xl shadow-md border border-slate-100">
-            <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
-              <AlertCircle size={20} className="text-rose-500" />
-              כספים בחוץ ללא תאריך מוגדר
-            </h3>
-            {cashflow.undatedItems.length === 0 ? (
-              <p className="text-sm text-slate-400 font-bold py-8 text-center">
-                כל היתרות הפתוחות בעלות תאריך תשלום צפוי 🎉
-              </p>
-            ) : (
-              <>
-                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 mb-3">
-                  <p className="text-xs font-bold text-rose-900">
-                    סה"כ ללא תאריך:{' '}
-                    <span className="text-base font-black">
-                      ₪{cashflow.undatedTotal.toLocaleString()}
-                    </span>{' '}
-                    ב-{cashflow.undatedItems.length} אירועים
-                  </p>
-                </div>
-                <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
-                  {cashflow.undatedItems.map((item) => (
-                    <div
-                      key={item.eventId}
-                      className="flex items-center gap-2 p-2 rounded-lg bg-rose-50/60 border border-rose-100"
-                    >
-                      {/* שם + אירוע + סטטוס */}
-                      <div className="min-w-0 flex-1 flex items-center gap-2">
-                        <span className="text-sm font-black text-slate-800 truncate">{item.customerName}</span>
-                        <span className="text-xs text-slate-400 truncate hidden sm:inline" title={item.eventTitle}>
-                          · {item.eventTitle}
-                          {item.eventDate && ` · ${new Date(item.eventDate).toLocaleDateString('he-IL')}`}
-                        </span>
-                        <StatusChip status={item.paymentStatus} />
-                      </div>
-                      {/* טלפון */}
-                      {item.phone && (
-                        <a
-                          href={`tel:${item.phone}`}
-                          title={item.phone}
-                          className="shrink-0 w-7 h-7 rounded-full bg-white border border-rose-200 flex items-center justify-center text-rose-600 hover:bg-rose-50 hover:border-rose-400 transition-colors"
-                        >
-                          <Phone size={12} />
-                        </a>
-                      )}
-                      {/* סכום */}
-                      <div className="shrink-0 text-sm font-black text-rose-700 whitespace-nowrap">
-                        ₪{item.amount.toLocaleString()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* סיכום לפי לקוח */}
-          <div className="bg-white p-5 rounded-2xl shadow-md border border-slate-100">
-            <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
-              <Users size={20} className="text-purple-500" />
-              סיכום לפי לקוח
-              <span className="text-xs text-slate-500 font-bold mr-1">
-                ({cashflow.byCustomer.length})
-              </span>
-            </h3>
-            {cashflow.byCustomer.length === 0 ? (
-              <p className="text-sm text-slate-400 font-bold py-8 text-center">
-                אין יתרות פתוחות 🎉
-              </p>
-            ) : (
-              <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
-                {cashflow.byCustomer.map((c, idx) => (
-                  <div key={c.customerKey} className="rounded-lg border border-purple-100 bg-purple-50/50 p-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black text-slate-400 w-5">{idx + 1}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-black text-slate-800 truncate">{c.customerName}</div>
-                        <div className="text-[10px] font-bold text-slate-500">
-                          {c.eventCount} אירועים
-                          {c.phone ? ` · ${c.phone}` : ''}
-                        </div>
-                      </div>
-                      <div className="text-sm font-black text-purple-800 whitespace-nowrap">
-                        ₪{c.total.toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-1 text-[10px] font-black">
-                      {c.totalExpected > 0 && (
-                        <span className="bg-amber-100 text-amber-700 rounded-lg px-2 py-0.5">
-                          צפי ₪{c.totalExpected.toLocaleString()}
-                        </span>
-                      )}
-                      {c.totalUndated > 0 && (
-                        <span className="bg-rose-100 text-rose-700 rounded-lg px-2 py-0.5">
-                          ללא תאריך ₪{c.totalUndated.toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        {/* רשימות הפירוט (באיחור / צפוי / ללא תאריך / לפי לקוח) אוחדו לטבלה קומפקטית אחת
+            בראש הדף — «כל האירועים עם יתרה פתוחה» עם צ'יפים לסינון ו-toggle קיבוץ לפי לקוח. */}
 
         {/* פוטר סיכום */}
         <div className="mt-6 bg-white/60 backdrop-blur p-4 rounded-2xl border border-emerald-200 text-center">
