@@ -962,6 +962,12 @@ export default function ChartsBoard() {
     const endMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     endMonth.setHours(23, 59, 59, 999);
 
+    // גבולות השנה הנוכחית — הממוצעים מחושבים מתחילת השנה ואינם תלויים בחודש שנבחר בתצוגה
+    const yearStart = new Date(today.getFullYear(), 0, 1);
+    yearStart.setHours(0, 0, 0, 0);
+    const yearEnd = new Date(today.getFullYear(), 11, 31);
+    yearEnd.setHours(23, 59, 59, 999);
+
     const dow = today.getDay(); // 0 = ראשון
     const startWeek = new Date(today);
     startWeek.setDate(today.getDate() - dow);
@@ -1025,6 +1031,7 @@ export default function ChartsBoard() {
     let expectedThisWeek = 0;
     let undatedTotal = 0;
     let totalOutstanding = 0;
+    let ytdReceived = 0; // סך התקבולים מתחילת השנה (לפי תאריך תשלום בפועל)
 
     type InflowItem = {
       key: string;
@@ -1108,6 +1115,7 @@ export default function ChartsBoard() {
           }
           if (recDate >= startMonth && recDate <= endMonth) receivedThisMonth += paid;
           if (recDate >= startWeek && recDate <= endWeek) receivedThisWeek += paid;
+          if (recDate >= yearStart && recDate <= yearEnd) ytdReceived += paid;
           inflows.push({
             key: `${ev.id}-r`,
             date: recDateStr,
@@ -1235,10 +1243,18 @@ export default function ChartsBoard() {
       };
       });
     const activeWeeks = weeklyData.length || 1;
-    const totalReceivedInWindow = weeklyData.reduce((sum, row) => sum + row.received, 0);
     const totalEventValueInWindow = weeklyData.reduce((sum, row) => sum + row.eventValue, 0);
-    const averageWeeklyIncome = (totalReceivedInWindow + undatedTotal) / activeWeeks;
-    const averageMonthlyIncome = (totalReceivedInWindow + undatedTotal) / 3;
+
+    // ממוצעים מתחילת השנה עד היום — לא מושפעים מניווט בין חודשים בתצוגה.
+    // מספר החודשים/השבועות שחלפו מתחילת השנה (לפחות 1 כדי למנוע חלוקה באפס).
+    const monthsElapsed = Math.max(1, today.getMonth() + 1);
+    const weeksElapsed = Math.max(
+      1,
+      Math.ceil((today.getTime() - yearStart.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1,
+    );
+    const ytdBase = ytdReceived + undatedTotal;
+    const averageWeeklyIncome = ytdBase / weeksElapsed;
+    const averageMonthlyIncome = ytdBase / monthsElapsed;
     const averageWeeklyEventValue = (totalEventValueInWindow + undatedTotal) / activeWeeks;
 
     return {
