@@ -1562,6 +1562,8 @@ export default function ChartsBoard() {
         </div>
       </div>
 
+      {/* תזרים מזומנים מוצג מעל לוח תזרים ומסים */}
+      <div className="flex flex-col-reverse gap-8">
       {/* ============ לוח תזרים ומסים ============ */}
       <div className="bg-gradient-to-br from-indigo-50 via-white to-emerald-50 p-6 rounded-3xl border-2 border-indigo-200 shadow-lg">
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
@@ -2612,6 +2614,7 @@ export default function ChartsBoard() {
             </span>
           </p>
         </div>
+      </div>
       </div>
 
       {/* גרפים */}
