@@ -38,12 +38,19 @@ export const PAID_PAYMENT_STATUSES: PaymentStatus[] = [
   PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider,
 ];
 
-export function isPaidForKpi(paymentStatus: PaymentStatus): boolean {
-  return PAID_PAYMENT_STATUSES.includes(paymentStatus);
+export function isPaidForKpi(paymentStatus: PaymentStatus | string | undefined | null): boolean {
+  if (!paymentStatus) return false;
+  return (PAID_PAYMENT_STATUSES as string[]).includes(String(paymentStatus));
 }
 
 export function excludeEventFromKpis(ev: AppEvent): boolean {
-  return ev.status === EventStatus.Cancelled;
+  return ev.status === EventStatus.Cancelled || String(ev.status || '') === 'בוטל';
+}
+
+/** יתרה פתוחה לפי כסף בפועל — לא מסתירים אירוע בגלל תווית סטטוס חריגה (למשל «לא שולם») */
+export function eventOpenAmount(ev: AppEvent): number {
+  if (excludeEventFromKpis(ev)) return 0;
+  return eventOutstandingBalance(ev);
 }
 
 export function yearFromDateKey(dateStr: string | undefined): string {
@@ -76,9 +83,7 @@ export function eventOutstandingBalance(ev: AppEvent): number {
 }
 
 export function eventHasOpenBalance(ev: AppEvent): boolean {
-  if (excludeEventFromKpis(ev)) return false;
-  if (isPaidForKpi(ev.paymentStatus)) return false;
-  return eventOutstandingBalance(ev) > 0;
+  return eventOpenAmount(ev) > 0;
 }
 
 /** Open debt: event date before today (local calendar), not cancelled, not fully-paid status, positive balance */
