@@ -230,7 +230,7 @@ export default function ChartsBoard() {
   const [financeFilters, setFinanceFilters] = useState({
     dateFrom: yearStartIso(),
     dateTo: todayIso(),
-    source: 'systemAndGi' as 'gi' | 'systemAndGi',
+    source: 'systemAndGi' as 'gi' | 'system' | 'systemAndGi',
     includePaid: true,
     includeDated: true,
     includeFuture: true,
@@ -679,7 +679,8 @@ export default function ChartsBoard() {
     // סכומים ששולמו — ממסמכי חשבונית ירוקה
     // ברוטו = נטו + מע"מ מתוך המסמך, כדי שקבלות (נטו 0) על חשבוניות שכבר נספרו לא ייספרו פעמיים
     if (financeFilters.includePaid) {
-      greenInvoiceIncome.forEach(doc => {
+      // במקור "מערכת בלבד" לא סופרים מסמכי חשבונית ירוקה בכלל
+      if (financeFilters.source !== 'system') greenInvoiceIncome.forEach(doc => {
         const rawGross = Math.max(Number(doc.amount || 0), 0);
         const net = doc.netAmount != null ? Math.max(Number(doc.netAmount), 0) : rawGross / (1 + VAT_RATE);
         const vat = doc.vatAmount != null ? Math.max(Number(doc.vatAmount), 0) : Math.max(0, rawGross - net);
@@ -697,7 +698,8 @@ export default function ChartsBoard() {
 
       // במקור "מערכת + חשבונית ירוקה": מוסיפים גם תשלומים שנרשמו באירועים במערכת —
       // אך מדלגים על אירוע שכבר יש לו מסמך חשבונית ירוקה מסונכרן, כדי למנוע ספירה כפולה.
-      if (financeFilters.source === 'systemAndGi') {
+      // במקור "מערכת בלבד": סופרים את כל תשלומי האירועים (בלי מסמכי ח"י בכלל).
+      if (financeFilters.source === 'systemAndGi' || financeFilters.source === 'system') {
         const giDocIds = new Set(
           greenInvoiceIncome.map(d => String(d.id || '').trim()).filter(Boolean)
         );
@@ -714,7 +716,8 @@ export default function ChartsBoard() {
           if (ev.status === EventStatus.Cancelled) return;
           const paidGross = Math.max(Number(ev.paidAmount || 0), 0);
           if (paidGross <= 0) return;
-          if (alreadyInGreenInvoice(ev)) return; // כבר נספר דרך חשבונית ירוקה
+          // ב"מערכת + ח"י" מדלגים על אירוע שכבר נספר דרך מסמך ח"י; ב"מערכת בלבד" סופרים הכל
+          if (financeFilters.source === 'systemAndGi' && alreadyInGreenInvoice(ev)) return;
           const actualDate = ev.paymentDate || ev.date;
           const actualMonth = monthKeyFromIso(actualDate);
           if (actualMonth.startsWith(String(currentYear)) && inDateRange(actualDate)) {
@@ -1767,11 +1770,12 @@ export default function ChartsBoard() {
                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-2">
               <select
                 value={financeFilters.source}
-                onChange={e => setFinanceFilters(prev => ({ ...prev, source: e.target.value as 'gi' | 'systemAndGi' }))}
+                onChange={e => setFinanceFilters(prev => ({ ...prev, source: e.target.value as 'gi' | 'system' | 'systemAndGi' }))}
                     className="w-full bg-white text-xs font-black border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-100 text-slate-700"
               >
                 <option value="systemAndGi">מערכת + חשבונית ירוקה (ללא כפילות)</option>
                 <option value="gi">חשבונית ירוקה בלבד</option>
+                <option value="system">מערכת בלבד (ללא ח"י)</option>
               </select>
                 </div>
             </div>

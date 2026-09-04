@@ -100,22 +100,35 @@ const EVENT_FILTERS_STORAGE_KEY = 'ME_CFM_EVENT_BOARD_FILTERS_V2';
 
 const dateKey = (value?: string) => (value || '').slice(0, 10);
 
+/** נרמול לחיפוש לפי סכום: מסיר פסיקים, רווחים וסימן ₪ */
+const digitsOnly = (v: string) => v.replace(/[,₪\s]/g, '');
+
+/** התאמה חלקית של סכום — "429" ימצא גם 4,290 וגם 14,290, עם או בלי פסיקים */
+const amountMatches = (searchRaw: string, event: AppEvent): boolean => {
+  const q = digitsOnly(searchRaw.trim());
+  if (!q || !/^\d+$/.test(q)) return false;
+  return String(event.amount ?? '').includes(q) || String(event.paidAmount ?? '').includes(q);
+};
+
 const MultiSelectFilter: React.FC<{
   label: string;
   options: string[];
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
-  onSave: () => void;
   getCount?: (option: string) => number;
-}> = ({ label, options, selected, onChange, onSave, getCount }) => {
+}> = ({ label, options, selected, onChange, getCount }) => {
   const [open, setOpen] = useState(false);
-  const summary = selected.size === 0 ? 'הכל' : selected.size === options.length ? 'הכל נבחר' : `${selected.size} נבחרו`;
+  // סט ריק = הכל נבחר (אין סינון) — מוצג כ"הכל מסומן"
+  const allSelected = selected.size === 0 || selected.size === options.length;
+  const summary = allSelected ? 'הכל' : `${selected.size} נבחרו`;
 
   const toggle = (option: string) => {
-    const next = new Set(selected);
-    if (next.has(option)) next.delete(option);
-    else next.add(option);
-    onChange(next);
+    // כשהסט ריק (=הכל), ביטול סימון אחד יוצר "הכל חוץ ממנו"
+    const base = selected.size === 0 ? new Set(options) : new Set(selected);
+    if (base.has(option)) base.delete(option);
+    else base.add(option);
+    // אם חזרנו למצב שהכל מסומן — חוזרים לסט ריק (=ללא סינון)
+    onChange(base.size === options.length ? new Set() : base);
   };
 
   return (
@@ -123,27 +136,24 @@ const MultiSelectFilter: React.FC<{
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="min-w-[12rem] bg-white border border-slate-200 rounded-xl px-3 py-2 text-right shadow-sm hover:border-purple-300 transition-all"
+        className={`bg-white border rounded-lg px-2.5 py-1.5 text-right shadow-sm transition-all flex items-center gap-1.5 ${allSelected ? 'border-slate-200 hover:border-purple-300' : 'border-purple-400 bg-purple-50'}`}
       >
-        <div className="text-[10px] font-black text-slate-400">{label}</div>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-black text-slate-800 truncate">{summary}</span>
-          <ChevronDown size={15} className="text-slate-400 shrink-0" />
-        </div>
+        <span className="text-[11px] font-black text-slate-400">{label}:</span>
+        <span className={`text-xs font-black truncate ${allSelected ? 'text-slate-700' : 'text-purple-700'}`}>{summary}</span>
+        <ChevronDown size={13} className="text-slate-400 shrink-0" />
       </button>
 
       {open && (
         <div className="absolute z-40 top-full right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-slate-200 p-3">
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            <button type="button" onClick={() => onChange(new Set(options))} className="text-xs font-black bg-purple-50 text-purple-700 rounded-lg py-2">סמן הכל</button>
-            <button type="button" onClick={() => onChange(new Set())} className="text-xs font-black bg-slate-50 text-slate-600 rounded-lg py-2">ניקוי בחירה</button>
-            <button type="button" onClick={() => { onSave(); setOpen(false); }} className="text-xs font-black bg-emerald-50 text-emerald-700 rounded-lg py-2">שמירת בחירה</button>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <button type="button" onClick={() => onChange(new Set())} className="text-xs font-black bg-purple-50 text-purple-700 rounded-lg py-2">סמן הכל</button>
+            <button type="button" onClick={() => setOpen(false)} className="text-xs font-black bg-slate-50 text-slate-600 rounded-lg py-2">סגור</button>
           </div>
           <div className="max-h-72 overflow-y-auto space-y-1 pr-1">
             {options.map(option => {
-              const checked = selected.has(option);
+              const checked = selected.size === 0 || selected.has(option);
               return (
-                <label key={option} className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                <label key={option} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={checked}
@@ -172,174 +182,148 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
   const businessCategory = getBusinessCategory(event);
 
   return (
-      <div id={`event-row-${event.id}`} className="bg-white border-b border-slate-100 p-4 sm:p-5 hover:bg-slate-50 transition-colors group rounded-lg sm:rounded-none">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col xl:flex-row xl:items-start gap-4 xl:gap-6">
-              <div className="flex-1 min-w-0 space-y-3">
-                  <div className="flex items-start justify-between gap-3 min-w-0">
-                      <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                              <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded shrink-0">{event.externalId || 'ID לא זמין'}</span>
-                              <h4 className="text-base sm:text-lg font-bold text-slate-800 break-words">{event.title}</h4>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <span className={`text-xs font-bold px-3 py-1 rounded-lg ${EVENT_TAGS[businessCategory] || 'bg-slate-400 text-white'}`}>{businessCategory}</span>
-                            <span className={`text-xs font-bold px-3 py-1 rounded-lg ${EVENT_TYPE_STYLES[event.eventType] || 'bg-slate-500 text-white'}`}>{event.eventType}</span>
-                            {event.clickersNeeded > 0 && (
-                               <span className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg text-xs font-bold border border-indigo-200">
-                                  <MousePointer2 size={12} /> {event.clickersNeeded} קליקרים
-                               </span>
-                             )}
-                          </div>
-                      </div>
-                      <button type="button" onClick={() => onEdit(event)} className="p-2.5 hover:bg-purple-100 text-slate-400 hover:text-purple-600 rounded-xl transition-colors shrink-0"><Edit size={20} /></button>
+      <div id={`event-row-${event.id}`} className="bg-white border-b border-slate-100 px-3 py-2.5 sm:px-4 hover:bg-slate-50 transition-colors group rounded-lg sm:rounded-none">
+          <div className="flex flex-col gap-1.5">
+              {/* שורה 1: ID + שם + תגיות + עריכה */}
+              <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex-1 flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+                      <span className="text-[11px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">{event.externalId || 'ID לא זמין'}</span>
+                      <h4 className="text-sm sm:text-base font-bold text-slate-800 break-words">{event.title}</h4>
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${EVENT_TAGS[businessCategory] || 'bg-slate-400 text-white'}`}>{businessCategory}</span>
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${EVENT_TYPE_STYLES[event.eventType] || 'bg-slate-500 text-white'}`}>{event.eventType}</span>
+                      {event.clickersNeeded > 0 && (
+                         <span className="flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md text-[11px] font-bold border border-indigo-200">
+                            <MousePointer2 size={11} /> {event.clickersNeeded} קליקרים
+                         </span>
+                       )}
                   </div>
+                  <button type="button" onClick={() => onEdit(event)} className="p-1.5 hover:bg-purple-100 text-slate-400 hover:text-purple-600 rounded-lg transition-colors shrink-0"><Edit size={17} /></button>
+              </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                      <div className="flex items-center gap-2 text-slate-600 min-w-0">
-                         <Users size={16} className="text-purple-500 shrink-0" />
-                         <span className="font-medium truncate">{customer?.name || event.title || 'לא משויך ללקוח'}</span>
-                      </div>
-                      {event.phone && (
-                          <div className="flex items-center gap-2 text-slate-600 min-w-0">
-                             <span className="text-purple-500 shrink-0">📞</span>
-                             <a href={`tel:${event.phone}`} className="font-medium truncate hover:text-purple-600">{event.phone}</a>
-                          </div>
-                      )}
-                      {event.email && (
-                          <div className="sm:col-span-2 flex items-start gap-2 text-slate-600 min-w-0">
-                             <span className="text-purple-500 shrink-0 mt-0.5">📧</span>
-                             <a href={`mailto:${event.email}`} className="font-medium text-xs break-all min-w-0 leading-relaxed">{event.email}</a>
-                          </div>
-                      )}
-                      {event.location && (
-                          <div className="sm:col-span-2 flex items-center gap-2 text-slate-600 min-w-0">
-                             <MapPin size={16} className="text-purple-500 shrink-0" />
-                             <span className="font-medium break-words">{event.location}</span>
-                          </div>
-                      )}
-                      {event.paymentDate && (
-                          <div className="sm:col-span-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 w-fit">
-                            תאריך תשלום: {new Date(event.paymentDate + 'T12:00:00').toLocaleDateString('he-IL')}
-                          </div>
-                      )}
-                      {event.notes && (
-                          <div className="sm:col-span-2 flex items-start gap-2 text-slate-600 bg-amber-50 p-2 rounded-lg border border-amber-100">
-                             <Info size={14} className="text-amber-600 mt-0.5 shrink-0" />
-                             <span className="text-xs font-medium break-words">{event.notes}</span>
-                          </div>
-                      )}
-                      {event.giDocId && (
-                        <div className="sm:col-span-2">
-                          <span
-                            className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-pointer hover:bg-emerald-100"
-                            onClick={() => onEdit(event)}
-                            title="פתח לפרטי מסמך"
+              {/* שורה 2: לקוח · טלפון · תאריך · שעות · סכום · חוב */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
+                  <span className="flex items-center gap-1.5 min-w-0">
+                     <Users size={14} className="text-purple-500 shrink-0" />
+                     <span className="font-medium truncate max-w-[14rem]">{customer?.name || event.title || 'לא משויך ללקוח'}</span>
+                  </span>
+                  {event.phone && (
+                      <a href={`tel:${event.phone}`} className="flex items-center gap-1 font-medium hover:text-purple-600">📞 {event.phone}</a>
+                  )}
+                  <span className="flex items-center gap-1.5 font-bold text-slate-800">
+                      <CalendarIcon size={14} className="text-blue-500 shrink-0" />
+                      {new Date(event.date).toLocaleDateString('he-IL')}
+                      {event.hebrewDate && <span className="text-xs text-slate-500 italic font-normal">({event.hebrewDate})</span>}
+                  </span>
+                  <span className="flex items-center gap-1 text-slate-600">
+                      <Clock size={13} className="text-green-500 shrink-0" />
+                      {event.startTime} - {event.endTime}
+                  </span>
+                  <span className="font-bold text-slate-800">₪{event.amount.toLocaleString()}</span>
+                  {showDebt && <span className="text-xs text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded">חוב: ₪{debt.toLocaleString()}</span>}
+                  {event.paymentDate && (
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                        שולם: {new Date(event.paymentDate + 'T12:00:00').toLocaleDateString('he-IL')}
+                      </span>
+                  )}
+              </div>
+
+              {/* שורה אופציונלית: מייל / מיקום / הערות / מסמך ח"י */}
+              {(event.email || event.location || event.notes || event.giDocId) && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                    {event.email && (
+                        <a href={`mailto:${event.email}`} className="flex items-center gap-1 hover:text-purple-600 truncate max-w-[16rem]">📧 {event.email}</a>
+                    )}
+                    {event.location && (
+                        <span className="flex items-center gap-1 min-w-0">
+                           <MapPin size={12} className="text-purple-500 shrink-0" />
+                           <span className="truncate max-w-[18rem]">{event.location}</span>
+                        </span>
+                    )}
+                    {event.notes && (
+                        <span className="flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100 min-w-0">
+                           <Info size={11} className="text-amber-600 shrink-0" />
+                           <span className="font-medium truncate max-w-[22rem]" title={event.notes}>{event.notes}</span>
+                        </span>
+                    )}
+                    {event.giDocId && (
+                      <span
+                        className="inline-flex items-center gap-1 font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-pointer hover:bg-emerald-100"
+                        onClick={() => onEdit(event)}
+                        title="פתח לפרטי מסמך"
+                      >
+                        <FileCheck size={12} />
+                        {giDocTypeName(event.giDocType)}
+                        {event.giDocNumber ? ` #${event.giDocNumber}` : ''}
+                        {event.giDocUrl && (
+                          <a
+                            href={event.giDocUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="underline mr-1"
                           >
-                            <FileCheck size={13} />
-                            {giDocTypeName(event.giDocType)}
-                            {event.giDocNumber ? ` #${event.giDocNumber}` : ''}
-                            {event.giDocUrl && (
-                              <a
-                                href={event.giDocUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={e => e.stopPropagation()}
-                                className="underline mr-1"
-                              >
-                                הורד
-                              </a>
-                            )}
-                          </span>
-                        </div>
-                      )}
-                  </div>
-              </div>
+                            הורד
+                          </a>
+                        )}
+                      </span>
+                    )}
+                </div>
+              )}
 
-              <div className="flex flex-col sm:flex-row flex-wrap gap-4 xl:flex-nowrap xl:shrink-0 xl:border-s xl:border-slate-200 xl:ps-6 pt-2 xl:pt-0 border-t xl:border-t-0 border-slate-100">
-                  <div className="space-y-1.5 min-w-[9rem]">
-                      <div className="flex items-center gap-2 font-bold text-slate-800 text-base">
-                          <CalendarIcon size={16} className="text-blue-500 shrink-0" />
-                          {new Date(event.date).toLocaleDateString('he-IL')}
-                      </div>
-                      {event.hebrewDate && <div className="text-xs text-slate-500 italic">{event.hebrewDate}</div>}
-                      <div className="text-sm text-slate-600 flex items-center gap-1.5">
-                          <Clock size={14} className="text-green-500 shrink-0" />
-                          {event.startTime} - {event.endTime}
-                      </div>
-                  </div>
-
-                  <div className="space-y-1.5 min-w-[5rem]">
-                     <div className="text-lg font-bold text-slate-800">₪{event.amount.toLocaleString()}</div>
-                     {showDebt && <div className="text-xs text-red-600 font-bold bg-red-50 px-2 py-1 rounded w-fit">חוב: ₪{debt.toLocaleString()}</div>}
-                  </div>
-
-                  <div className="w-full sm:w-auto sm:min-w-[12rem] xl:w-56">
-                      <select 
-                        value={event.paymentStatus}
-                        onChange={(e) => updateEvent(event.id, { paymentStatus: e.target.value as PaymentStatus })}
-                        className={`w-full text-xs font-bold p-2.5 rounded-lg border-0 outline-none cursor-pointer ${PAYMENT_STATUS_STYLES[event.paymentStatus]}`}
-                      >
-                          {Object.values(PaymentStatus).map(s => <option key={s} value={s} className="bg-white text-slate-800">{s}</option>)}
-                      </select>
-                  </div>
-                  <div className="w-full sm:w-auto sm:min-w-[12rem] xl:w-56">
-                      <select
-                        value={event.invoiceSent || ''}
-                        onChange={(e) => updateEvent(event.id, { invoiceSent: e.target.value || undefined })}
-                        className={`w-full text-xs font-bold p-2.5 rounded-lg border-0 outline-none cursor-pointer transition-all ${
-                          event.invoiceSent
-                            ? 'bg-green-500 text-white'
-                            : 'bg-slate-100 text-slate-500'
-                        }`}
-                      >
-                        <option value="">📄 חשבונית – לא נשלחה</option>
-                        <option value="חשבון עסקה">✓ חשבון עסקה</option>
-                        <option value="חשבונית מס">✓ חשבונית מס</option>
-                        <option value="חשבונית מס/קבלה">✓ חשבונית מס/קבלה</option>
-                        <option value="קבלה">✓ קבלה</option>
-                      </select>
-                  </div>
-              </div>
-            </div>
-
-              <div className="border-t border-slate-100 pt-3">
-                {linkedTask ? (
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-bold text-purple-600 mb-1">📋 משימה מקושרת:</div>
-                      <div className="text-sm font-bold text-slate-800 break-words">{linkedTask.title}</div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
+              {/* שורה 3: סטטוסים + משימה */}
+              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <select 
+                    value={event.paymentStatus}
+                    onChange={(e) => updateEvent(event.id, { paymentStatus: e.target.value as PaymentStatus })}
+                    className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border-0 outline-none cursor-pointer w-full sm:w-44 ${PAYMENT_STATUS_STYLES[event.paymentStatus]}`}
+                  >
+                      {Object.values(PaymentStatus).map(s => <option key={s} value={s} className="bg-white text-slate-800">{s}</option>)}
+                  </select>
+                  <select
+                    value={event.invoiceSent || ''}
+                    onChange={(e) => updateEvent(event.id, { invoiceSent: e.target.value || undefined })}
+                    className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border-0 outline-none cursor-pointer transition-all w-full sm:w-44 ${
+                      event.invoiceSent
+                        ? 'bg-green-500 text-white'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    <option value="">📄 חשבונית – לא נשלחה</option>
+                    <option value="חשבון עסקה">✓ חשבון עסקה</option>
+                    <option value="חשבונית מס">✓ חשבונית מס</option>
+                    <option value="חשבונית מס/קבלה">✓ חשבונית מס/קבלה</option>
+                    <option value="קבלה">✓ קבלה</option>
+                  </select>
+                  {linkedTask ? (
+                    <span className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1 text-xs min-w-0">
+                      <span className="font-bold text-purple-600 shrink-0">📋</span>
+                      <span className="font-bold text-slate-800 truncate max-w-[14rem]" title={linkedTask.title}>{linkedTask.title}</span>
                       {linkedTask.isCompleted ? (
-                        <span className="text-xs font-bold bg-green-500 text-white px-3 py-1 rounded-lg">✓ הושלמה</span>
+                        <span className="font-bold bg-green-500 text-white px-1.5 py-0.5 rounded shrink-0">✓</span>
                       ) : linkedTask.progress > 0 ? (
-                        <span className="text-xs font-bold bg-blue-500 text-white px-3 py-1 rounded-lg">⏳ {linkedTask.progress}%</span>
+                        <span className="font-bold bg-blue-500 text-white px-1.5 py-0.5 rounded shrink-0">{linkedTask.progress}%</span>
                       ) : (
-                        <span className="text-xs font-bold bg-slate-300 text-slate-700 px-3 py-1 rounded-lg">⏸️ ממתינה</span>
+                        <span className="font-bold bg-slate-300 text-slate-700 px-1.5 py-0.5 rounded shrink-0">⏸️</span>
                       )}
                       <button 
                         type="button"
                         onClick={() => updateEvent(event.id, { taskId: undefined })}
-                        className="text-red-500 hover:bg-red-50 p-1 rounded transition-all"
+                        className="text-red-500 hover:bg-red-50 p-0.5 rounded transition-all shrink-0"
                         title="נתק משימה"
                       >
-                        <X size={16} />
+                        <X size={13} />
                       </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
+                    </span>
+                  ) : (
                     <button
                       type="button"
                       onClick={() => onCreateTask?.(event)}
-                      className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-3 py-2 rounded-lg border-2 border-purple-300 transition-all flex items-center gap-1"
+                      className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-2.5 py-1.5 rounded-lg border border-purple-300 transition-all flex items-center gap-1"
                     >
-                      <Plus size={14} />
-                      צור משימה חדשה
+                      <Plus size={13} />
+                      משימה
                     </button>
-                  </div>
-                )}
+                  )}
               </div>
           </div>
       </div>
@@ -411,7 +395,10 @@ const EventsBoard: React.FC = () => {
     }
   }, []);
 
-  const saveFilters = () => {
+  // שמירה אוטומטית של הסינונים בכל שינוי — אין צורך בכפתור "שמירת בחירה"
+  const skipFirstFilterSave = useRef(true);
+  useEffect(() => {
+    if (skipFirstFilterSave.current) { skipFirstFilterSave.current = false; return; }
     localStorage.setItem(EVENT_FILTERS_STORAGE_KEY, JSON.stringify({
       years: Array.from(selectedYears),
       categories: Array.from(selectedCategories),
@@ -421,7 +408,7 @@ const EventsBoard: React.FC = () => {
       dateFrom,
       dateTo,
     }));
-  };
+  }, [selectedYears, selectedCategories, selectedEventTypes, selectedPaymentStatuses, selectedEventStatuses, dateFrom, dateTo]);
 
   const clearAllFilters = () => {
     setSelectedYears(new Set());
@@ -468,7 +455,8 @@ const EventsBoard: React.FC = () => {
           (cust?.name || '').toLowerCase().includes(s) ||
           String(e.externalId || '').toLowerCase().includes(s) ||
           String(e.phone || '').includes(searchTerm.trim()) ||
-          String(e.email || '').toLowerCase().includes(s);
+          String(e.email || '').toLowerCase().includes(s) ||
+          amountMatches(searchTerm, e);
         const yearMatch = selectedYears.size === 0 || selectedYears.has(eventYearKey(e));
         const categoryMatch = selectedCategories.size === 0 || selectedCategories.has(getBusinessCategory(e));
         const typeMatch = selectedEventTypes.size === 0 || selectedEventTypes.has(e.eventType || '');
@@ -498,7 +486,8 @@ const EventsBoard: React.FC = () => {
       return (
         title.includes(s) ||
         (cust?.name || '').toLowerCase().includes(s) ||
-        String(e.phone || '').includes(searchTerm.trim())
+        String(e.phone || '').includes(searchTerm.trim()) ||
+        amountMatches(searchTerm, e)
       );
     });
   }, [searchTerm, events, filtered, getCustomerById]);
@@ -624,64 +613,116 @@ const EventsBoard: React.FC = () => {
   }, [customers, searchTerm]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-4">
-            <div>
-              <h2 className="text-3xl font-bold text-slate-800">אירועים</h2>
-              <p className="text-slate-500">ניהול לוח זמנים, סיווגים וגבייה</p>
-            </div>
-            <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-3 rounded-xl shadow-lg">
-              <div className="text-xs font-bold opacity-90">סך הכנסות</div>
-              <div className="text-2xl font-black">₪{totalRevenueFiltered.toLocaleString()}</div>
+    <div className="space-y-4">
+      {/* אזור עליון קבוע — כותרת, חיפוש וסינון לא נגללים עם הרשימה */}
+      <div className="sticky top-0 z-30 bg-slate-50 -mx-4 md:-mx-8 -mt-4 md:-mt-8 px-4 md:px-8 pt-4 md:pt-5 pb-3 border-b border-slate-200 shadow-sm space-y-3">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold text-slate-800">אירועים</h2>
+            <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-4 py-1.5 rounded-xl shadow flex items-baseline gap-2">
+              <span className="text-xs font-bold opacity-90">סך הכנסות</span>
+              <span className="text-lg font-black">₪{totalRevenueFiltered.toLocaleString()}</span>
             </div>
           </div>
+          <div className="flex flex-wrap gap-2">
+            <input type="file" ref={fileInputRef} onChange={async (e) => { const file = e.target.files?.[0]; if(file) { importEvents(await parseCSV(file)); alert('ייבוא וסנכרון הושלם!'); } }} className="hidden" accept=".csv" />
+            <input type="file" ref={paymentCsvRef} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { const rows = await parseCSV(file); const n = applyPaymentDatesFromImport(rows as Record<string, unknown>[]); alert(n ? `עודכנו תאריכי תשלום ל-${n} אירועים` : 'לא נמצאו התאמות. וודאו שיש בעמודות Item ID ותאריך תשלום, ושהמזהה תואם לאירוע.'); } finally { e.target.value = ''; } }} className="hidden" accept=".csv" />
+            <button
+              type="button"
+              onClick={() => setEventModal({ type: 'new', draftKey: Date.now() })}
+              className="bg-purple-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm font-bold shadow hover:bg-purple-700 transition-all"
+            >
+              <Plus size={16} /> הוסף אירוע
+            </button>
+            <button
+              type="button"
+              disabled={cloudRefreshing}
+              onClick={async () => {
+                setCloudRefreshing(true);
+                try {
+                  await reloadFromCloud();
+                } catch (e) {
+                  alert((e as Error).message || 'רענון מהענן נכשל');
+                } finally {
+                  setCloudRefreshing(false);
+                }
+              }}
+              className="bg-white border px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm font-bold shadow-sm hover:bg-slate-50 transition-all disabled:opacity-60"
+            >
+              <Download size={16} /> {cloudRefreshing ? 'מרענן…' : 'רענן מהענן'}
+            </button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="bg-white border px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm font-bold shadow-sm hover:bg-slate-50 transition-all"><Upload size={16} /> ייבוא</button>
+            <button type="button" title="קובץ נתוני אירועים: Item ID + תאריך תשלום" onClick={() => paymentCsvRef.current?.click()} className="bg-amber-50 border border-amber-200 text-amber-900 px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm font-bold shadow-sm hover:bg-amber-100 transition-all"><CalendarIcon size={16} /> תאריכי תשלום</button>
+            <button onClick={() => setViewMode(v => v === 'all' ? 'unpaid' : 'all')} className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all shadow-sm ${viewMode === 'unpaid' ? 'bg-red-500 text-white' : 'bg-white text-slate-700 border'}`}>
+              {viewMode === 'unpaid' ? 'הצג הכל' : 'הצג חובות'}
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <input type="file" ref={fileInputRef} onChange={async (e) => { const file = e.target.files?.[0]; if(file) { importEvents(await parseCSV(file)); alert('ייבוא וסנכרון הושלם!'); } }} className="hidden" accept=".csv" />
-          <input type="file" ref={paymentCsvRef} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; try { const rows = await parseCSV(file); const n = applyPaymentDatesFromImport(rows as Record<string, unknown>[]); alert(n ? `עודכנו תאריכי תשלום ל-${n} אירועים` : 'לא נמצאו התאמות. וודאו שיש בעמודות Item ID ותאריך תשלום, ושהמזהה תואם לאירוע.'); } finally { e.target.value = ''; } }} className="hidden" accept=".csv" />
-          <button
-            type="button"
-            onClick={() => setEventModal({ type: 'new', draftKey: Date.now() })}
-            className="bg-purple-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-lg hover:bg-purple-700 transition-all"
-          >
-            <Plus size={18} /> הוסף אירוע
-          </button>
-          <button
-            type="button"
-            disabled={cloudRefreshing}
-            onClick={async () => {
-              setCloudRefreshing(true);
-              try {
-                await reloadFromCloud();
-              } catch (e) {
-                alert((e as Error).message || 'רענון מהענן נכשל');
-              } finally {
-                setCloudRefreshing(false);
-              }
-            }}
-            className="bg-white border px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-slate-50 transition-all disabled:opacity-60"
-          >
-            <Download size={18} /> {cloudRefreshing ? 'מרענן…' : 'רענן מהענן'}
-          </button>
-          <button type="button" onClick={() => fileInputRef.current?.click()} className="bg-white border px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-slate-50 transition-all"><Upload size={18} /> ייבוא</button>
-          <button type="button" title="קובץ נתוני אירועים: Item ID + תאריך תשלום" onClick={() => paymentCsvRef.current?.click()} className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-sm hover:bg-amber-100 transition-all"><CalendarIcon size={18} /> תאריכי תשלום</button>
-          <button onClick={() => setViewMode(v => v === 'all' ? 'unpaid' : 'all')} className={`px-4 py-2 rounded-xl font-bold transition-all shadow-sm ${viewMode === 'unpaid' ? 'bg-red-500 text-white' : 'bg-white text-slate-700 border'}`}>
-            {viewMode === 'unpaid' ? 'הצג הכל' : 'הצג חובות'}
-          </button>
-        </div>
-      </div>
 
-      <div className="flex flex-col md:flex-row gap-4 items-center">
-          <div className="relative flex-1">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input type="text" placeholder="חפש לפי שם, ID או תגית..." className="w-full pr-10 pl-4 py-3 bg-white border rounded-xl outline-none shadow-sm focus:ring-2 focus:ring-purple-100" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+        {/* חיפוש + סינונים בשורה אחת */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-64">
+              <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+              <input type="text" placeholder="חפש שם, ID, תגית או סכום..." className="w-full pr-8 pl-3 py-1.5 text-sm bg-white border rounded-lg outline-none shadow-sm focus:ring-2 focus:ring-purple-100" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
           </div>
-          <div className="flex gap-2">
-              <button onClick={() => toggleAllGroups(false)} className="text-xs font-bold text-purple-600 bg-purple-50 px-3 py-2 rounded-lg">פתח הכל</button>
-              <button onClick={() => toggleAllGroups(true)} className="text-xs font-bold text-slate-400 bg-slate-50 px-3 py-2 rounded-lg">כווץ הכל</button>
+          <MultiSelectFilter
+            label="שנים"
+            options={allYears}
+            selected={selectedYears}
+            onChange={setSelectedYears}
+            getCount={(year) => events.filter(e => eventYearKey(e) === year).length}
+          />
+          <MultiSelectFilter
+            label="תחומים"
+            options={allCategories}
+            selected={selectedCategories}
+            onChange={setSelectedCategories}
+            getCount={(cat) => events.filter(e => getBusinessCategory(e) === cat).length}
+          />
+          <MultiSelectFilter
+            label="סוג"
+            options={allEventTypes}
+            selected={selectedEventTypes}
+            onChange={setSelectedEventTypes}
+            getCount={(type) => events.filter(e => e.eventType === type).length}
+          />
+          <MultiSelectFilter
+            label="תשלום"
+            options={allPaymentStatuses}
+            selected={selectedPaymentStatuses}
+            onChange={setSelectedPaymentStatuses}
+            getCount={(status) => events.filter(e => e.paymentStatus === status || (status === PaymentStatus.NotPaid && e.paymentStatus === 'לא שולם')).length}
+          />
+          <MultiSelectFilter
+            label="סטטוס"
+            options={allEventStatuses}
+            selected={selectedEventStatuses}
+            onChange={setSelectedEventStatuses}
+            getCount={(status) => events.filter(e => e.status === status).length}
+          />
+          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              className="text-xs font-bold border-0 outline-none w-[7.5rem]"
+              title="מתאריך (ריק = ללא הגבלה)"
+            />
+            <span className="text-xs text-slate-400">עד</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              className="text-xs font-bold border-0 outline-none w-[7.5rem]"
+              title="עד תאריך (ריק = ללא הגבלה)"
+            />
           </div>
+          <button type="button" onClick={clearAllFilters} className="text-xs font-black bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-200">ניקוי</button>
+          <div className="flex gap-1.5 mr-auto">
+              <button onClick={() => toggleAllGroups(false)} className="text-xs font-bold text-purple-600 bg-purple-50 px-2.5 py-1.5 rounded-lg">פתח הכל</button>
+              <button onClick={() => toggleAllGroups(true)} className="text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-lg">כווץ הכל</button>
+          </div>
+        </div>
       </div>
 
       {searchTerm.trim() && matchedCustomersForSearch.length > 0 && (
@@ -710,89 +751,6 @@ const EventsBoard: React.FC = () => {
           </div>
         </div>
       )}
-
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <div className="flex flex-col xl:flex-row xl:items-end gap-3">
-          <div className="flex-1">
-            <h3 className="text-sm font-black text-slate-700 mb-2">סינון אירועים</h3>
-            <div className="flex flex-wrap gap-3">
-              <MultiSelectFilter
-                label="שנים"
-                options={allYears}
-                selected={selectedYears}
-                onChange={setSelectedYears}
-                onSave={saveFilters}
-                getCount={(year) => events.filter(e => eventYearKey(e) === year).length}
-              />
-              <MultiSelectFilter
-                label="תגיות / תחומים"
-                options={allCategories}
-                selected={selectedCategories}
-                onChange={setSelectedCategories}
-                onSave={saveFilters}
-                getCount={(cat) => events.filter(e => getBusinessCategory(e) === cat).length}
-              />
-              <MultiSelectFilter
-                label="סוג אירוע"
-                options={allEventTypes}
-                selected={selectedEventTypes}
-                onChange={setSelectedEventTypes}
-                onSave={saveFilters}
-                getCount={(type) => events.filter(e => e.eventType === type).length}
-              />
-              <MultiSelectFilter
-                label="סטטוס תשלום"
-                options={allPaymentStatuses}
-                selected={selectedPaymentStatuses}
-                onChange={setSelectedPaymentStatuses}
-                onSave={saveFilters}
-                getCount={(status) => events.filter(e => e.paymentStatus === status || (status === PaymentStatus.NotPaid && e.paymentStatus === 'לא שולם')).length}
-              />
-              <MultiSelectFilter
-                label="סטטוס אירוע"
-                options={allEventStatuses}
-                selected={selectedEventStatuses}
-                onChange={setSelectedEventStatuses}
-                onSave={saveFilters}
-                getCount={(status) => events.filter(e => e.status === status).length}
-              />
-              <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
-                <div className="text-[10px] font-black text-slate-400 mb-1">טווח תאריכים</div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={e => setDateFrom(e.target.value)}
-                    className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-purple-100"
-                    title="מתאריך (ריק = ללא הגבלה)"
-                  />
-                  <span className="text-xs text-slate-400">עד</span>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={e => setDateTo(e.target.value)}
-                    className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-purple-100"
-                    title="עד תאריך (ריק = ללא הגבלה)"
-                  />
-                  {(dateFrom || dateTo) && (
-                    <button
-                      type="button"
-                      onClick={() => { setDateFrom(''); setDateTo(''); }}
-                      className="text-[10px] font-black text-slate-500 hover:text-slate-800 underline"
-                    >
-                      נקה תאריכים
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={saveFilters} className="text-xs font-black bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700">שמירת בחירה</button>
-            <button type="button" onClick={clearAllFilters} className="text-xs font-black bg-slate-100 text-slate-600 px-4 py-2 rounded-xl hover:bg-slate-200">ניקוי בחירה</button>
-          </div>
-        </div>
-      </div>
 
       {hiddenByFilters.length > 0 && (
         <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">

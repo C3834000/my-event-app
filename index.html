@@ -36,13 +36,17 @@
       body {
         background-color: #f8fafc;
       }
-      /* Custom scrollbar for cleaner look */
+      /* Custom scrollbar for cleaner look — thin vertical bar */
       ::-webkit-scrollbar {
-        width: 8px;
+        width: 5px;
         height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #f1f5f9; 
+        background: transparent;
+      }
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 transparent;
       }
       ::-webkit-scrollbar-thumb {
         background: #cbd5e1; 
