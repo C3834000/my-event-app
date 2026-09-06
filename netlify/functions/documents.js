@@ -14,7 +14,8 @@
 //   create      { data: {...מטא־דאטה}, source: {kind, ref} } → יצירת רשומה + מקור.
 //   list        { direction?, reviewStatus?, monthKey? } → רשימה + מקורות + חשדות כפילות.
 //   update      { id, data } → עדכון שדות מותרים בלבד.
-//   delete      { id } → מחיקת רשומה + הקובץ מהאחסון.
+//   archive     { id } → העברה לארכיון (ניתן לשחזור; הקובץ לא נמחק לעולם).
+//   restore     { id } → שחזור מהארכיון.
 //   fileUrl     { id } → signed URL לצפייה (שעה).
 //   addSource   { id, kind, ref } → רישום מקור נוסף לאותו מסמך.
 // ============================================================================
@@ -50,7 +51,21 @@ const sanitizeFileName = (name) => String(name || 'file')
   .replace(/[^\w.\-\u0590-\u05FF ]/g, '_')
   .slice(0, 120);
 
-/** חשדות כפילות: אותו מספר מסמך + ספק/לקוח, או אותו מספר+סוג. סימון בלבד — אין מיזוג אוטומטי. */
+/**
+ * חשדות כפילות — סימון בלבד, אין מיזוג אוטומטי.
+ * כפילות = אותו מספר מסמך + אותו *סוג* מסמך. חשבונית וקבלה עם אותו מספר
+ * על אותה עסקה הן שני מסמכים לגיטימיים — לא כפילות.
+ * אם סוג המסמך חסר בשני הצדדים, נדרש לפחות אותו ספק/לקוח כדי לסמן חשד.
+ */
+function isDuplicatePair(a, b) {
+  if (!a.doc_number || a.doc_number !== b.doc_number) return false;
+  if (a.doc_type && b.doc_type) return a.doc_type === b.doc_type;
+  if (!a.doc_type && !b.doc_type) {
+    return !!(a.counterparty && b.counterparty && a.counterparty === b.counterparty);
+  }
+  return false; // סוג ידוע מול סוג חסר — לא מסמנים
+}
+
 async function findSuspects(supabase, doc) {
   if (!doc.doc_number) return [];
   const { data, error } = await supabase
@@ -59,12 +74,7 @@ async function findSuspects(supabase, doc) {
     .eq('doc_number', doc.doc_number)
     .neq('id', doc.id);
   if (error || !data) return [];
-  return data
-    .filter(d =>
-      (d.counterparty && doc.counterparty && d.counterparty === doc.counterparty) ||
-      (d.doc_type && doc.doc_type && d.doc_type === doc.doc_type)
-    )
-    .map(toCamel);
+  return data.filter(d => isDuplicatePair(doc, d)).map(toCamel);
 }
 
 export const handler = async (event) => {
@@ -164,6 +174,9 @@ export const handler = async (event) => {
     // ── list ──────────────────────────────────────────────────────────────
     if (action === 'list') {
       let q = supabase.from('documents').select('*').order('doc_date', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false });
+      // ברירת מחדל: בלי מסמכי ארכיון. archivedOnly=true — רק ארכיון.
+      if (body.archivedOnly === true) q = q.not('archived_at', 'is', null);
+      else q = q.is('archived_at', null);
       if (body.direction) q = q.eq('direction', body.direction);
       if (body.reviewStatus) q = q.eq('review_status', body.reviewStatus);
       if (body.monthKey && /^\d{4}-\d{2}$/.test(body.monthKey)) {
@@ -185,15 +198,12 @@ export const handler = async (event) => {
           (sourcesByDoc[s.document_id] ||= []).push(toCamel(s));
         }
       }
-      // סימון חשדות כפילות בתוך התוצאה: אותו doc_number שמופיע יותר מפעם אחת
-      const numCount = {};
-      for (const r of rows || []) {
-        if (r.doc_number) numCount[r.doc_number] = (numCount[r.doc_number] || 0) + 1;
-      }
+      // סימון חשדות כפילות בתוך התוצאה — לפי אותם כללים (מספר+סוג),
+      // כך שחשבונית וקבלה על אותה עסקה לא מסומנות ככפילות.
       const documents = (rows || []).map(r => ({
         ...toCamel(r),
         sources: sourcesByDoc[r.id] || [],
-        duplicateSuspect: !!(r.doc_number && numCount[r.doc_number] > 1),
+        duplicateSuspect: (rows || []).some(o => o.id !== r.id && isDuplicatePair(r, o)),
       }));
       return json(200, { success: true, documents });
     }
@@ -212,17 +222,18 @@ export const handler = async (event) => {
       return json(200, { success: true, document: toCamel(updated), suspects });
     }
 
-    // ── delete: רשומה + קובץ ──────────────────────────────────────────────
-    if (action === 'delete') {
+    // ── archive / restore: אין מחיקה לצמיתות בשלב הניסיון ────────────────
+    if (action === 'archive' || action === 'restore') {
       const id = String(body.id || '');
       if (!id) return json(400, { success: false, error: 'נדרש id' });
-      const { data: doc } = await supabase.from('documents').select('file_path').eq('id', id).maybeSingle();
-      const { error } = await supabase.from('documents').delete().eq('id', id);
+      const { data: updated, error } = await supabase
+        .from('documents')
+        .update({ archived_at: action === 'archive' ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
       if (error) throw error;
-      if (doc?.file_path) {
-        await supabase.storage.from(BUCKET).remove([doc.file_path]).catch(() => {});
-      }
-      return json(200, { success: true });
+      return json(200, { success: true, document: toCamel(updated) });
     }
 
     // ── fileUrl: signed URL לצפייה ───────────────────────────────────────

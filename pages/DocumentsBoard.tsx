@@ -4,13 +4,13 @@
 // ============================================================================
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Upload, FileText, Eye, Edit, Trash2, CheckCircle2, AlertTriangle,
+  Upload, FileText, Eye, Edit, Archive, ArchiveRestore, CheckCircle2, AlertTriangle,
   RotateCcw, X, KeyRound, Loader2,
 } from 'lucide-react';
 import {
   FinanceDocument, DocSuspect, DOC_TYPES, DocDirection,
   sha256OfFile, initUpload, uploadToSignedUrl, createDocument,
-  listDocuments, updateDocument, deleteDocument, getDocumentFileUrl,
+  listDocuments, updateDocument, archiveDocument, restoreDocument, getDocumentFileUrl,
   getDocsApiKey, setDocsApiKey,
 } from '../services/documents';
 
@@ -47,6 +47,7 @@ const DocumentsBoard: React.FC = () => {
   const [monthFilter, setMonthFilter] = useState('');       // '' = הכל
   const [directionFilter, setDirectionFilter] = useState<'' | DocDirection>('');
   const [statusFilter, setStatusFilter] = useState<'' | 'needs_review' | 'confirmed'>('');
+  const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<EditState>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,6 +60,7 @@ const DocumentsBoard: React.FC = () => {
         direction: directionFilter || undefined,
         reviewStatus: statusFilter || undefined,
         monthKey: monthFilter || undefined,
+        archivedOnly: showArchived || undefined,
       });
       setDocs(rows);
     } catch (e) {
@@ -68,7 +70,7 @@ const DocumentsBoard: React.FC = () => {
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [apiKey, monthFilter, directionFilter, statusFilter]);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [apiKey, monthFilter, directionFilter, statusFilter, showArchived]);
 
   const saveKey = () => {
     if (!keyInput.trim()) return;
@@ -130,10 +132,20 @@ const DocumentsBoard: React.FC = () => {
     }
   };
 
-  const remove = async (doc: FinanceDocument) => {
-    if (!confirm(`למחוק את המסמך «${doc.fileName || doc.docNumber || doc.id}»? הקובץ יימחק גם מהאחסון.`)) return;
+  // ארכיון במקום מחיקה — ניתן לשחזור בכל רגע; הקובץ המקורי נשאר באחסון.
+  const archive = async (doc: FinanceDocument) => {
+    if (!confirm(`להעביר את «${doc.fileName || doc.docNumber || doc.id}» לארכיון? ניתן לשחזר בכל רגע — הקובץ לא נמחק.`)) return;
     try {
-      await deleteDocument(doc.id);
+      await archiveDocument(doc.id);
+      setDocs(prev => prev.filter(d => d.id !== doc.id));
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
+  const restore = async (doc: FinanceDocument) => {
+    try {
+      await restoreDocument(doc.id);
       setDocs(prev => prev.filter(d => d.id !== doc.id));
     } catch (e) {
       alert((e as Error).message);
@@ -155,9 +167,10 @@ const DocumentsBoard: React.FC = () => {
           <h2 className="text-2xl font-bold text-slate-800">מאגר מסמכים — מפתח גישה</h2>
         </div>
         <p className="text-sm text-slate-600 leading-relaxed">
-          הגישה למאגר המסמכים מאובטחת במפתח משותף. יש להגדיר את המשתנה
+          בסביבת הבדיקה המקומית המפתח מוזרק אוטומטית והמסך הזה לא אמור להופיע.
+          בסביבה מאוחסנת יש להזין פעם אחת מפתח התואם למשתנה
           <span className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded mx-1">DOCS_API_KEY</span>
-          ב-Netlify (Environment variables), ולהזין כאן את אותו ערך. המפתח נשמר מקומית בדפדפן בלבד.
+          שמוגדר בשרת. המפתח נשמר מקומית בדפדפן בלבד.
         </p>
         <div className="flex gap-2">
           <input
@@ -242,6 +255,13 @@ const DocumentsBoard: React.FC = () => {
           <option value="needs_review">לבדיקה</option>
           <option value="confirmed">מאושר</option>
         </select>
+        <button
+          onClick={() => setShowArchived(v => !v)}
+          className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border flex items-center gap-1 ${showArchived ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+          title="הצגת מסמכים שהועברו לארכיון"
+        >
+          <Archive size={13} /> {showArchived ? 'חזרה למסמכים פעילים' : 'ארכיון'}
+        </button>
         <div className="mr-auto flex items-center gap-3 text-xs font-bold text-slate-500">
           <span>{stats.total} מסמכים</span>
           {stats.needsReview > 0 && <span className="text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200">{stats.needsReview} לבדיקה</span>}
@@ -331,16 +351,24 @@ const DocumentsBoard: React.FC = () => {
                     <button onClick={() => setEditing({ doc, suspects: [] })} className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg" title="עריכת פרטים">
                       <Edit size={15} />
                     </button>
-                    <button
-                      onClick={() => toggleApprove(doc)}
-                      className={`p-1.5 rounded-lg ${doc.reviewStatus === 'confirmed' ? 'text-green-600 hover:bg-amber-50 hover:text-amber-600' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`}
-                      title={doc.reviewStatus === 'confirmed' ? 'החזר לבדיקה' : 'אשר מסמך'}
-                    >
-                      <CheckCircle2 size={15} />
-                    </button>
-                    <button onClick={() => remove(doc)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="מחיקה">
-                      <Trash2 size={15} />
-                    </button>
+                    {!showArchived && (
+                      <button
+                        onClick={() => toggleApprove(doc)}
+                        className={`p-1.5 rounded-lg ${doc.reviewStatus === 'confirmed' ? 'text-green-600 hover:bg-amber-50 hover:text-amber-600' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`}
+                        title={doc.reviewStatus === 'confirmed' ? 'החזר לבדיקה' : 'אשר מסמך'}
+                      >
+                        <CheckCircle2 size={15} />
+                      </button>
+                    )}
+                    {showArchived ? (
+                      <button onClick={() => restore(doc)} className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg" title="שחזור מהארכיון">
+                        <ArchiveRestore size={15} />
+                      </button>
+                    ) : (
+                      <button onClick={() => archive(doc)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="העברה לארכיון (ניתן לשחזור)">
+                        <Archive size={15} />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -389,6 +417,9 @@ const EditDocumentModal: React.FC<{
     relatedDocId: doc.relatedDocId || '',
   });
   const [saving, setSaving] = useState(false);
+  // שיעור מע"מ ניתן לעריכה — ברירת המחדל 18 אך אינה מוחלת אוטומטית על אף מסמך.
+  // מסמכים היסטוריים (למשל 17%) או פטורים ממע"מ: משנים את השיעור או לוחצים "ללא מע"מ".
+  const [vatRate, setVatRate] = useState('18');
 
   const isCreditOrCancel = form.docType === 'זיכוי' || form.docType === 'ביטול';
   const numOrNull = (s: string) => {
@@ -398,15 +429,26 @@ const EditDocumentModal: React.FC<{
     return Number.isFinite(n) ? n : null;
   };
 
-  // חישוב מע"מ 18% מהסה"כ — רק בלחיצה מפורשת, לא אוטומטית
+  // חישוב נטו ומע"מ מהסה"כ לפי השיעור שהוזן — רק בלחיצה מפורשת, לא אוטומטית
   const fillVatFromTotal = () => {
     const total = numOrNull(form.totalAmount);
-    if (total == null) return;
-    const net = total / 1.18;
+    const rate = numOrNull(vatRate);
+    if (total == null || rate == null || rate < 0) return;
+    const net = total / (1 + rate / 100);
     setForm(f => ({
       ...f,
       netAmount: net.toFixed(2),
       vatAmount: (total - net).toFixed(2),
+    }));
+  };
+
+  // מסמך ללא מע"מ (פטור/עוסק פטור/מסמך היסטורי ללא מע"מ)
+  const setNoVat = () => {
+    const total = numOrNull(form.totalAmount);
+    setForm(f => ({
+      ...f,
+      vatAmount: '0',
+      netAmount: total != null ? String(total) : f.netAmount,
     }));
   };
 
@@ -485,16 +527,31 @@ const EditDocumentModal: React.FC<{
           </div>
           <div>
             <label className={label}>מע"מ</label>
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 items-center">
               <input value={form.vatAmount} onChange={e => setForm(f => ({ ...f, vatAmount: e.target.value }))} className={input} inputMode="decimal" />
+              <input
+                value={vatRate}
+                onChange={e => setVatRate(e.target.value)}
+                className="w-12 shrink-0 border border-slate-200 rounded-lg px-1.5 py-2 text-xs font-bold text-center outline-none focus:ring-2 focus:ring-purple-100"
+                inputMode="decimal"
+                title="שיעור המע''מ לחישוב (%) — ניתן לשינוי, למשל 17 למסמכים היסטוריים"
+              />
               <button
                 type="button"
                 onClick={fillVatFromTotal}
                 disabled={!form.totalAmount}
-                className="shrink-0 text-[11px] font-black bg-slate-100 text-slate-600 px-2 rounded-lg hover:bg-slate-200 disabled:opacity-40"
-                title="חישוב נטו ומע''מ מהסה''כ לפי 18% — פעולה מפורשת, לא אוטומטית"
+                className="shrink-0 text-[11px] font-black bg-slate-100 text-slate-600 px-2 py-2 rounded-lg hover:bg-slate-200 disabled:opacity-40"
+                title="חישוב נטו ומע''מ מהסה''כ לפי השיעור שהוזן — פעולה מפורשת, לא אוטומטית"
               >
-                18%
+                חשב %
+              </button>
+              <button
+                type="button"
+                onClick={setNoVat}
+                className="shrink-0 text-[11px] font-black bg-slate-100 text-slate-600 px-2 py-2 rounded-lg hover:bg-slate-200"
+                title="מסמך ללא מע''מ — מע''מ 0, נטו = סה''כ"
+              >
+                ללא
               </button>
             </div>
           </div>

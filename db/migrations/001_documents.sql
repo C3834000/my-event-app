@@ -50,6 +50,8 @@ create table if not exists documents (
   file_name     text,
   file_mime     text,
   file_size     bigint,
+  -- ארכיון במקום מחיקה: מסמך בארכיון ניתן לשחזור; הקובץ המקורי לא נמחק לעולם.
+  archived_at   timestamptz,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );

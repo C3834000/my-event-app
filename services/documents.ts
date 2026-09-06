@@ -55,8 +55,22 @@ export interface DocSuspect {
 
 const DOCS_KEY_STORAGE = 'ME_CFM_DOCS_API_KEY';
 
+/**
+ * מפתח הגישה למאגר המסמכים — סוד נפרד, לא קשור לסיסמת ההתחברות.
+ * עדיפות 1: VITE_DOCS_API_KEY — מוזרק אוטומטית בסביבת הבדיקה המקומית בלבד
+ *           (נוצר אקראית על ידי scripts/docs-test-server.mjs; לא נכנס ל-git).
+ * עדיפות 2: מפתח שהוזן ידנית פעם אחת (localStorage) — למשל בסביבה מאוחסנת.
+ *
+ * ⚠️ מגבלה מתועדת: זהו סוד משותף (shared secret) — לא הזדהות משתמשים אמיתית.
+ * אין זהות פר-משתמש, אין ביטול הרשאה פרטני ואין תפוגה. מתאים לשלב הניסיון
+ * לכלי פנימי של משתמש יחיד; לייצור רב-משתמשים נדרש מנגנון הזדהות אמיתי
+ * (למשל Supabase Auth) — מחוץ להיקף השלב הזה.
+ */
 export const getDocsApiKey = (): string => {
-  try { return localStorage.getItem(DOCS_KEY_STORAGE) || ''; } catch { return ''; }
+  try {
+    const injected = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_DOCS_API_KEY;
+    return injected || localStorage.getItem(DOCS_KEY_STORAGE) || '';
+  } catch { return ''; }
 };
 
 export const setDocsApiKey = (key: string) => {
@@ -127,6 +141,7 @@ export async function listDocuments(filters?: {
   direction?: DocDirection;
   reviewStatus?: DocReviewStatus;
   monthKey?: string;
+  archivedOnly?: boolean;
 }): Promise<FinanceDocument[]> {
   const res = await post<{ documents: FinanceDocument[] }>({ action: 'list', ...(filters || {}) });
   return res.documents || [];
@@ -139,8 +154,13 @@ export async function updateDocument(
   return post({ action: 'update', id, data });
 }
 
-export async function deleteDocument(id: string): Promise<void> {
-  await post({ action: 'delete', id });
+/** ארכיון במקום מחיקה — ניתן לשחזור; הקובץ המקורי נשאר באחסון */
+export async function archiveDocument(id: string): Promise<void> {
+  await post({ action: 'archive', id });
+}
+
+export async function restoreDocument(id: string): Promise<void> {
+  await post({ action: 'restore', id });
 }
 
 export async function getDocumentFileUrl(id: string): Promise<string> {
