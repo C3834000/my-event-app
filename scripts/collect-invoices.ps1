@@ -18,7 +18,13 @@ if (-not (Test-Path 'node_modules/pdf-parse')) {
 Write-Host '1/2 סורק את המחשב (קריאה בלבד)...' -ForegroundColor Cyan
 node scripts/scan-invoices.mjs
 
-Write-Host '2/2 מייבא מסמכים חדשים למערכת החיה...' -ForegroundColor Cyan
+Write-Host '2/4 מייבא מסמכים חדשים למערכת החיה...' -ForegroundColor Cyan
 node scripts/import-scanned.mjs all --target=prod
+
+Write-Host '3/4 ממלא פרטים אוטומטית מתוכן המסמכים (ספק, סכום, מע"מ, תאריך)...' -ForegroundColor Cyan
+node scripts/extract-details.mjs --apply
+
+Write-Host '4/4 מארכב מסמכי חשבונית ירוקה שהופקו על ידך (הכנסות, לא הוצאות)...' -ForegroundColor Cyan
+node scripts/archive-gi-docs.mjs --apply
 
 Write-Host 'סיום. המסמכים ממתינים לבדיקה במסך: https://myecrm2026.netlify.app/#/documents' -ForegroundColor Green
