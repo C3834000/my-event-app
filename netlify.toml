@@ -58,6 +58,12 @@
   status = 200
   force  = true
 
+# Route /api/documents → מאגר מסמכים (שלב ראשון — העלאה ידנית)
+[[redirects]]
+  from   = "/api/documents"
+  to     = "/.netlify/functions/documents"
+  status = 200
+
 # SPA fallback – all routes → index.html
 [[redirects]]
   from   = "/*"
