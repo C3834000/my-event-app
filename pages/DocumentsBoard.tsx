@@ -331,8 +331,17 @@ const DocumentsBoard: React.FC = () => {
                     {doc.direction === 'income' ? 'הכנסה' : 'הוצאה'}
                   </span>
                 </td>
-                <td className="px-3 py-2 text-xs text-slate-500">
-                  {(doc.sources || []).map(s => SOURCE_LABELS[s.sourceKind] || s.sourceKind).join(', ') || '—'}
+                <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
+                  {(() => {
+                    // מרכזים מקורות זהים: "תיקייה ×44" במקום שם חוזר עשרות פעמים
+                    const counts = new Map<string, number>();
+                    for (const s of doc.sources || []) {
+                      const label = SOURCE_LABELS[s.sourceKind] || s.sourceKind;
+                      counts.set(label, (counts.get(label) || 0) + 1);
+                    }
+                    if (!counts.size) return '—';
+                    return [...counts.entries()].map(([label, n]) => n > 1 ? `${label} ×${n}` : label).join(', ');
+                  })()}
                 </td>
                 <td className="px-3 py-2">
                   {doc.reviewStatus === 'confirmed' ? (
