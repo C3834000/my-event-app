@@ -47,9 +47,18 @@ const pickDocFields = (data) => Object.fromEntries(
 
 const newId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-const sanitizeFileName = (name) => String(name || 'file')
-  .replace(/[^\w.\-\u0590-\u05FF ]/g, '_')
-  .slice(0, 120);
+// נתיב אחסון חייב להיות ASCII בלבד (Supabase Storage דוחה עברית במפתח האובייקט).
+// השם המקורי (כולל עברית) נשמר בשדה file_name לתצוגה — רק הנתיב מנוקה.
+const sanitizeFileName = (name) => {
+  const raw = String(name || 'file');
+  const dot = raw.lastIndexOf('.');
+  const ext = dot > 0 ? raw.slice(dot).replace(/[^\w.]/g, '') : '';
+  const base = (dot > 0 ? raw.slice(0, dot) : raw)
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 100);
+  return (base || 'file') + ext;
+};
 
 /**
  * חשדות כפילות — סימון בלבד, אין מיזוג אוטומטי.
