@@ -13,8 +13,9 @@ dist-ssr
 *.local
 .env
 server/.env
-# מפתחות סביבת הבדיקה של מאגר המסמכים — לא נכנסים ל-git
+# מפתחות מאגר המסמכים (בדיקה + ייצור) — לא נכנסים ל-git
 .env.documents-test
+.env.documents-prod
 # נתוני סביבת הבדיקה המקומית (מסמכים וקבצים שהועלו בניסוי)
 test-env/
 test-env-live/

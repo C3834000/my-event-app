@@ -1,18 +1,37 @@
 // ============================================================================
-// ייבוא ממצאי הסריקה למאגר המסמכים בסביבת הבדיקה — עד 20 מסמכים מחודש אחד.
+// ייבוא ממצאי הסריקה למאגר המסמכים בסביבת הבדיקה.
 // - קריאה בלבד מהקבצים המקוריים (לא מזיז/משנה/מוחק).
 // - תאריך נקבע רק אם זוהה בבירור מתוך תוכן המסמך; אחרת נשאר ריק + הערה.
 // - כל מיקום מקורי נרשם כמקור (source kind='folder').
-// הרצה: node scripts/import-scanned.mjs [YYYY-MM] (ברירת מחדל: 2025-05)
+// - התקדמות נשמרת ב-test-env/scan/imported.json — הרצה חוזרת מדלגת על מה שיובא,
+//   וכפילויות נחסמות ממילא לפי hash בצד השרת.
+// הרצה:  node scripts/import-scanned.mjs YYYY-MM          ← חודש אחד (עד 20)
+//        node scripts/import-scanned.mjs all               ← כל ודאי 2025/2026
+//        node scripts/import-scanned.mjs all --target=prod ← ישירות למערכת החיה
 // ============================================================================
 import fs from 'node:fs';
 import path from 'node:path';
 
-const MONTH = process.argv[2] || '2025-05';
-const BASE = 'http://localhost:4000';
-const LIMIT = 20;
+const args = process.argv.slice(2);
+const ARG = args.find(a => !a.startsWith('--')) || '2025-05';
+const PROD = args.includes('--target=prod');
+const ALL_MODE = ARG === 'all';
+const MONTH = ALL_MODE ? null : ARG;
+const BASE = PROD ? 'https://myecrm2026.netlify.app' : 'http://localhost:4000';
+const LIMIT = ALL_MODE ? Infinity : 20;
 
-const KEY = fs.readFileSync('.env.documents-test', 'utf8').match(/^DOCS_API_KEY=(.+)$/m)[1].trim();
+// מפתח גישה: בייצור מ-.env.documents-prod, בבדיקה מ-.env.documents-test (שניהם מחוץ ל-git)
+const KEY_FILE = PROD ? '.env.documents-prod' : '.env.documents-test';
+
+// התקדמות נפרדת לכל יעד — אפשר לעצור ולהמשיך בלי להתחיל מחדש
+const PROGRESS_FILE = PROD ? 'test-env/scan/imported-prod.json' : 'test-env/scan/imported.json';
+const progress = fs.existsSync(PROGRESS_FILE)
+  ? JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8'))
+  : { importedHashes: [] };
+const importedSet = new Set(progress.importedHashes);
+const saveProgress = () => fs.writeFileSync(PROGRESS_FILE, JSON.stringify({ importedHashes: [...importedSet] }, null, 1), 'utf8');
+
+const KEY = fs.readFileSync(KEY_FILE, 'utf8').match(/^DOCS_API_KEY=(.+)$/m)[1].trim();
 const F = JSON.parse(fs.readFileSync('test-env/scan/findings.json', 'utf8'));
 
 const api = async (body) => {
@@ -33,24 +52,36 @@ const filenameMonth = (name) => {
 
 const cohort = [];
 for (const d of F.documents) {
-  if (!inInvoiceContext(d)) continue;
-  if (d.ext !== '.pdf' && !d.isInvoiceLike) continue; // תמונות בלי אימות תוכן — לא בסבב הראשון
+  if (importedSet.has(d.hash)) continue; // כבר יובא בהרצה קודמת
+  if (d.ext !== '.pdf') continue;        // תמונות בלי אימות תוכן — לא "ודאי"
   const contentMonth = d.dateStatus === 'clear' ? d.detectedDate.slice(0, 7) : null;
   const nameMonth = filenameMonth(d.fileName);
   // בטיחות: אם שם הקובץ סותר את השנה שזוהתה בתוכן — לא סומכים על התאריך
   const conflict = contentMonth && nameMonth && contentMonth.slice(0, 4) !== nameMonth.slice(0, 4);
-  if (contentMonth === MONTH && !conflict) {
-    cohort.push({ d, docDate: d.detectedDate, dateSource: 'תוכן המסמך' });
-  } else if (!contentMonth && nameMonth === MONTH) {
-    cohort.push({ d, docDate: null, dateSource: `שם הקובץ מרמז על ${MONTH} — לא אומת בתוכן` });
+
+  if (ALL_MODE) {
+    // "ודאי 2025/2026": מסמך שאושר כחשבונית/קבלה לפי תוכן, והשיוך לשנה ברור —
+    // מתאריך בתוכן, או משם הקובץ/תיקייה כשאין תאריך ברור בתוכן.
+    if (!d.isInvoiceLike) continue;
+    const contentYearOk = contentMonth && /^202[56]/.test(contentMonth) && !conflict;
+    const nameYearOk = !contentMonth && nameMonth && /^202[56]/.test(nameMonth) && inInvoiceContext(d);
+    if (contentYearOk) cohort.push({ d, docDate: d.detectedDate, dateSource: 'תוכן המסמך' });
+    else if (nameYearOk) cohort.push({ d, docDate: null, dateSource: `שם הקובץ מרמז על ${nameMonth} — לא אומת בתוכן` });
+  } else {
+    if (!inInvoiceContext(d)) continue;
+    if (contentMonth === MONTH && !conflict) {
+      cohort.push({ d, docDate: d.detectedDate, dateSource: 'תוכן המסמך' });
+    } else if (!contentMonth && nameMonth === MONTH) {
+      cohort.push({ d, docDate: null, dateSource: `שם הקובץ מרמז על ${MONTH} — לא אומת בתוכן` });
+    }
   }
 }
 cohort.sort((a, b) => (a.docDate || '9') < (b.docDate || '9') ? -1 : 1);
 const batch = cohort.slice(0, LIMIT);
-console.log(`חודש ${MONTH}: ${cohort.length} מסמכים ייחודיים, מייבא ${batch.length}`);
+console.log(`${ALL_MODE ? 'כל ודאי 2025/2026' : `חודש ${MONTH}`}: ${cohort.length} מסמכים ייחודיים, מייבא ${batch.length}`);
 
 // ── ייבוא ───────────────────────────────────────────────────────────────────
-const log = [`# ייבוא ${MONTH} — ${new Date().toLocaleString('he-IL')}`, ''];
+const log = [`# ייבוא ${ALL_MODE ? 'כל ודאי 2025/2026' : MONTH} — ${new Date().toLocaleString('he-IL')}`, ''];
 let ok = 0, dup = 0, fail = 0;
 
 for (const { d, docDate, dateSource } of batch) {
@@ -60,6 +91,8 @@ for (const { d, docDate, dateSource } of batch) {
     const init = await api({ action: 'initUpload', fileHash: d.hash, fileName: d.fileName, fileMime: 'application/pdf', fileSize: buf.length });
     if (init.body.duplicate) {
       dup++;
+      importedSet.add(d.hash);
+      saveProgress();
       log.push(`⚠ כבר קיים במאגר: ${d.fileName}`);
       continue;
     }
@@ -95,6 +128,8 @@ for (const { d, docDate, dateSource } of batch) {
       await api({ action: 'addSource', id: docId, kind: 'folder', ref: loc });
     }
     ok++;
+    importedSet.add(d.hash);
+    saveProgress(); // שמירת התקדמות אחרי כל מסמך — אפשר לעצור ולהמשיך
     log.push(`✓ ${d.fileName} · ${d.docType || 'סוג לא זוהה'} · ${docDate || 'ללא תאריך (לבדיקה)'} · ${d.locations.length} מיקומים`);
   } catch (e) {
     fail++;
@@ -103,5 +138,5 @@ for (const { d, docDate, dateSource } of batch) {
 }
 
 log.push('', `סיכום: ${ok} יובאו, ${dup} כבר היו קיימים, ${fail} נכשלו`);
-fs.writeFileSync('test-env/scan/import-log.md', log.join('\n'), 'utf8');
+fs.writeFileSync(PROD ? 'test-env/scan/import-log-prod.md' : 'test-env/scan/import-log.md', log.join('\n'), 'utf8');
 console.log(log.join('\n'));
