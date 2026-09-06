@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // חילוץ אוטומטי של פרטי מסמכים (ספק, מספר, תאריך, סכומים, מע"מ) מתוך ה-PDF
 // ועדכון המסמכים במאגר הייצור. ממלא רק שדות ריקים — לא דורס עריכות ידניות.
 // מסמך שכל פרטיו חולצו בביטחון → מאושר אוטומטית; אחרת נשאר "לבדיקה" עם הערה.
@@ -199,22 +199,24 @@ for (const doc of docs) {
     status = 'needs_review'; flagged++;
     noteAdd = '🔎 נראה כמסמך מבוטל — לא לכלול בהוצאות בלי בדיקה';
   } else if (strong && !missing.length) {
-    status = 'approved'; full++;
+    status = 'confirmed'; full++;
     noteAdd = '✓ הפרטים חולצו אוטומטית מתוכן המסמך ואומתו (נטו+מע"מ=סה"כ)';
   } else if (strong) {
-    status = 'approved'; full++;
+    status = 'confirmed'; full++;
     noteAdd = `✓ חולץ אוטומטית מהתוכן · להשלמה אם רלוונטי: ${missing.join(', ')}`;
   } else {
     status = 'needs_review'; partial++;
     noteAdd = `⚠ חולץ חלקית — להשלים ידנית: ${missing.join(', ') || 'אימות סכומים'}`;
   }
 
-  row.result = `${status === 'approved' ? 'אושר' : 'לבדיקה'} | סכום=${after.totalAmount ?? '—'} מע"מ=${after.vatAmount ?? '—'} תאריך=${after.docDate ?? '—'} ספק=${after.counterparty ?? '—'} מס'=${after.docNumber ?? '—'}`;
+  row.result = `${status === 'confirmed' ? 'אושר' : 'לבדיקה'} | סכום=${after.totalAmount ?? '—'} מע"מ=${after.vatAmount ?? '—'} תאריך=${after.docDate ?? '—'} ספק=${after.counterparty ?? '—'} מס'=${after.docNumber ?? '—'}`;
   report.push(row);
 
   if (APPLY && (Object.keys(data).length || status !== doc.reviewStatus)) {
     data.reviewStatus = status;
-    data.notes = [(doc.notes || '').trim(), noteAdd].filter(Boolean).join('\n');
+    // לא מכפילים הערה שכבר נוספה בהרצה קודמת
+    const notes = (doc.notes || '').trim();
+    data.notes = notes.includes(noteAdd) ? notes : [notes, noteAdd].filter(Boolean).join('\n');
     const res = await api({ action: 'update', id: doc.id, data });
     if (!res.success) { row.result += ` | ✗ עדכון נכשל: ${res.error}`; }
   }
