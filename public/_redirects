@@ -1,4 +1,5 @@
 /api/send-email    /.netlify/functions/send-email    200
 /api/db            /.netlify/functions/db             200
 /api/green-invoice /.netlify/functions/green-invoice 200
+/api/documents     /.netlify/functions/documents     200
 /*                 /index.html                        200
