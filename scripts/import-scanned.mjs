@@ -7,6 +7,7 @@
 //   וכפילויות נחסמות ממילא לפי hash בצד השרת.
 // הרצה:  node scripts/import-scanned.mjs YYYY-MM          ← חודש אחד (עד 20)
 //        node scripts/import-scanned.mjs all               ← כל ודאי 2025/2026
+//        node scripts/import-scanned.mjs folders           ← כל קובץ בתיקיות חשבוניות (גם לא מפוענח)
 //        node scripts/import-scanned.mjs all --target=prod ← ישירות למערכת החיה
 // ============================================================================
 import fs from 'node:fs';
@@ -16,9 +17,18 @@ const args = process.argv.slice(2);
 const ARG = args.find(a => !a.startsWith('--')) || '2025-05';
 const PROD = args.includes('--target=prod');
 const ALL_MODE = ARG === 'all';
-const MONTH = ALL_MODE ? null : ARG;
+const FOLDERS_MODE = ARG === 'folders';
+const MONTH = (ALL_MODE || FOLDERS_MODE) ? null : ARG;
 const BASE = PROD ? 'https://myecrm2026.netlify.app' : 'http://localhost:4000';
-const LIMIT = ALL_MODE ? Infinity : 20;
+const LIMIT = (ALL_MODE || FOLDERS_MODE) ? Infinity : 20;
+
+// סוגי קבצים נתמכים במצב folders (הכל נשמר; הפרטים מושלמים בבדיקה)
+const MIME_BY_EXT = {
+  '.pdf': 'application/pdf',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xls': 'application/vnd.ms-excel', '.csv': 'text/csv',
+};
 
 // מפתח גישה: בייצור מ-.env.documents-prod, בבדיקה מ-.env.documents-test (שניהם מחוץ ל-git)
 const KEY_FILE = PROD ? '.env.documents-prod' : '.env.documents-test';
@@ -53,6 +63,17 @@ const filenameMonth = (name) => {
 const cohort = [];
 for (const d of F.documents) {
   if (importedSet.has(d.hash)) continue; // כבר יובא בהרצה קודמת
+
+  if (FOLDERS_MODE) {
+    // כל קובץ נתמך שנמצא בתיקיות חשבוניות/קבלות/הוצאות — נשמר כ"לבדיקה".
+    // תאריך רק אם זוהה בבירור בתוכן; אחרת ריק והחילוץ האוטומטי ישלים בהמשך.
+    if (!MIME_BY_EXT[d.ext]) continue;
+    if (!inInvoiceContext(d)) continue;
+    const clear = d.dateStatus === 'clear' && d.detectedDate;
+    cohort.push({ d, docDate: clear ? d.detectedDate : null, dateSource: clear ? 'תוכן המסמך' : 'לא זוהה תאריך — להשלמה בבדיקה' });
+    continue;
+  }
+
   if (d.ext !== '.pdf') continue;        // תמונות בלי אימות תוכן — לא "ודאי"
   const contentMonth = d.dateStatus === 'clear' ? d.detectedDate.slice(0, 7) : null;
   const nameMonth = filenameMonth(d.fileName);
@@ -78,17 +99,19 @@ for (const d of F.documents) {
 }
 cohort.sort((a, b) => (a.docDate || '9') < (b.docDate || '9') ? -1 : 1);
 const batch = cohort.slice(0, LIMIT);
-console.log(`${ALL_MODE ? 'כל ודאי 2025/2026' : `חודש ${MONTH}`}: ${cohort.length} מסמכים ייחודיים, מייבא ${batch.length}`);
+const MODE_LABEL = FOLDERS_MODE ? 'כל הקבצים בתיקיות חשבוניות' : ALL_MODE ? 'כל ודאי 2025/2026' : `חודש ${MONTH}`;
+console.log(`${MODE_LABEL}: ${cohort.length} מסמכים ייחודיים, מייבא ${batch.length}`);
 
 // ── ייבוא ───────────────────────────────────────────────────────────────────
-const log = [`# ייבוא ${ALL_MODE ? 'כל ודאי 2025/2026' : MONTH} — ${new Date().toLocaleString('he-IL')}`, ''];
+const log = [`# ייבוא ${FOLDERS_MODE ? 'תיקיות חשבוניות' : ALL_MODE ? 'כל ודאי 2025/2026' : MONTH} — ${new Date().toLocaleString('he-IL')}`, ''];
 let ok = 0, dup = 0, fail = 0;
 
 for (const { d, docDate, dateSource } of batch) {
   const primary = d.locations[0];
   try {
     const buf = fs.readFileSync(primary); // קריאה בלבד
-    const init = await api({ action: 'initUpload', fileHash: d.hash, fileName: d.fileName, fileMime: 'application/pdf', fileSize: buf.length });
+    const mime = MIME_BY_EXT[d.ext] || 'application/pdf';
+    const init = await api({ action: 'initUpload', fileHash: d.hash, fileName: d.fileName, fileMime: mime, fileSize: buf.length });
     if (init.body.duplicate) {
       dup++;
       importedSet.add(d.hash);
@@ -97,7 +120,7 @@ for (const { d, docDate, dateSource } of batch) {
       continue;
     }
     if (!init.body.uploadUrl) throw new Error(init.body.error || 'אין כתובת העלאה');
-    const put = await fetch(init.body.uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'application/pdf' }, body: buf });
+    const put = await fetch(init.body.uploadUrl, { method: 'PUT', headers: { 'Content-Type': mime }, body: buf });
     if (!put.ok) throw new Error(`PUT ${put.status}`);
 
     const notes = [
@@ -116,7 +139,7 @@ for (const { d, docDate, dateSource } of batch) {
       filePath: init.body.path,
       fileHash: d.hash,
       fileName: d.fileName,
-      fileMime: 'application/pdf',
+      fileMime: mime,
       fileSize: buf.length,
       reviewStatus: 'needs_review',
     }, source: { kind: 'folder', ref: primary } });
