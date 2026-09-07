@@ -9,6 +9,7 @@ import CustomersBoard from './pages/CustomersBoard';
 import LeadsBoard from './pages/LeadsBoard';
 import TasksBoard from './pages/TasksBoard';
 import ChartsBoard from './pages/ChartsBoard';
+import TaxBoard from './pages/TaxBoard';
 import DocumentsBoard from './pages/DocumentsBoard';
 import Settings from './pages/Settings';
 import BookingForm from './pages/BookingForm';
@@ -30,6 +31,7 @@ const App: React.FC = () => {
             <Route path="leads" element={<LeadsBoard />} />
             <Route path="tasks" element={<TasksBoard />} />
             <Route path="charts" element={<ChartsBoard />} />
+            <Route path="tax" element={<TaxBoard />} />
             <Route path="documents" element={<DocumentsBoard />} />
             <Route path="forms" element={<FormsManagement />} />
             <Route path="settings" element={<Settings />} />

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { settingsService } from '../services/supabase';
 import { searchGreenInvoiceIncomeDocuments, type GreenInvoiceIncomeDocument } from '../services/greenInvoice';
+import { type FinanceEntry, type FinanceEntryType, ENTRY_TYPE_LABELS, entryScope } from '../services/financeEntries';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { TrendingUp, DollarSign, Calendar, Tag, RefreshCw, Wallet, Clock, AlertCircle, CalendarClock, Users, Phone, Plus, Trash2, Heart, ReceiptText, Percent, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, Pencil, X } from 'lucide-react';
 import { AppEvent, EventStatus, EventType, PaymentStatus } from '../types';
@@ -71,15 +72,8 @@ const StatusChip = ({ status }: { status?: string }) => {
 const FINANCE_STORAGE_KEY = 'ME_CFM_FINANCE_ENTRIES_V1';
 const GREEN_INVOICE_INCOME_STORAGE_KEY = 'ME_CFM_GREEN_INVOICE_INCOME_V1';
 
-type FinanceEntryType = 'fixedExpense' | 'variableExpense' | 'donation';
-
-type FinanceEntry = {
-  id: string;
-  type: FinanceEntryType;
-  label: string;
-  amount: number;
-  date: string;
-};
+// הרישום הפיננסי משותף עם מסך "מצב מס ותזרים" — כולל תיוג עסק/בית ומשכורות.
+// לוח הדוחות מחשב מסים על הצד העסקי בלבד; רישומי בית ומשכורות מנוהלים במסך מצב מס.
 
 const VAT_RATE = 0.18;
 const NATIONAL_INSURANCE_RATE = 0.12;
@@ -121,11 +115,7 @@ const yearStartIso = () => `${new Date().getFullYear()}-01-01`;
 const monthKeyFromIso = (iso: string) => (iso || '').slice(0, 7);
 const eventDateKey = (event: AppEvent) => parseEventDateKey(event.date) || '';
 
-const getEntryTypeLabel = (type: FinanceEntryType) => {
-  if (type === 'fixedExpense') return 'הוצאה קבועה';
-  if (type === 'variableExpense') return 'הוצאה שוטפת';
-  return 'תרומה';
-};
+const getEntryTypeLabel = (type: FinanceEntryType) => ENTRY_TYPE_LABELS[type] || type;
 
 const calculateProgressiveTaxMonthly = (monthlyIncome: number) => {
   let tax = 0;
@@ -764,6 +754,8 @@ export default function ChartsBoard() {
     });
 
     financeEntries.forEach(entry => {
+      // חישובי המס בלוח הזה הם על העסק בלבד — משכורות ורישומי בית שייכים למסך "מצב מס ותזרים"
+      if (entry.type === 'salary' || entryScope(entry) === 'home') return;
       const mk = monthKeyFromIso(entry.date);
       if (!mk) return;
       if (entry.type === 'fixedExpense') {
