@@ -49,6 +49,8 @@ const DocumentsBoard: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'' | 'needs_review' | 'confirmed'>('');
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<EditState>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -157,6 +159,36 @@ const DocumentsBoard: React.FC = () => {
     needsReview: docs.filter(d => d.reviewStatus === 'needs_review').length,
     suspects: docs.filter(d => d.duplicateSuspect).length,
   }), [docs]);
+
+  // ── בחירה מרובה: ארכוב/אישור של כמה מסמכים בבת אחת ─────────────────────────
+  const toggleSelect = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const allVisibleSelected = docs.length > 0 && docs.every(d => selected.has(d.id));
+  const toggleSelectAll = () => setSelected(allVisibleSelected ? new Set() : new Set(docs.map(d => d.id)));
+  // ניקוי בחירה כשהסינון משתנה — שלא יישארו מזהים שאינם על המסך
+  useEffect(() => { setSelected(new Set()); }, [monthFilter, directionFilter, statusFilter, showArchived]);
+
+  const runBulk = async (label: string, action: (id: string) => Promise<unknown>, removeFromList: boolean) => {
+    const ids = docs.filter(d => selected.has(d.id)).map(d => d.id);
+    if (!ids.length) return;
+    if (!confirm(`${label} ${ids.length} מסמכים?`)) return;
+    setBulkBusy(true);
+    let failed = 0;
+    for (const id of ids) {
+      try { await action(id); } catch { failed++; }
+    }
+    if (removeFromList) setDocs(prev => prev.filter(d => !selected.has(d.id)));
+    setSelected(new Set());
+    setBulkBusy(false);
+    if (failed) alert(`${failed} פעולות נכשלו`);
+    await load();
+  };
+  const bulkArchive = () => runBulk('להעביר לארכיון', (id) => archiveDocument(id), true);
+  const bulkRestore = () => runBulk('לשחזר מהארכיון', (id) => restoreDocument(id), true);
+  const bulkConfirm = () => runBulk('לאשר', (id) => updateDocument(id, { reviewStatus: 'confirmed' }), false);
 
   // ── מסך הגדרת מפתח גישה ──────────────────────────────────────────────────
   if (!apiKey) {
@@ -314,11 +346,38 @@ const DocumentsBoard: React.FC = () => {
         </div>
       )}
 
+      {/* פס פעולות מרובות — מופיע כשמסומנים מסמכים */}
+      {selected.size > 0 && (
+        <div className="sticky top-0 z-20 bg-purple-600 text-white rounded-xl px-4 py-2.5 flex flex-wrap items-center gap-3 shadow-lg">
+          <span className="text-sm font-black">{selected.size} מסומנים</span>
+          {!showArchived && (
+            <>
+              <button onClick={bulkConfirm} disabled={bulkBusy} className="text-xs font-bold bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
+                <CheckCircle2 size={13} /> אשר הכל
+              </button>
+              <button onClick={bulkArchive} disabled={bulkBusy} className="text-xs font-bold bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
+                <Archive size={13} /> העבר לארכיון
+              </button>
+            </>
+          )}
+          {showArchived && (
+            <button onClick={bulkRestore} disabled={bulkBusy} className="text-xs font-bold bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
+              <ArchiveRestore size={13} /> שחזר מהארכיון
+            </button>
+          )}
+          {bulkBusy && <Loader2 size={15} className="animate-spin" />}
+          <button onClick={() => setSelected(new Set())} className="mr-auto text-xs font-bold opacity-80 hover:opacity-100">בטל בחירה</button>
+        </div>
+      )}
+
       {/* טבלת מסמכים */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 text-slate-500 text-xs font-black border-b border-slate-200">
+              <th className="px-3 py-2.5 w-8">
+                <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} className="accent-purple-600 cursor-pointer" title="בחר הכל" />
+              </th>
               <th className="text-right px-3 py-2.5">תאריך</th>
               <th className="text-right px-3 py-2.5">סוג</th>
               <th className="text-right px-3 py-2.5">ספק / לקוח</th>
@@ -333,15 +392,18 @@ const DocumentsBoard: React.FC = () => {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading && (
-              <tr><td colSpan={10} className="text-center py-8 text-slate-400 font-bold">טוען…</td></tr>
+              <tr><td colSpan={11} className="text-center py-8 text-slate-400 font-bold">טוען…</td></tr>
             )}
             {!loading && docs.length === 0 && (
-              <tr><td colSpan={10} className="text-center py-8 text-slate-400 font-bold">
+              <tr><td colSpan={11} className="text-center py-8 text-slate-400 font-bold">
                 אין מסמכים עדיין — העלו PDF או תמונה כדי להתחיל
               </td></tr>
             )}
             {!loading && docs.map(doc => (
-              <tr key={doc.id} className={`hover:bg-slate-50 ${doc.duplicateSuspect ? 'bg-red-50/40' : ''}`}>
+              <tr key={doc.id} className={`hover:bg-slate-50 ${selected.has(doc.id) ? 'bg-purple-50/60' : doc.duplicateSuspect ? 'bg-red-50/40' : ''}`}>
+                <td className="px-3 py-2">
+                  <input type="checkbox" checked={selected.has(doc.id)} onChange={() => toggleSelect(doc.id)} className="accent-purple-600 cursor-pointer" />
+                </td>
                 <td className="px-3 py-2 font-bold text-slate-700 whitespace-nowrap">{fmtDate(doc.docDate)}</td>
                 <td className="px-3 py-2 text-slate-600">{doc.docType || '—'}</td>
                 <td className="px-3 py-2 font-bold text-slate-800 max-w-[14rem] truncate" title={doc.counterparty || ''}>
