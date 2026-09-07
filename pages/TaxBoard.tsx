@@ -191,8 +191,10 @@ const TaxBoard: React.FC = () => {
     const annualizedDonations = monthsElapsed > 0 ? (donationsYtd / monthsElapsed) * 12 : 0;
     const creditFromDonations = donationCredit(annualizedDonations, annualizedTaxable);
     const taxAfterCredits = Math.max(0, taxBeforeCredits - creditFromDonations);
-    // ניכוי במקור: הלקוחות מנכים אחוז מהתשלום (כולל מע"מ)
-    const withheldYtd = grossIncomeYtd * (withholdingRate / 100);
+    // ניכוי במקור: סכום בפועל שהוזן ידנית גובר; אחרת הערכה לפי אחוז מהתשלומים
+    const withheldYtd = taxSettings.withheldActual > 0
+      ? taxSettings.withheldActual
+      : grossIncomeYtd * (withholdingRate / 100);
     const annualizedWithheld = monthsElapsed > 0 ? (withheldYtd / monthsElapsed) * 12 : 0;
     const taxBalance = taxAfterCredits - annualizedWithheld; // חיובי = חוב, שלילי = החזר צפוי
     const nationalInsurance = annualizedTaxable * NATIONAL_INSURANCE_RATE;
@@ -372,7 +374,7 @@ const TaxBoard: React.FC = () => {
                 ['מס לפי מדרגות', fmt(snap.taxBeforeCredits)],
                 ['זיכוי תרומות (35%)', `−${fmt(snap.creditFromDonations).slice(1)}`],
                 ['מס לאחר זיכוי', fmt(snap.taxAfterCredits)],
-                [`נוכה במקור (${withholdingRate}% מההכנסות)`, `−${fmt(snap.annualizedWithheld).slice(1)}`],
+                [taxSettings.withheldActual > 0 ? 'נוכה במקור בפועל (שנתי לפי קצב)' : `נוכה במקור (${withholdingRate}% מההכנסות)`, `−${fmt(snap.annualizedWithheld).slice(1)}`],
               ].map(([label, value]) => (
                 <div key={label as string} className="flex items-center justify-between text-xs font-bold text-slate-600">
                   <span>{label}</span><span>{value}</span>
@@ -382,8 +384,17 @@ const TaxBoard: React.FC = () => {
                 <span>{snap.taxBalance > 0 ? 'צפי חוב מס בסוף השנה' : 'צפי החזר מס בסוף השנה'}</span>
                 <span>{fmt(Math.abs(snap.taxBalance))}</span>
               </div>
-              <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 pt-1">
-                אחוז ניכוי במקור:
+              <div className="flex items-center gap-2 flex-wrap text-[11px] font-bold text-slate-500 pt-1">
+                נוכה במקור בפועל השנה:
+                <input
+                  type="number" min={0}
+                  value={taxSettings.withheldActual || ''}
+                  placeholder="0"
+                  onChange={e => updateTaxSettings({ withheldActual: Math.max(0, Number(e.target.value) || 0) })}
+                  className="w-24 border border-slate-200 rounded-lg px-2 py-1 text-xs font-black text-center"
+                />₪
+                <span className="text-slate-300">|</span>
+                אחוז (אם אין סכום):
                 <input
                   type="number" min={0} max={50}
                   value={withholdingRate}
@@ -393,7 +404,7 @@ const TaxBoard: React.FC = () => {
                 <span className="text-slate-400">· תרומות שנרשמו: {fmt(snap.donationsYtd)}</span>
               </div>
               <p className="text-[11px] font-bold text-amber-600 leading-snug">
-                ⚠ לפי נתוני רשות המסים (נתוני עזר לדוח השנתי 2025): 39 מנכים דיווחו עסקאות של 299,111 ₪ — ומס שנוכה בפועל: 0 ₪. הלקוחות משלמים סכום מלא ולא מנכים במקור. לכן המקדמות הדו-חודשיות ({taxSettings.advanceRate}% מהמחזור) הן תשלום המס היחיד מראש — חובה לשלם אותן בפועל, אחרת נצבר חוב.
+                ⚠ ב-2026 חלק מהלקוחות המוסדיים מנכים 30-33% במקור (אין אישור פטור בתוקף). כדי שהניכוי ייחשב: לאסוף אישור ניכוי מס במקור מכל לקוח שקיזז, ולדווח את הסכום בדוח המקדמות הדו-חודשי — זה מקזז את חוב המקדמות. בשנים 2023-2025 לא היה ניכוי בפועל (דיווחי המנכים: 0), ולכן שם המקדמות הן תשלום המס היחיד מראש.
               </p>
             </div>
 

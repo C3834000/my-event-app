@@ -69,6 +69,7 @@ export interface TaxSettings {
   incomeTaxDebt: number;       // חוב מס הכנסה קיים
   debtAsOf: string;            // לאיזה תאריך נכונים סכומי החוב
   monthlyDebtPayment: number;  // כמה מפרישים בחודש לסגירת החוב
+  withheldActual: number;      // ניכוי במקור בפועל השנה (₪) — אם >0, גובר על החישוב לפי אחוז
 }
 
 // ברירות מחדל לפי "ריכוז יתרות" ברשות המסים (07/09/2026) — ניתנים לעריכה במסך
@@ -81,6 +82,9 @@ export const DEFAULT_TAX_SETTINGS: TaxSettings = {
   incomeTaxDebt: 28301,
   debtAsOf: '2026-09-07',
   monthlyDebtPayment: 0,
+  // ב-2026 חלק מהלקוחות המוסדיים כן מנכים 30-33% (אין אישור פטור בתוקף).
+  // לפי הרישום של המשתמש (07/09/2026): 13,904 ₪ קוזזו. עדכון ידני במסך.
+  withheldActual: 13904,
 };
 
 export async function loadTaxSettings(): Promise<TaxSettings> {
