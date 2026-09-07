@@ -27,7 +27,8 @@ if (!fs.existsSync(envPath)) {
 }
 const accounts = fs.readFileSync(envPath, 'utf8').split(/\r?\n/)
   .map(l => l.match(/^ACCOUNT=([^:]+):(.+)$/)).filter(Boolean)
-  .map(m => ({ user: m[1].trim(), pass: m[2].trim() }));
+  .map(m => ({ user: m[1].trim(), pass: m[2].replace(/\s+/g, '').trim() }))
+  .filter(a => a.pass && !/^X{4,}$/i.test(a.pass)); // דלג על שורות שעדיין לא מולאו
 if (!accounts.length) { console.log('לא נמצאו חשבונות ב-.env.email'); process.exit(1); }
 
 const safe = (s) => String(s || '').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80);
@@ -61,10 +62,13 @@ for (const acc of accounts) {
   console.log(`תיבה: ${box}`);
   const uids = await client.search({ since: SINCE }, { uid: true });
   console.log(`מיילים מאז 2025: ${uids.length}`);
-  let saved = 0, checked = 0;
+  // שלב 1: סריקת מבנה ההודעות ואיסוף רשימת הורדות.
+  // אסור להוריד באמצע לולאת fetch — זה נועל את חיבור ה-IMAP.
+  const toDownload = [];
+  let checked = 0;
   for await (const msg of client.fetch(uids, { uid: true, envelope: true, bodyStructure: true }, { uid: true })) {
     checked++;
-    if (checked % 500 === 0) console.log(`  ...נבדקו ${checked}`);
+    if (checked % 1000 === 0) console.log(`  ...נבדקו ${checked}`);
     const subj = msg.envelope?.subject || '';
     const from = (msg.envelope?.from || []).map(a => `${a.name || ''} ${a.address || ''}`).join(' ');
     // איסוף חלקי PDF מצורפים מתוך מבנה ההודעה
@@ -87,15 +91,22 @@ for (const acc of accounts) {
       const fname = `${dateStr}_${safe(msg.envelope?.from?.[0]?.address || 'unknown')}_${safe(origName)}`;
       const dest = path.join(outDir, fname.endsWith('.pdf') ? fname : fname + '.pdf');
       if (fs.existsSync(dest)) continue;
-      try {
-        const { content } = await client.download(msg.uid, part.part, { uid: true });
-        const chunks = [];
-        for await (const c of content) chunks.push(c);
-        fs.writeFileSync(dest, Buffer.concat(chunks));
-        saved++; totalSaved++;
-      } catch (e) {
-        log.push(`${acc.user}: הורדה נכשלה ${origName} — ${e.message}`);
-      }
+      toDownload.push({ uid: msg.uid, partNo: part.part, origName, dest });
+    }
+  }
+  // שלב 2: הורדת הקבצים
+  console.log(`להורדה: ${toDownload.length} קבצים`);
+  let saved = 0;
+  for (const item of toDownload) {
+    try {
+      const { content } = await client.download(item.uid, item.partNo, { uid: true });
+      const chunks = [];
+      for await (const c of content) chunks.push(c);
+      fs.writeFileSync(item.dest, Buffer.concat(chunks));
+      saved++; totalSaved++;
+      if (saved % 25 === 0) console.log(`  ...הורדו ${saved}/${toDownload.length}`);
+    } catch (e) {
+      log.push(`${acc.user}: הורדה נכשלה ${item.origName} — ${e.message}`);
     }
   }
   console.log(`נשמרו ${saved} קבצים ל-${outDir}`);
