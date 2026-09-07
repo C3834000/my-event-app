@@ -73,7 +73,9 @@ export interface TaxSettings {
 
 // ברירות מחדל לפי "ריכוז יתרות" ברשות המסים (07/09/2026) — ניתנים לעריכה במסך
 export const DEFAULT_TAX_SETTINGS: TaxSettings = {
-  withholdingRate: 30,
+  // לפי נתוני העזר לדוח השנתי (2025): 39 מנכים דיווחו 299,111 ₪ עסקאות — ומס שנוכה 0.
+  // בפועל הלקוחות משלמים סכום מלא ולא מנכים במקור.
+  withholdingRate: 0,
   advanceRate: 4,
   vatDebt: 93465,
   incomeTaxDebt: 28301,
