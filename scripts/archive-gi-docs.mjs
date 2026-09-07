@@ -15,10 +15,24 @@ const pdfParse = require('pdf-parse/lib/pdf-parse.js');
 const APPLY = process.argv.includes('--apply');
 const BASE = 'https://myecrm2026.netlify.app';
 const KEY = fs.readFileSync('.env.documents-prod', 'utf8').match(/^DOCS_API_KEY=(.+)$/m)[1].trim();
-const api = (path, body) => fetch(`${BASE}${path}`, {
+// קריאה עם ניסיונות חוזרים — תשובה ריקה (timeout של Netlify) לא מפילה את הריצה
+const fetchJson = async (url, opts, label) => {
+  for (let i = 1; i <= 3; i++) {
+    try {
+      const r = await fetch(url, opts);
+      const t = await r.text();
+      if (t.trim()) return JSON.parse(t);
+      throw new Error(`תשובה ריקה (HTTP ${r.status})`);
+    } catch (e) {
+      if (i === 3) { console.log(`✗ ${label}: נכשל אחרי 3 ניסיונות — ${e.message}`); return {}; }
+      await new Promise(res => setTimeout(res, 2000 * i));
+    }
+  }
+};
+const api = (path, body) => fetchJson(`${BASE}${path}`, {
   method: 'POST', headers: { 'Content-Type': 'application/json', 'x-docs-key': KEY },
   body: JSON.stringify(body),
-}).then(r => r.json());
+}, body.action || path);
 
 const F = JSON.parse(fs.readFileSync('test-env/scan/findings.json', 'utf8'));
 const byHash = new Map(F.documents.map(d => [d.hash, d]));
@@ -26,10 +40,10 @@ const byHash = new Map(F.documents.map(d => [d.hash, d]));
 // ── רשימת מספרי המסמכים שלך בחשבונית ירוקה ──────────────────────────────────
 const giNumbers = new Set();
 for (const year of ['2025', '2026']) {
-  const res = await fetch(`${BASE}/api/green-invoice`, {
+  const res = await fetchJson(`${BASE}/api/green-invoice`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'searchDocuments', fromDate: `${year}-01-01`, toDate: `${year}-12-31` }),
-  }).then(r => r.json());
+  }, `GI ${year}`);
   for (const d of res.documents || []) {
     if (d.number != null) giNumbers.add(String(d.number).trim());
   }
