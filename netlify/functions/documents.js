@@ -156,8 +156,8 @@ export const handler = async (event) => {
     // ── create: רשומת מסמך חדשה + מקור ───────────────────────────────────
     if (action === 'create') {
       const data = pickDocFields(body.data);
-      if (!data.direction || !['income', 'expense'].includes(data.direction)) {
-        return json(400, { success: false, error: 'direction חייב להיות income או expense' });
+      if (!data.direction || !['income', 'expense', 'tracking'].includes(data.direction)) {
+        return json(400, { success: false, error: 'direction חייב להיות income / expense / tracking' });
       }
       const id = newId('doc');
       const row = { id, ...toSnake(data) };

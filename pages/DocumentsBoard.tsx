@@ -26,6 +26,7 @@ const SOURCE_LABELS: Record<string, string> = {
   drive: 'Drive',
   folder: 'תיקייה',
   greeninvoice: 'ח"י',
+  statement: 'דף אשראי',
 };
 
 const monthKeyNow = () => {
@@ -405,7 +406,13 @@ const DocumentsBoard: React.FC = () => {
                   <input type="checkbox" checked={selected.has(doc.id)} onChange={() => toggleSelect(doc.id)} className="accent-purple-600 cursor-pointer" />
                 </td>
                 <td className="px-3 py-2 font-bold text-slate-700 whitespace-nowrap">{fmtDate(doc.docDate)}</td>
-                <td className="px-3 py-2 text-slate-600">{doc.docType || '—'}</td>
+                <td className="px-3 py-2 text-slate-600">
+                  {doc.docType === 'חסר מסמך' ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-black text-red-700 bg-red-100 px-2 py-0.5 rounded-md whitespace-nowrap">
+                      <AlertTriangle size={10} /> חסר מסמך
+                    </span>
+                  ) : (doc.docType || '—')}
+                </td>
                 <td className="px-3 py-2 font-bold text-slate-800 max-w-[14rem] truncate" title={doc.counterparty || ''}>
                   {doc.counterparty || <span className="text-slate-400 font-normal">— חסר —</span>}
                 </td>
