@@ -448,7 +448,7 @@ const TaxBoard: React.FC = () => {
                   />
                 </div>
                 <div className="text-[10px] font-bold text-slate-400 leading-snug mt-1">
-                  כולל קביעה של ₪22,708 על 05-06/2026 — הגשת הדוח האמיתי צפויה להקטין אותה משמעותית
+                  פירוק (18/08/26): קרן 36,801 · קביעה 22,708 · קנסות 24,037 · ריבית 9,460 — כמחצית מהחוב הם קנסות וקביעה שניתן לחתוך
                 </div>
               </div>
               <div className="bg-rose-50/60 rounded-xl p-3">
