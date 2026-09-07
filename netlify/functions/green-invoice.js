@@ -152,6 +152,26 @@ function normalizePaymentRecord(row) {
   };
 }
 
+// הוצאות שהוזנו בחשבונית ירוקה (מודול "הוצאות") — קריאה בלבד
+function normalizeExpense(row) {
+  const amount = Number(row?.amount ?? row?.total ?? row?.price ?? 0);
+  const vatAmount = Number(row?.vat ?? row?.vatLocal ?? 0);
+  const netAmount = Number(row?.amountExcludeVat ?? (amount - vatAmount));
+  return {
+    id: String(row?.id ?? row?._id ?? ''),
+    number: row?.number ?? row?.documentNumber ?? row?.reference ?? '',
+    date: String(row?.date ?? row?.documentDate ?? row?.payDate ?? '').slice(0, 10),
+    supplierName: row?.supplier?.name ?? row?.supplierName ?? row?.businessName ?? '',
+    description: row?.description ?? row?.remarks ?? '',
+    amount: Number.isFinite(amount) ? amount : 0,
+    netAmount: Number.isFinite(netAmount) ? netAmount : 0,
+    vatAmount: Number.isFinite(vatAmount) ? vatAmount : 0,
+    currency: row?.currency ?? 'ILS',
+    fileUrl: row?.url?.origin ?? row?.url ?? row?.fileUrl ?? null,
+    raw: row,
+  };
+}
+
 async function searchGreenInvoicePaged(env, path, buildPayload, normalize, maxPages, pageSize) {
   const docs = [];
   for (let pageIndex = 0; pageIndex < maxPages; pageIndex++) {
@@ -271,6 +291,41 @@ async function handleBody(body, env) {
         statusCode: 200,
         body: { success: true, fromDate, toDate, documents: filteredDocs, count: filteredDocs.length },
       };
+    } catch (e) {
+      if (e.code === 'NOT_CONFIGURED') {
+        return { statusCode: 503, body: { success: false, error: e.message } };
+      }
+      return { statusCode: 500, body: { success: false, error: e.message || String(e) } };
+    }
+  }
+
+  // ── searchExpenses: הוצאות שהוזנו בחשבונית ירוקה (קריאה בלבד) ──────────
+  if (body.action === 'searchExpenses') {
+    const fromDate = String(body.fromDate || `${new Date().getFullYear()}-01-01`).slice(0, 10);
+    const toDate = String(body.toDate || `${new Date().getFullYear()}-12-31`).slice(0, 10);
+    const pageSize = Math.min(Math.max(Number(body.pageSize) || 100, 1), 100);
+    const maxPages = Math.min(Math.max(Number(body.maxPages) || 20, 1), 50);
+    const attempts = [
+      { path: '/expenses/search', buildPayload: (p) => ({ page: p, pageSize, fromDate, toDate }) },
+      { path: '/expenses/search', buildPayload: (p) => ({ page: p + 1, pageSize, fromDate, toDate }) },
+      { path: '/expenses/search', buildPayload: (p) => ({ page: p, pageSize, from: fromDate, to: toDate }) },
+    ];
+    try {
+      let docs = null, lastError = null;
+      for (const attempt of attempts) {
+        try {
+          docs = await searchGreenInvoicePaged(env, attempt.path, attempt.buildPayload, normalizeExpense, maxPages, pageSize);
+          lastError = null;
+          break;
+        } catch (e) { lastError = e; }
+      }
+      if (lastError) {
+        return {
+          statusCode: lastError.status >= 400 && lastError.status < 600 ? lastError.status : 502,
+          body: { success: false, error: lastError.message || String(lastError), details: lastError.details },
+        };
+      }
+      return { statusCode: 200, body: { success: true, fromDate, toDate, expenses: docs, count: docs.length } };
     } catch (e) {
       if (e.code === 'NOT_CONFIGURED') {
         return { statusCode: 503, body: { success: false, error: e.message } };
