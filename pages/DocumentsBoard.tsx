@@ -249,6 +249,7 @@ const DocumentsBoard: React.FC = () => {
           <option value="">הכנסות והוצאות</option>
           <option value="income">הכנסות</option>
           <option value="expense">הוצאות</option>
+          <option value="tracking">מעקב (לא נספר)</option>
         </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as '' | 'needs_review' | 'confirmed')} className="text-sm font-bold border border-slate-200 rounded-lg px-2 py-1.5 bg-white">
           <option value="">כל הסטטוסים</option>
@@ -280,6 +281,36 @@ const DocumentsBoard: React.FC = () => {
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm font-bold text-red-800">
           {loadError}
           <button onClick={() => { setDocsApiKey(''); setApiKeyState(''); }} className="underline mr-3">החלף מפתח גישה</button>
+        </div>
+      )}
+
+      {/* סיכום מעקב: כמה קיבל כל גורם בגין המשתמש, לפי שנים — לא נספר בחישובי מס */}
+      {directionFilter === 'tracking' && docs.length > 0 && (
+        <div className="bg-sky-50 border border-sky-200 rounded-xl p-4">
+          <h3 className="text-sm font-black text-sky-900 mb-2">סיכום מעקב — כספים שהתקבלו אצל אחרים בגינך (לא נספר בהוצאות/הכנסות)</h3>
+          <div className="flex flex-wrap gap-4">
+            {(() => {
+              const byParty = new Map<string, Map<string, number>>();
+              for (const d of docs) {
+                const party = d.counterparty || 'ללא שם';
+                const y = (d.docDate || '').slice(0, 4) || 'ללא תאריך';
+                if (!byParty.has(party)) byParty.set(party, new Map());
+                const m = byParty.get(party)!;
+                m.set(y, (m.get(y) || 0) + Number(d.totalAmount || 0));
+              }
+              return [...byParty.entries()].map(([party, years]) => {
+                const total = [...years.values()].reduce((s, v) => s + v, 0);
+                return (
+                  <div key={party} className="bg-white rounded-lg border border-sky-100 px-3 py-2 text-xs font-bold text-slate-700">
+                    <div className="text-sky-900 font-black">{party} · {nis(total)}</div>
+                    {[...years.entries()].sort().map(([y, v]) => (
+                      <div key={y} className="text-slate-500">{y}: {nis(v)}</div>
+                    ))}
+                  </div>
+                );
+              });
+            })()}
+          </div>
         </div>
       )}
 
@@ -327,8 +358,8 @@ const DocumentsBoard: React.FC = () => {
                 <td className="px-3 py-2 font-bold text-slate-800 whitespace-nowrap">{nis(doc.totalAmount)}</td>
                 <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{nis(doc.vatAmount)}</td>
                 <td className="px-3 py-2">
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${doc.direction === 'income' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}`}>
-                    {doc.direction === 'income' ? 'הכנסה' : 'הוצאה'}
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${doc.direction === 'income' ? 'bg-emerald-100 text-emerald-800' : doc.direction === 'tracking' ? 'bg-sky-100 text-sky-800' : 'bg-orange-100 text-orange-800'}`}>
+                    {doc.direction === 'income' ? 'הכנסה' : doc.direction === 'tracking' ? 'מעקב' : 'הוצאה'}
                   </span>
                 </td>
                 <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
@@ -505,6 +536,7 @@ const EditDocumentModal: React.FC<{
             <select value={form.direction} onChange={e => setForm(f => ({ ...f, direction: e.target.value as DocDirection }))} className={input}>
               <option value="expense">הוצאה</option>
               <option value="income">הכנסה</option>
+              <option value="tracking">מעקב (לא נספר בחישובים)</option>
             </select>
           </div>
           <div>

@@ -4,7 +4,9 @@
 // מזין פעם אחת ונשמר מקומית. אין גישה ישירה ל-Supabase מהדפדפן.
 // ============================================================================
 
-export type DocDirection = 'income' | 'expense';
+// 'tracking' = מעקב: מסמכים שנשמרים ומסוכמים בנפרד (למשל כספים שגבו אחרים בגין
+// מוצרי המשתמש) אבל אינם הוצאה/הכנסה של העסק ולא נספרים בחישובי מס.
+export type DocDirection = 'income' | 'expense' | 'tracking';
 export type DocReviewStatus = 'needs_review' | 'confirmed';
 
 export const DOC_TYPES = [
