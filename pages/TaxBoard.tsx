@@ -392,8 +392,8 @@ const TaxBoard: React.FC = () => {
                 />%
                 <span className="text-slate-400">· תרומות שנרשמו: {fmt(snap.donationsYtd)}</span>
               </div>
-              <p className="text-[11px] font-bold text-slate-400 leading-snug">
-                בתיק רשומות מקדמות בשיעור {taxSettings.advanceRate}% מהמחזור — כל עוד הניכוי במקור ({withholdingRate}%) גבוה מהן, הן מכוסות ואין תשלום מקדמות נוסף.
+              <p className="text-[11px] font-bold text-amber-600 leading-snug">
+                ⚠ בתיק רשומות מקדמות {taxSettings.advanceRate}% מהמחזור. הניכוי במקור ({withholdingRate}%) אמור לכסות אותן — אבל רק אם מדווחים אותו בדוח המקדמות הדו-חודשי. בדוחות שהוגשו עד כה דווח ניכוי במקור 0, ולכן המקדמות נרשמות כחוב למרות שהמס כבר נוכה.
               </p>
             </div>
 
