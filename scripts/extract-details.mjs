@@ -4,6 +4,8 @@
 // מסמך שכל פרטיו חולצו בביטחון → מאושר אוטומטית; אחרת נשאר "לבדיקה" עם הערה.
 // הרצה:  node scripts/extract-details.mjs           ← ניסיון יבש (בלי עדכון)
 //        node scripts/extract-details.mjs --apply   ← עדכון בפועל
+//        --fix-totals: מתקן גם סכומים שהוזנו אוטומטית בהרצות קודמות (לפי סימן
+//        ההערה של הסקריפט). עריכות ידניות לעולם לא נדרסות.
 // ============================================================================
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -11,6 +13,9 @@ const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse/lib/pdf-parse.js');
 
 const APPLY = process.argv.includes('--apply');
+const FIX_TOTALS = process.argv.includes('--fix-totals');
+// הערות שהסקריפט עצמו מוסיף — סימן שהסכומים הגיעו מחילוץ אוטומטי ולא מעריכה ידנית
+const AUTO_MARK = /חולץ אוטומטית|חולץ חלקית|הפרטים חולצו אוטומטית/;
 const BASE = 'https://myecrm2026.netlify.app';
 const KEY = fs.readFileSync('.env.documents-prod', 'utf8').match(/^DOCS_API_KEY=(.+)$/m)[1].trim();
 const api = (body) => fetch(`${BASE}/api/documents`, {
@@ -93,8 +98,17 @@ function extract(text, fileName) {
     if (out.vat == null) out.vat = findAmount(t, ['מע"?מ\\s*\\d{1,2}(?:\\.\\d+)?\\s*%', '\\d{1,2}\\s*%\\s*(?:סה"?כ\\s*)?מע"?מ', 'סה"?כ\\s*מע"?מ']);
     // "סה"כ ₪ 840" או "₪ 840" בקבלות פשוטות
     if (out.total == null) {
-      const m = t.match(/(?:סה"?כ[^\n]{0,10})?₪\s*([\d,]+(?:\.\d{2})?)/) || t.match(/([\d,]+(?:\.\d{2})?)\s*₪/);
-      if (m) out.total = num(m[1]);
+      // סדר עדיפות: שורת סה"כ מפורשת → סכום תשלום → נסיגה לסכום ה-₪ הגדול במסמך
+      // (הסה"כ תמיד ≥ מכל שורת פריט; כך לא נתפסת שורת פריט ראשונה בטעות)
+      const labeled = t.match(/סה"?כ\s*(?:לתשלום|כולל\s*מע"?מ|לחיוב)?\s*:?\s*₪?\s*([\d,]+(?:\.\d{2})?)\s*₪?/)
+        || t.match(/₪\s*([\d,]+(?:\.\d{2})?)\s*:?\s*(?:לתשלום|כולל\s*מע"?מ)?\s*סה"?כ/) // RTL הפוך
+        || t.match(/(?:פרטי\s*תשלום|שולם)\s*:?\s*\n?\s*₪\s*([\d,]+(?:\.\d{2})?)/);
+      if (labeled) out.total = num(labeled[1]);
+      if (out.total == null) {
+        const all = [...t.matchAll(/₪\s*([\d,]+(?:\.\d{2})?)/g), ...t.matchAll(/([\d,]+(?:\.\d{2})?)\s*₪/g)]
+          .map(m => num(m[1])).filter(v => v != null && v > 0);
+        if (all.length) out.total = Math.max(...all);
+      }
     }
 
     // מספר מסמך — גם כשהמספר מופיע לפני התווית (ארטיפקט RTL בחילוץ PDF,
@@ -177,10 +191,12 @@ for (const doc of docs) {
   const data = {};
   // מסמך שאינו חשבונית (תלוש/שומה/דוח בנק) — רק סיווג, בלי מילוי סכומים בניחוש
   if (!ex.nonInvoice) {
-    // ממלאים רק שדות ריקים
-    if (doc.totalAmount == null && ex.total != null) data.totalAmount = ex.total;
-    if (doc.vatAmount == null && ex.vat != null) data.vatAmount = ex.vat;
-    if (doc.netAmount == null && ex.net != null) data.netAmount = ex.net;
+    // ממלאים רק שדות ריקים; ב---fix-totals מתקנים גם סכומים שהוזנו אוטומטית
+    const autoFilled = AUTO_MARK.test(doc.notes || '');
+    const mayFixAmounts = FIX_TOTALS && autoFilled;
+    if ((doc.totalAmount == null || (mayFixAmounts && ex.total != null && Math.abs(Number(doc.totalAmount) - ex.total) > 0.05)) && ex.total != null) data.totalAmount = ex.total;
+    if ((doc.vatAmount == null || (mayFixAmounts && ex.vat != null)) && ex.vat != null) data.vatAmount = ex.vat;
+    if ((doc.netAmount == null || (mayFixAmounts && ex.net != null)) && ex.net != null) data.netAmount = ex.net;
     if (!doc.docNumber && ex.docNumber) data.docNumber = ex.docNumber;
     if (!doc.docDate && ex.date) data.docDate = ex.date;
     if (!doc.counterparty && ex.counterparty) data.counterparty = ex.counterparty;
