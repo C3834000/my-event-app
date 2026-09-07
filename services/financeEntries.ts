@@ -61,18 +61,31 @@ export async function saveFinanceEntries(entries: FinanceEntry[]): Promise<void>
   } catch { /* הענן לא זמין — יסתנכרן בשמירה הבאה */ }
 }
 
-// ── הגדרות מס (אחוז ניכוי במקור וכו') ─────────────────────────────────────────
+// ── הגדרות מס (ניכוי במקור, מקדמות, חובות קיימים) ────────────────────────────
 export interface TaxSettings {
-  withholdingRate: number; // אחוז ניכוי במקור שהלקוחות מנכים (ברירת מחדל 30)
+  withholdingRate: number;     // אחוז ניכוי במקור שהלקוחות מנכים (ברירת מחדל 30)
+  advanceRate: number;         // שיעור מקדמות מס הכנסה מהמחזור (מהתיק: 4%)
+  vatDebt: number;             // חוב מע"מ קיים (בור העבר)
+  incomeTaxDebt: number;       // חוב מס הכנסה קיים
+  debtAsOf: string;            // לאיזה תאריך נכונים סכומי החוב
+  monthlyDebtPayment: number;  // כמה מפרישים בחודש לסגירת החוב
 }
 
-export const DEFAULT_TAX_SETTINGS: TaxSettings = { withholdingRate: 30 };
+// ברירות מחדל לפי צילומי המסך מרשות המסים (18/08/2026) — ניתנים לעריכה במסך
+export const DEFAULT_TAX_SETTINGS: TaxSettings = {
+  withholdingRate: 30,
+  advanceRate: 4,
+  vatDebt: 93060,
+  incomeTaxDebt: 28243,
+  debtAsOf: '2026-08-18',
+  monthlyDebtPayment: 0,
+};
 
 export async function loadTaxSettings(): Promise<TaxSettings> {
   try {
     const s = await settingsService.get();
     const t = s?.data?.taxSettings;
-    if (t && typeof t.withholdingRate === 'number') return { ...DEFAULT_TAX_SETTINGS, ...t };
+    if (t && typeof t === 'object') return { ...DEFAULT_TAX_SETTINGS, ...t };
   } catch { /* ignore */ }
   return DEFAULT_TAX_SETTINGS;
 }

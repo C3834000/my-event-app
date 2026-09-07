@@ -10,7 +10,7 @@ import {
   Home, Briefcase, Plus, Trash2, AlertTriangle, CheckCircle2, FileText,
 } from 'lucide-react';
 import {
-  FinanceEntry, FinanceEntryType, FinanceScope, ENTRY_TYPE_LABELS,
+  FinanceEntry, FinanceEntryType, FinanceScope, ENTRY_TYPE_LABELS, TaxSettings,
   entryScope, isRecurring, loadFinanceEntriesLocal, loadFinanceEntriesCloud,
   saveFinanceEntries, loadTaxSettings, saveTaxSettings, DEFAULT_TAX_SETTINGS,
 } from '../services/financeEntries';
@@ -43,7 +43,8 @@ const TaxBoard: React.FC = () => {
   const [giSyncing, setGiSyncing] = useState(false);
   const [expenseDocs, setExpenseDocs] = useState<FinanceDocument[]>([]);
   const [docsError, setDocsError] = useState('');
-  const [withholdingRate, setWithholdingRate] = useState(DEFAULT_TAX_SETTINGS.withholdingRate);
+  const [taxSettings, setTaxSettings] = useState<TaxSettings>(DEFAULT_TAX_SETTINGS);
+  const withholdingRate = taxSettings.withholdingRate;
   const [homeView, setHomeView] = useState(false);
   const [form, setForm] = useState({ type: 'fixedExpense' as FinanceEntryType, scope: 'business' as FinanceScope, label: '', amount: '', date: todayIso() });
 
@@ -63,7 +64,7 @@ const TaxBoard: React.FC = () => {
       if (cloud) setEntries(cloud);
       setEntriesLoaded(true);
     });
-    loadTaxSettings().then(t => { if (active) setWithholdingRate(t.withholdingRate); });
+    loadTaxSettings().then(t => { if (active) setTaxSettings(t); });
 
     if (getDocsApiKey()) {
       listDocuments({ direction: 'expense' })
@@ -100,11 +101,12 @@ const TaxBoard: React.FC = () => {
     }
   };
 
-  const updateWithholding = (v: number) => {
-    const rate = Math.max(0, Math.min(50, v));
-    setWithholdingRate(rate);
-    saveTaxSettings({ withholdingRate: rate });
+  const updateTaxSettings = (patch: Partial<TaxSettings>) => {
+    const next = { ...taxSettings, ...patch };
+    setTaxSettings(next);
+    saveTaxSettings(next);
   };
+  const updateWithholding = (v: number) => updateTaxSettings({ withholdingRate: Math.max(0, Math.min(50, v)) });
 
   // ── חישוב מרכזי ────────────────────────────────────────────────────────────
   const snap = useMemo(() => {
@@ -208,10 +210,11 @@ const TaxBoard: React.FC = () => {
     const businessMonthlyProfit = avgMonthlyNetIncome - avgMonthlyExpenses - taxReserveMonthly - biReserveMonthly;
     const annualProfit = businessMonthlyProfit * 12;
 
-    // ── תזרים בית ──
+    // ── תזרים בית ── (כולל ההפרשה החודשית לסגירת חוב העבר, אם הוגדרה)
+    const debtPaymentMonthly = taxSettings.monthlyDebtPayment || 0;
     const homeVariableThisMonth = homeVariableByMonth.get(currentMonthKey) || 0;
     const homeInflow = salaryMonthly + Math.max(0, businessMonthlyProfit);
-    const homeOutflow = homeFixedMonthly + homeVariableThisMonth;
+    const homeOutflow = homeFixedMonthly + homeVariableThisMonth + debtPaymentMonthly;
     const homeBalance = homeInflow - homeOutflow;
 
     return {
@@ -224,8 +227,9 @@ const TaxBoard: React.FC = () => {
       vatReserveMonthly, taxReserveMonthly, biReserveMonthly, reserveMonthly,
       avgMonthlyNetIncome, avgMonthlyExpenses, businessMonthlyProfit, annualProfit,
       salaryMonthly, homeFixedMonthly, homeVariableThisMonth, homeInflow, homeOutflow, homeBalance,
+      debtPaymentMonthly,
     };
-  }, [giDocs, expenseDocs, entries, withholdingRate, year, currentMonthKey, monthsElapsed]);
+  }, [giDocs, expenseDocs, entries, taxSettings, withholdingRate, year, currentMonthKey, monthsElapsed]);
 
   // ── הוספת רישום מהירה ──────────────────────────────────────────────────────
   const addEntry = () => {
@@ -388,6 +392,9 @@ const TaxBoard: React.FC = () => {
                 />%
                 <span className="text-slate-400">· תרומות שנרשמו: {fmt(snap.donationsYtd)}</span>
               </div>
+              <p className="text-[11px] font-bold text-slate-400 leading-snug">
+                בתיק רשומות מקדמות בשיעור {taxSettings.advanceRate}% מהמחזור — כל עוד הניכוי במקור ({withholdingRate}%) גבוה מהן, הן מכוסות ואין תשלום מקדמות נוסף.
+              </p>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-2">
@@ -410,13 +417,87 @@ const TaxBoard: React.FC = () => {
               </p>
             </div>
           </div>
+
+          {/* בור העבר — חובות קיימים */}
+          <div className="bg-white rounded-2xl border border-rose-100 shadow-sm p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h2 className="text-sm font-black text-slate-700 flex items-center gap-2">
+                <AlertTriangle size={15} className="text-rose-500" />
+                חובות קיימים לרשויות (בור העבר)
+              </h2>
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
+                נכון ל:
+                <input
+                  type="date"
+                  value={taxSettings.debtAsOf}
+                  onChange={e => updateTaxSettings({ debtAsOf: e.target.value })}
+                  className="border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-rose-50/60 rounded-xl p-3">
+                <div className="text-[11px] font-bold text-slate-500 mb-1">חוב מע"מ</div>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-black text-slate-700">₪</span>
+                  <input
+                    type="number" min={0}
+                    value={taxSettings.vatDebt}
+                    onChange={e => updateTaxSettings({ vatDebt: Math.max(0, Number(e.target.value) || 0) })}
+                    className="w-full bg-transparent text-lg font-black text-rose-700 outline-none"
+                  />
+                </div>
+                <div className="text-[10px] font-bold text-slate-400 leading-snug mt-1">
+                  כולל קביעה של ₪22,708 על 05-06/2026 — הגשת הדוח האמיתי צפויה להקטין אותה משמעותית
+                </div>
+              </div>
+              <div className="bg-rose-50/60 rounded-xl p-3">
+                <div className="text-[11px] font-bold text-slate-500 mb-1">חוב מס הכנסה</div>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-black text-slate-700">₪</span>
+                  <input
+                    type="number" min={0}
+                    value={taxSettings.incomeTaxDebt}
+                    onChange={e => updateTaxSettings({ incomeTaxDebt: Math.max(0, Number(e.target.value) || 0) })}
+                    className="w-full bg-transparent text-lg font-black text-rose-700 outline-none"
+                  />
+                </div>
+                <div className="text-[10px] font-bold text-slate-400 leading-snug mt-1">
+                  דוחות שנתיים 2024 ו-2025 טרם הוגשו — הסכום יתעדכן אחרי ההגשה
+                </div>
+              </div>
+              <div className="bg-slate-50 rounded-xl p-3">
+                <div className="text-[11px] font-bold text-slate-500 mb-1">סה"כ חוב</div>
+                <div className="text-lg font-black text-slate-800">{fmt(taxSettings.vatDebt + taxSettings.incomeTaxDebt)}</div>
+                <div className="text-[10px] font-bold text-slate-400 mt-1">עדכנו את הסכומים כאן אחרי כל תשלום או הסדר</div>
+              </div>
+              <div className="bg-indigo-50/60 rounded-xl p-3">
+                <div className="text-[11px] font-bold text-slate-500 mb-1">הפרשה חודשית לסגירת החוב</div>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-black text-slate-700">₪</span>
+                  <input
+                    type="number" min={0}
+                    value={taxSettings.monthlyDebtPayment}
+                    onChange={e => updateTaxSettings({ monthlyDebtPayment: Math.max(0, Number(e.target.value) || 0) })}
+                    className="w-full bg-transparent text-lg font-black text-indigo-700 outline-none"
+                    placeholder="0"
+                  />
+                </div>
+                <div className="text-[10px] font-bold text-slate-400 leading-snug mt-1">
+                  {taxSettings.monthlyDebtPayment > 0
+                    ? `בקצב הזה החוב נסגר בעוד ${Math.ceil((taxSettings.vatDebt + taxSettings.incomeTaxDebt) / taxSettings.monthlyDebtPayment)} חודשים`
+                    : 'הזינו סכום כדי לראות תוך כמה חודשים החוב נסגר'}
+                </div>
+              </div>
+            </div>
+          </div>
         </>
       ) : (
         <>
           {/* KPI בית */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {kpiCard('נכנס בחודש', fmt(snap.homeInflow), `משכורות ${fmt(snap.salaryMonthly)} + עסק נטו ${fmtSigned(Math.max(0, snap.businessMonthlyProfit))}`, <TrendingUp size={18} />, 'text-emerald-500')}
-            {kpiCard('יוצא בחודש (בית)', fmt(snap.homeOutflow), `קבועות ${fmt(snap.homeFixedMonthly)} + שוטפות החודש ${fmt(snap.homeVariableThisMonth)}`, <TrendingDown size={18} />, 'text-rose-500')}
+            {kpiCard('יוצא בחודש (בית)', fmt(snap.homeOutflow), `קבועות ${fmt(snap.homeFixedMonthly)} + שוטפות ${fmt(snap.homeVariableThisMonth)}${snap.debtPaymentMonthly > 0 ? ` + החזר חוב ${fmt(snap.debtPaymentMonthly)}` : ''}`, <TrendingDown size={18} />, 'text-rose-500')}
             {kpiCard('נשאר בחודש', fmtSigned(snap.homeBalance), snap.homeBalance >= 0 ? 'תזרים חיובי' : 'תזרים שלילי — ההוצאות גבוהות מההכנסות', <PiggyBank size={18} />, snap.homeBalance >= 0 ? 'text-emerald-500' : 'text-rose-500')}
             {kpiCard('הפרשה למסים (עסק)', fmt(snap.reserveMonthly), 'כבר מחושבת בתוך "עסק נטו"', <Landmark size={18} />, 'text-indigo-500')}
           </div>
