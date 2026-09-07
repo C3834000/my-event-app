@@ -38,3 +38,5 @@ test-env-live/
 
 # Generated spreadsheet exports
 exports/
+
+.env.email
