@@ -24,6 +24,42 @@
 # API rewrites MUST stay above the SPA fallback. force=true prevents
 # a published file (or _redirects catch-all) from serving index.html.
 [[redirects]]
+  from   = "/.well-known/oauth-protected-resource"
+  to     = "/.netlify/functions/oauth"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/.well-known/oauth-protected-resource/mcp"
+  to     = "/.netlify/functions/oauth"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/.well-known/oauth-authorization-server"
+  to     = "/.netlify/functions/oauth"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/oauth/register"
+  to     = "/.netlify/functions/oauth"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/oauth/authorize"
+  to     = "/.netlify/functions/oauth"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/oauth/token"
+  to     = "/.netlify/functions/oauth"
+  status = 200
+  force  = true
+
+[[redirects]]
   from   = "/mcp"
   to     = "/.netlify/functions/mcp"
   status = 200

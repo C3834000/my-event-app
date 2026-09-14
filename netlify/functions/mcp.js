@@ -12,6 +12,8 @@ const MCP_HEADERS = {
 
 const PROTOCOL = '2025-03-26';
 const FALLBACK_PROTOCOL = '2024-11-05';
+const RESOURCE_METADATA = 'https://myecrm2026.netlify.app/.well-known/oauth-protected-resource/mcp';
+const AUTH_CHALLENGE = `Bearer resource_metadata="${RESOURCE_METADATA}", error="invalid_token", error_description="Connect the CRM account to continue"`;
 const SERVER_INFO = { name: 'me-crm', title: 'CRM כספים', version: '1.0.0' };
 const INSTRUCTIONS = [
   'Read-only live CRM. Never write or guess money figures.',
@@ -25,6 +27,7 @@ const TOOLS = [
     name: 'getCashflow',
     description: 'Live cashflow: money owed to me, tax-authority debts, income, expenses, receipts, open invoices, and forecast.',
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    securitySchemes: [{ type: 'oauth2', scopes: ['crm.read'] }],
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -40,6 +43,7 @@ const TOOLS = [
     name: 'getCrmData',
     description: 'Live CRM records: events, customers, leads, tasks, or all.',
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    securitySchemes: [{ type: 'oauth2', scopes: ['crm.read'] }],
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -145,6 +149,7 @@ async function handleMessage(msg, event) {
       return rpcResult(id, {
         isError: true,
         content: toolText({ success: false, error: auth.error }),
+        _meta: { 'mcp/www_authenticate': [AUTH_CHALLENGE] },
       });
     }
 

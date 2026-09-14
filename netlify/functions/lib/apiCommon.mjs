@@ -1,4 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+const MCP_AUDIENCE = 'https://myecrm2026.netlify.app/mcp';
+const MCP_ISSUER = 'https://myecrm2026.netlify.app';
 
 export const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -43,7 +47,7 @@ export function handleOptions(event) {
   return null;
 }
 
-function configuredTokens() {
+export function configuredTokens() {
   return [
     process.env.CRM_API_KEY,
     process.env.GPT_READONLY_TOKEN,
@@ -60,6 +64,56 @@ export function readProvidedToken(event) {
   return String(bearer || apiKey || params.token || '').trim();
 }
 
+function b64urlDecode(value) {
+  try {
+    return Buffer.from(String(value), 'base64url');
+  } catch {
+    return null;
+  }
+}
+
+function safeEqualString(left, right) {
+  const a = Buffer.from(String(left));
+  const b = Buffer.from(String(right));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** OAuth access tokens issued by our MCP authorization endpoint. */
+export function verifyMcpAccessToken(token) {
+  const [prefix, encodedPayload, signature] = String(token || '').split('.');
+  if (prefix !== 'mcp1' || !encodedPayload || !signature) return null;
+
+  const secret = configuredTokens()[0];
+  if (!secret) return null;
+
+  const expected = createHmac('sha256', secret)
+    .update(`${prefix}.${encodedPayload}`)
+    .digest('base64url');
+  if (!safeEqualString(signature, expected)) return null;
+
+  const decoded = b64urlDecode(encodedPayload);
+  if (!decoded) return null;
+
+  try {
+    const claims = JSON.parse(decoded.toString('utf8'));
+    const now = Math.floor(Date.now() / 1000);
+    const scopes = String(claims.scope || '').split(/\s+/).filter(Boolean);
+    if (
+      claims.iss !== MCP_ISSUER ||
+      claims.aud !== MCP_AUDIENCE ||
+      !Number.isFinite(claims.exp) ||
+      claims.exp <= now ||
+      (claims.nbf && claims.nbf > now) ||
+      !scopes.includes('crm.read')
+    ) {
+      return null;
+    }
+    return claims;
+  } catch {
+    return null;
+  }
+}
+
 /** Bearer / X-API-Key / ?token= — מקבל CRM_API_KEY או אחד מהמפתחות הקיימים */
 export function authorize(event) {
   const tokens = configuredTokens();
@@ -67,10 +121,12 @@ export function authorize(event) {
     return { ok: false, statusCode: 503, error: 'CRM_API_KEY is not configured' };
   }
   const provided = readProvidedToken(event);
-  if (!provided || !tokens.includes(provided)) {
+  const staticMatch = provided && tokens.some((token) => safeEqualString(provided, token));
+  const oauthClaims = provided ? verifyMcpAccessToken(provided) : null;
+  if (!staticMatch && !oauthClaims) {
     return { ok: false, statusCode: 401, error: 'Unauthorized' };
   }
-  return { ok: true };
+  return { ok: true, oauthClaims };
 }
 
 export function getSupabase() {
