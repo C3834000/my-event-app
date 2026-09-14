@@ -1,5 +1,7 @@
 # API first — never fall through to the SPA HTML shell.
 # 200! = rewrite + force, so an existing file cannot shadow the function.
+/mcp               /.netlify/functions/mcp           200!
+/api/mcp           /.netlify/functions/mcp           200!
 /api/crm-data      /.netlify/functions/crm-data      200!
 /api/gpt-data      /.netlify/functions/gpt-data      200!
 /api/cashflow      /.netlify/functions/cashflow      200!

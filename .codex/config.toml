@@ -1,0 +1,11 @@
+# ChatGPT desktop / Codex CLI / IDE — Streamable HTTP MCP (read-only).
+# Put the API key in the environment or Codex secret store, not in this file.
+# Variable name only: CRM_API_KEY
+
+[mcp_servers.crm]
+url = "https://myecrm2026.netlify.app/mcp"
+bearer_token_env_var = "CRM_API_KEY"
+default_tools_approval_mode = "auto"
+enabled_tools = ["getCashflow", "getCrmData"]
+startup_timeout_sec = 20
+tool_timeout_sec = 45

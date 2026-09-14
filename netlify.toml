@@ -24,6 +24,18 @@
 # API rewrites MUST stay above the SPA fallback. force=true prevents
 # a published file (or _redirects catch-all) from serving index.html.
 [[redirects]]
+  from   = "/mcp"
+  to     = "/.netlify/functions/mcp"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/api/mcp"
+  to     = "/.netlify/functions/mcp"
+  status = 200
+  force  = true
+
+[[redirects]]
   from   = "/api/crm-data"
   to     = "/.netlify/functions/crm-data"
   status = 200
