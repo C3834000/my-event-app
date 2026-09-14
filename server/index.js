@@ -88,6 +88,36 @@ app.post('/api/green-invoice', async (req, res) => {
   }
 });
 
+function invokeNetlifyHandler(relativePath) {
+  const url = pathToFileURL(path.join(__dirname, '..', 'netlify', 'functions', relativePath)).href;
+  return import(url).then((mod) => mod.handler);
+}
+
+async function proxyNetlifyGet(relativePath, req, res) {
+  try {
+    const handler = await invokeNetlifyHandler(relativePath);
+    const result = await handler({
+      httpMethod: req.method,
+      headers: req.headers,
+      queryStringParameters: req.query || {},
+      path: req.path,
+    });
+    const headers = result.headers || {};
+    Object.entries(headers).forEach(([k, v]) => res.setHeader(k, v));
+    res.status(result.statusCode || 500).send(result.body ?? '');
+  } catch (err) {
+    console.error(relativePath, err);
+    res.status(500).json({ success: false, error: 'Handler failed' });
+  }
+}
+
+app.options('/api/crm-data', (_req, res) => res.sendStatus(204));
+app.options('/api/gpt-data', (_req, res) => res.sendStatus(204));
+app.options('/api/cashflow', (_req, res) => res.sendStatus(204));
+app.get('/api/crm-data', (req, res) => proxyNetlifyGet('crm-data.js', req, res));
+app.get('/api/gpt-data', (req, res) => proxyNetlifyGet('crm-data.js', req, res));
+app.get('/api/cashflow', (req, res) => proxyNetlifyGet('cashflow.js', req, res));
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, emailConfigured: !!getTransporter(), dbConfigured: !!getSupabase() });

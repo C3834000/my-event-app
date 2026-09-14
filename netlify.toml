@@ -21,50 +21,63 @@
 [functions."leads-cleanup"]
   schedule = "0 5 * * *"
 
-# Route /api/send-email → Netlify Function
+# API rewrites MUST stay above the SPA fallback. force=true prevents
+# a published file (or _redirects catch-all) from serving index.html.
 [[redirects]]
-  from   = "/api/send-email"
-  to     = "/.netlify/functions/send-email"
+  from   = "/api/crm-data"
+  to     = "/.netlify/functions/crm-data"
   status = 200
+  force  = true
 
-# Route /api/db → Netlify Function (Supabase proxy)
-[[redirects]]
-  from   = "/api/db"
-  to     = "/.netlify/functions/db"
-  status = 200
-
-# Route /api/green-invoice → חשבונית ירוקה (API מול השרת בלבד)
-[[redirects]]
-  from   = "/api/green-invoice"
-  to     = "/.netlify/functions/green-invoice"
-  status = 200
-
-# Route /api/calendar.ics → פיד יומן Google (ICS)
-[[redirects]]
-  from   = "/api/calendar.ics"
-  to     = "/.netlify/functions/calendar-ics"
-  status = 200
-
-# Route /api/gpt-data → API לקריאה בלבד עבור GPT / כלי ניתוח
 [[redirects]]
   from   = "/api/gpt-data"
   to     = "/.netlify/functions/gpt-data"
   status = 200
+  force  = true
 
-# Route /api/cashflow → תמונת מצב כספית חיה / פער תזרימי יומי
 [[redirects]]
   from   = "/api/cashflow"
   to     = "/.netlify/functions/cashflow"
   status = 200
   force  = true
 
-# Route /api/documents → מאגר מסמכים (שלב ראשון — העלאה ידנית)
+[[redirects]]
+  from   = "/api/send-email"
+  to     = "/.netlify/functions/send-email"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/api/db"
+  to     = "/.netlify/functions/db"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/api/green-invoice"
+  to     = "/.netlify/functions/green-invoice"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/api/calendar.ics"
+  to     = "/.netlify/functions/calendar-ics"
+  status = 200
+  force  = true
+
 [[redirects]]
   from   = "/api/documents"
   to     = "/.netlify/functions/documents"
   status = 200
+  force  = true
 
-# SPA fallback – all routes → index.html
+[[redirects]]
+  from   = "/api/*"
+  to     = "/.netlify/functions/api-fallback"
+  status = 200
+  force  = true
+
+# SPA fallback – frontend routes only. /api/* is handled above.
 [[redirects]]
   from   = "/*"
   to     = "/index.html"

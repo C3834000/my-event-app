@@ -1,5 +1,12 @@
+# API first — never fall through to the SPA HTML shell.
+# 200! = rewrite + force, so an existing file cannot shadow the function.
+/api/crm-data      /.netlify/functions/crm-data      200!
+/api/gpt-data      /.netlify/functions/gpt-data      200!
+/api/cashflow      /.netlify/functions/cashflow      200!
 /api/send-email    /.netlify/functions/send-email    200
 /api/db            /.netlify/functions/db             200
 /api/green-invoice /.netlify/functions/green-invoice 200
 /api/documents     /.netlify/functions/documents     200
+/api/calendar.ics  /.netlify/functions/calendar-ics  200
+/api/*             /.netlify/functions/api-fallback  200!
 /*                 /index.html                        200

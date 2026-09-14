@@ -1,54 +1,19 @@
-import { createClient } from '@supabase/supabase-js';
+import {
+  authorize,
+  fail,
+  getSupabase,
+  handleOptions,
+  logError,
+  money,
+  ok,
+  toCamel,
+} from './lib/apiCommon.mjs';
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Content-Type': 'application/json; charset=utf-8',
-  'Cache-Control': 'no-store',
+const DEFAULT_TAX_SETTINGS = {
+  vatDebt: 93465,
+  incomeTaxDebt: 28301,
+  debtAsOf: '2026-09-07',
 };
-
-function json(statusCode, body) {
-  return { statusCode, headers: CORS_HEADERS, body: JSON.stringify(body) };
-}
-
-function getSupabase() {
-  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-  const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key);
-}
-
-function readBearerToken(event) {
-  const header = event.headers?.authorization || event.headers?.Authorization || '';
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || '';
-}
-
-function authorize(event) {
-  // Prefer dedicated finance token; fall back to existing GPT read token
-  const configured = process.env.CASHFLOW_API_TOKEN || process.env.GPT_READONLY_TOKEN;
-  if (!configured) {
-    return { ok: false, statusCode: 503, error: 'CASHFLOW_API_TOKEN / GPT_READONLY_TOKEN is not configured' };
-  }
-  const provided = readBearerToken(event);
-  if (!provided || provided !== configured) {
-    return { ok: false, statusCode: 401, error: 'Unauthorized' };
-  }
-  return { ok: true };
-}
-
-function toCamel(obj) {
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
-  return Object.fromEntries(
-    Object.entries(obj).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v])
-  );
-}
-
-function money(value) {
-  const n = typeof value === 'number' ? value : Number(String(value ?? '').replace(/,/g, '').trim());
-  return Number.isFinite(n) ? n : 0;
-}
 
 function parseDateKey(dateStr) {
   if (!dateStr) return null;
@@ -352,19 +317,73 @@ function round2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+function resolveTaxDebts(settingsData) {
+  const stored = settingsData?.taxSettings && typeof settingsData.taxSettings === 'object'
+    ? settingsData.taxSettings
+    : null;
+  const vat = money(stored?.vatDebt ?? DEFAULT_TAX_SETTINGS.vatDebt);
+  const incomeTax = money(stored?.incomeTaxDebt ?? DEFAULT_TAX_SETTINGS.incomeTaxDebt);
+  return {
+    vat,
+    incomeTax,
+    total: round2(vat + incomeTax),
+    asOf: stored?.debtAsOf || DEFAULT_TAX_SETTINGS.debtAsOf,
+    source: stored ? 'settings' : 'default',
+  };
+}
+
+function publicCashflow(snapshot, taxDebts) {
+  const s = snapshot.summary;
+  return {
+    openingBalance: snapshot.openingBalance,
+    income: s.totalEventAmount,
+    expenses: s.outflowsInRange,
+    received: s.receivedInRange,
+    paidOut: s.outflowsInRange,
+    receivables: s.totalOutstanding,
+    overdueReceivables: s.overdueOutstanding,
+    undatedReceivables: s.undatedOutstanding,
+    payables: 0,
+    taxDebts,
+    openInvoices: {
+      count: snapshot.openBalances.length,
+      amount: s.totalOutstanding,
+    },
+    projectedBalance: s.endingCumulativeGap,
+    forecast: {
+      expectedCollections: s.expectedDatedInRange,
+      scheduledOutflows: s.outflowsInRange,
+      undatedOutstanding: s.undatedOutstanding,
+      overdueOutstanding: s.overdueOutstanding,
+      netGapInRange: s.netGapInRange,
+      endingCumulative: s.endingCumulativeGap,
+    },
+    range: snapshot.range,
+    asOf: snapshot.asOf,
+    details: {
+      expectedCollections: snapshot.expectedCollections,
+      receivedPayments: snapshot.receivedPayments,
+      openBalances: snapshot.openBalances,
+      undatedBalances: snapshot.undatedBalances,
+      overdue: snapshot.overdue,
+      expenses: snapshot.expenses,
+      daily: snapshot.daily,
+    },
+  };
+}
+
 export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: CORS_HEADERS, body: '' };
-  }
+  const preflight = handleOptions(event);
+  if (preflight) return preflight;
   if (event.httpMethod !== 'GET') {
-    return json(405, { error: 'Method not allowed' });
+    return fail(405, 'Method not allowed');
   }
 
   const auth = authorize(event);
-  if (!auth.ok) return json(auth.statusCode, { error: auth.error });
+  if (!auth.ok) return fail(auth.statusCode, auth.error);
 
   const supabase = getSupabase();
-  if (!supabase) return json(503, { error: 'Database not configured' });
+  if (!supabase) return fail(503, 'Database not configured');
 
   const params = event.queryStringParameters || {};
   const asOf = parseDateKey(params.asOf) || todayKey();
@@ -372,7 +391,7 @@ export const handler = async (event) => {
   const to = parseDateKey(params.to) || shiftMonths(asOf, 3);
   const openingBalance = params.openingBalance;
 
-  if (from > to) return json(400, { error: '`from` must be <= `to`' });
+  if (from > to) return fail(400, '`from` must be <= `to`');
 
   try {
     const [eventsRes, settingsRes] = await Promise.all([
@@ -384,9 +403,11 @@ export const handler = async (event) => {
     if (settingsRes.error) throw settingsRes.error;
 
     const settingsRow = toCamel((settingsRes.data || [])[0] || {});
-    const financeEntries = Array.isArray(settingsRow?.data?.financeEntries)
-      ? settingsRow.data.financeEntries
+    const settingsData = settingsRow?.data || {};
+    const financeEntries = Array.isArray(settingsData.financeEntries)
+      ? settingsData.financeEntries
       : [];
+    const taxDebts = resolveTaxDebts(settingsData);
 
     const snapshot = buildCashflowSnapshot({
       events: eventsRes.data || [],
@@ -397,8 +418,18 @@ export const handler = async (event) => {
       asOf,
     });
 
-    return json(200, snapshot);
+    const data = publicCashflow(snapshot, taxDebts);
+    return ok(data, {
+      count: {
+        events: (eventsRes.data || []).length,
+        openInvoices: data.openInvoices.count,
+        expenses: snapshot.expenses.length,
+      },
+      asOf,
+      range: { from, to },
+    });
   } catch (err) {
-    return json(500, { error: err?.message || String(err) });
+    logError('cashflow', err);
+    return fail(500, 'Database request failed');
   }
 };
