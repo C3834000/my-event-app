@@ -1,0 +1,37 @@
+{
+  "name": "crm-finance",
+  "version": "1.0.0",
+  "description": "Read-only access to the live CRM and financial cashflow data.",
+  "author": {
+    "name": "C3834000",
+    "url": "https://github.com/C3834000"
+  },
+  "homepage": "https://myecrm2026.netlify.app",
+  "repository": "https://github.com/C3834000/my-event-app",
+  "keywords": [
+    "crm",
+    "cashflow",
+    "finance",
+    "events",
+    "leads",
+    "tasks"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "CRM כספים",
+    "shortDescription": "תמונת מצב חיה מה־CRM והתזרים",
+    "longDescription": "קריאה בלבד של לקוחות, לידים, משימות, אירועים, חייבים, חובות לרשויות ותחזית תזרים.",
+    "developerName": "C3834000",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ],
+    "websiteURL": "https://myecrm2026.netlify.app",
+    "defaultPrompt": [
+      "הכן תמונת מצב כלכלית חיה מה־CRM.",
+      "כמה כסף חייבים לי ומי החייבים הגדולים?",
+      "הצג משימות פתוחות, לידים שלא טופלו ואירועים קרובים."
+    ]
+  }
+}

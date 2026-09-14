@@ -1,0 +1,20 @@
+{
+  "name": "c3834000-crm",
+  "interface": {
+    "displayName": "CRM כספים"
+  },
+  "plugins": [
+    {
+      "name": "crm-finance",
+      "source": {
+        "source": "local",
+        "path": "./plugins/crm-finance"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

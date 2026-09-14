@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "crm": {
+      "type": "http",
+      "url": "https://myecrm2026.netlify.app/mcp",
+      "enabled_tools": [
+        "getCashflow",
+        "getCrmData"
+      ],
+      "default_tools_approval_mode": "auto",
+      "startup_timeout_sec": 20,
+      "tool_timeout_sec": 45
+    }
+  }
+}
