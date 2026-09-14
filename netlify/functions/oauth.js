@@ -13,7 +13,7 @@ const ACCESS_TOKEN_TTL = 60 * 60;
 const REFRESH_TOKEN_TTL = 180 * 24 * 60 * 60;
 const CODE_TTL = 90;
 // One-way fingerprint only. The setup key itself is never committed or logged.
-const SETUP_KEY_SHA256 = 'cc6f0ec3d03f66b773f32d58fa11885c9b9dd9128bfb1097a02805c16d640039';
+const SETUP_KEY_SHA256 = '48e5a3bcab4374540ba55143663091ed5ff42a999bf04bd75a7ba39aa3a2e7e8';
 
 const JSON_HEADERS = {
   'Access-Control-Allow-Origin': '*',
