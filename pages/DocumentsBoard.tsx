@@ -5,7 +5,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Upload, FileText, Eye, Edit, Archive, ArchiveRestore, CheckCircle2, AlertTriangle,
-  RotateCcw, X, KeyRound, Loader2,
+  RotateCcw, X, KeyRound, Loader2, Download, FolderOpen,
 } from 'lucide-react';
 import {
   FinanceDocument, DocSuspect, DOC_TYPES, DocDirection,
@@ -13,6 +13,7 @@ import {
   listDocuments, updateDocument, archiveDocument, restoreDocument, getDocumentFileUrl,
   getDocsApiKey, setDocsApiKey,
 } from '../services/documents';
+import YearFilter, { DEFAULT_DATA_YEAR } from '../components/YearFilter';
 
 const nis = (v?: number | null) =>
   v == null ? '—' : '₪' + Number(v).toLocaleString('he-IL', { maximumFractionDigits: 2 });
@@ -45,6 +46,7 @@ const DocumentsBoard: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
   const [uploadDirection, setUploadDirection] = useState<DocDirection>('expense');
+  const [yearFilter, setYearFilter] = useState<number | ''>(DEFAULT_DATA_YEAR);
   const [monthFilter, setMonthFilter] = useState('');       // '' = הכל
   const [directionFilter, setDirectionFilter] = useState<'' | DocDirection>('');
   const [statusFilter, setStatusFilter] = useState<'' | 'needs_review' | 'confirmed'>('');
@@ -52,6 +54,7 @@ const DocumentsBoard: React.FC = () => {
   const [editing, setEditing] = useState<EditState>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [showFileFolder, setShowFileFolder] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -63,6 +66,7 @@ const DocumentsBoard: React.FC = () => {
         direction: directionFilter || undefined,
         reviewStatus: statusFilter || undefined,
         monthKey: monthFilter || undefined,
+        year: monthFilter ? undefined : yearFilter || undefined,
         archivedOnly: showArchived || undefined,
       });
       setDocs(rows);
@@ -73,7 +77,7 @@ const DocumentsBoard: React.FC = () => {
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [apiKey, monthFilter, directionFilter, statusFilter, showArchived]);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [apiKey, yearFilter, monthFilter, directionFilter, statusFilter, showArchived]);
 
   const saveKey = () => {
     if (!keyInput.trim()) return;
@@ -135,6 +139,21 @@ const DocumentsBoard: React.FC = () => {
     }
   };
 
+  const downloadFile = async (doc: FinanceDocument) => {
+    try {
+      const url = await getDocumentFileUrl(doc.id, true);
+      const link = document.createElement('a');
+      link.href = url;
+      link.rel = 'noopener';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
   // ארכיון במקום מחיקה — ניתן לשחזור בכל רגע; הקובץ המקורי נשאר באחסון.
   const archive = async (doc: FinanceDocument) => {
     if (!confirm(`להעביר את «${doc.fileName || doc.docNumber || doc.id}» לארכיון? ניתן לשחזר בכל רגע — הקובץ לא נמחק.`)) return;
@@ -170,7 +189,7 @@ const DocumentsBoard: React.FC = () => {
   const allVisibleSelected = docs.length > 0 && docs.every(d => selected.has(d.id));
   const toggleSelectAll = () => setSelected(allVisibleSelected ? new Set() : new Set(docs.map(d => d.id)));
   // ניקוי בחירה כשהסינון משתנה — שלא יישארו מזהים שאינם על המסך
-  useEffect(() => { setSelected(new Set()); }, [monthFilter, directionFilter, statusFilter, showArchived]);
+  useEffect(() => { setSelected(new Set()); }, [yearFilter, monthFilter, directionFilter, statusFilter, showArchived]);
 
   const runBulk = async (label: string, action: (id: string) => Promise<unknown>, removeFromList: boolean) => {
     const ids = docs.filter(d => selected.has(d.id)).map(d => d.id);
@@ -266,10 +285,23 @@ const DocumentsBoard: React.FC = () => {
 
       {/* סינון + סיכום קצר */}
       <div className="flex flex-wrap items-center gap-2">
+        <YearFilter
+          value={yearFilter}
+          includeAll
+          onChange={(year) => {
+            setYearFilter(year);
+            if (!year || (monthFilter && !monthFilter.startsWith(String(year)))) {
+              setMonthFilter('');
+            }
+          }}
+        />
         <input
           type="month"
           value={monthFilter}
-          onChange={e => setMonthFilter(e.target.value)}
+          onChange={e => {
+            setMonthFilter(e.target.value);
+            if (e.target.value) setYearFilter(Number(e.target.value.slice(0, 4)));
+          }}
           className="text-sm font-bold border border-slate-200 rounded-lg px-2 py-1.5 bg-white"
           title="סינון לפי חודש המסמך (ריק = הכל)"
         />
@@ -295,6 +327,13 @@ const DocumentsBoard: React.FC = () => {
           title="הצגת מסמכים שהועברו לארכיון"
         >
           <Archive size={13} /> {showArchived ? 'חזרה למסמכים פעילים' : 'ארכיון'}
+        </button>
+        <button
+          onClick={() => setShowFileFolder(v => !v)}
+          className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border flex items-center gap-1 ${showFileFolder ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-purple-50'}`}
+          title="פתיחת תיקיית הקבצים של המסמכים המוצגים"
+        >
+          <FolderOpen size={13} /> {showFileFolder ? 'סגור תיקיית קבצים' : 'תיקיית קבצים'}
         </button>
         <div className="mr-auto flex items-center gap-3 text-xs font-bold text-slate-500">
           <span>{stats.total} מסמכים</span>
@@ -344,6 +383,44 @@ const DocumentsBoard: React.FC = () => {
               });
             })()}
           </div>
+        </div>
+      )}
+
+      {showFileFolder && (
+        <div className="bg-white rounded-xl border border-purple-100 shadow-sm p-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+              <FolderOpen size={17} className="text-purple-600" />
+              תיקיית הקבצים {yearFilter ? `— ${yearFilter}` : ''}
+            </h3>
+            <span className="text-xs font-bold text-slate-400">
+              {docs.filter(doc => doc.filePath).length} קבצים
+            </span>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+            {docs.filter(doc => doc.filePath).map(doc => (
+              <div key={doc.id} className="border border-slate-200 rounded-xl p-3 flex items-center gap-3 min-w-0">
+                <FileText size={22} className="text-purple-500 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-black text-slate-700 truncate" title={doc.fileName || doc.docNumber || ''}>
+                    {doc.fileName || doc.docNumber || 'מסמך'}
+                  </div>
+                  <div className="text-[10px] font-bold text-slate-400">
+                    {fmtDate(doc.docDate)} · {doc.counterparty || 'ללא שם'}
+                  </div>
+                </div>
+                <button onClick={() => openFile(doc)} className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg" title="פתח קובץ">
+                  <Eye size={15} />
+                </button>
+                <button onClick={() => downloadFile(doc)} className="p-1.5 text-slate-400 hover:text-purple-600 rounded-lg" title="הורד קובץ">
+                  <Download size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+          {!loading && docs.every(doc => !doc.filePath) && (
+            <div className="text-center py-6 text-sm font-bold text-slate-400">אין קבצים בשנה ובסינון שנבחרו</div>
+          )}
         </div>
       )}
 
@@ -453,9 +530,14 @@ const DocumentsBoard: React.FC = () => {
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-1">
                     {doc.filePath && (
-                      <button onClick={() => openFile(doc)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="פתח קובץ מקור">
-                        <Eye size={15} />
-                      </button>
+                      <>
+                        <button onClick={() => openFile(doc)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="פתח קובץ מקור">
+                          <Eye size={15} />
+                        </button>
+                        <button onClick={() => downloadFile(doc)} className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg" title="הורד מסמך">
+                          <Download size={15} />
+                        </button>
+                      </>
                     )}
                     <button onClick={() => setEditing({ doc, suspects: [] })} className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg" title="עריכת פרטים">
                       <Edit size={15} />

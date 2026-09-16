@@ -153,8 +153,12 @@ const hashA = hashOf('invoice-office-depot');
   check('סינון לפי סטטוס מאושר', onlyConfirmed.body.documents.every(d => d.reviewStatus === 'confirmed') && onlyConfirmed.body.documents.some(d => d.id === docA.id));
   const aug = await call({ action: 'list', monthKey: '2026-08' });
   check('סינון לפי חודש 2026-08', aug.body.documents.length >= 3 && aug.body.documents.every(d => (d.docDate || '').startsWith('2026-08')));
+  const year2026 = await call({ action: 'list', year: 2026 });
+  check('סינון לפי שנת 2026', year2026.body.documents.length >= 3 && year2026.body.documents.every(d => (d.docDate || '').startsWith('2026')));
   const income = await call({ action: 'list', direction: 'income' });
   check('סינון לפי כיוון הכנסה', income.body.documents.every(d => d.direction === 'income'));
+  const download = await call({ action: 'fileUrl', id: docA.id, download: true });
+  check('הורדת מסמך → signed URL', download.status === 200 && String(download.body.url || '').includes('signed'));
 }
 
 // ── 10. ארכיון במקום מחיקה + שחזור ─────────────────────────────────────────

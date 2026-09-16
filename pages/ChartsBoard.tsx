@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { useApp } from '../context/AppContext';
 import { settingsService } from '../services/supabase';
 import { searchGreenInvoiceIncomeDocuments, type GreenInvoiceIncomeDocument } from '../services/greenInvoice';
@@ -17,6 +17,7 @@ import {
   eventOpenAmount,
 } from '../services/eventKpi';
 import EditEventModal from '../components/EditEventModal';
+import YearFilter, { DEFAULT_DATA_YEAR } from '../components/YearFilter';
 
 type CashflowWeekKind = 'received' | 'expected' | 'eventValue';
 
@@ -110,7 +111,8 @@ const todayIso = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-const yearStartIso = () => `${new Date().getFullYear()}-01-01`;
+const yearStartIso = (year = DEFAULT_DATA_YEAR) => `${year}-01-01`;
+const yearEndIso = (year = DEFAULT_DATA_YEAR) => `${year}-12-31`;
 
 const monthKeyFromIso = (iso: string) => (iso || '').slice(0, 7);
 const eventDateKey = (event: AppEvent) => parseEventDateKey(event.date) || '';
@@ -150,7 +152,7 @@ const getMarginalTaxRate = (monthlyIncome: number) => {
 const vatPartFromGross = (grossAmount: number) => grossAmount - (grossAmount / (1 + VAT_RATE));
 const grossExpenseNeededForVatOffset = (vatAmount: number) => vatAmount > 0 ? vatAmount * (1 + VAT_RATE) / VAT_RATE : 0;
 
-const MiniMultiSelect: React.FC<{
+const MiniMultiSelect: FC<{
   label: string;
   options: string[];
   selected: Set<string>;
@@ -217,9 +219,10 @@ export default function ChartsBoard() {
     amount: '',
     date: todayIso(),
   });
+  const [reportYear, setReportYear] = useState(DEFAULT_DATA_YEAR);
   const [financeFilters, setFinanceFilters] = useState({
-    dateFrom: yearStartIso(),
-    dateTo: todayIso(),
+    dateFrom: yearStartIso(DEFAULT_DATA_YEAR),
+    dateTo: yearEndIso(DEFAULT_DATA_YEAR),
     source: 'systemAndGi' as 'gi' | 'system' | 'systemAndGi',
     includePaid: true,
     includeDated: true,
@@ -227,11 +230,13 @@ export default function ChartsBoard() {
     includeOccurredUnpaid: true,
   });
   const [reportFilters, setReportFilters] = useState({
-    dateFrom: yearStartIso(),
-    dateTo: todayIso(),
+    dateFrom: yearStartIso(DEFAULT_DATA_YEAR),
+    dateTo: yearEndIso(DEFAULT_DATA_YEAR),
     dateMode: 'event' as 'event' | 'payment',
   });
-  const [selectedReportYears, setSelectedReportYears] = useState<Set<string>>(new Set());
+  const [selectedReportYears, setSelectedReportYears] = useState<Set<string>>(
+    () => new Set([String(DEFAULT_DATA_YEAR)]),
+  );
   const [selectedReportCategories, setSelectedReportCategories] = useState<Set<string>>(new Set());
   const [selectedReportEventTypes, setSelectedReportEventTypes] = useState<Set<string>>(new Set());
   const [selectedReportPaymentStatuses, setSelectedReportPaymentStatuses] = useState<Set<string>>(new Set());
@@ -324,7 +329,7 @@ export default function ChartsBoard() {
 
   const syncGreenInvoiceIncome = async (options?: { silent?: boolean }) => {
     const silent = options?.silent === true;
-    const year = new Date().getFullYear();
+    const year = reportYear;
     setGreenInvoiceSyncing(true);
     try {
       const result = await searchGreenInvoiceIncomeDocuments({
@@ -336,21 +341,25 @@ export default function ChartsBoard() {
         return;
       }
       const docs = result.documents || [];
+      const mergedDocs = [
+        ...greenInvoiceIncome.filter(doc => !String(doc.date || '').startsWith(String(year))),
+        ...docs,
+      ];
       const lastSync = new Date().toISOString();
-      setGreenInvoiceIncome(docs);
+      setGreenInvoiceIncome(mergedDocs);
       setGreenInvoiceLastSync(lastSync);
-      localStorage.setItem(GREEN_INVOICE_INCOME_STORAGE_KEY, JSON.stringify({ documents: docs, lastSync }));
+      localStorage.setItem(GREEN_INVOICE_INCOME_STORAGE_KEY, JSON.stringify({ documents: mergedDocs, lastSync }));
       settingsService.get().then(s => {
         const currentData = s?.data || {};
         settingsService.update({
           data: {
             ...currentData,
-            greenInvoiceIncomeDocuments: docs,
+            greenInvoiceIncomeDocuments: mergedDocs,
             greenInvoiceIncomeLastSync: lastSync,
           },
         }).catch(() => {});
       }).catch(() => {});
-      if (!silent) alert(`סונכרנו ${docs.length} מסמכי הכנסה מחשבונית ירוקה`);
+      if (!silent) alert(`סונכרנו ${docs.length} מסמכי הכנסה מחשבונית ירוקה לשנת ${year}`);
     } finally {
       setGreenInvoiceSyncing(false);
     }
@@ -372,17 +381,13 @@ export default function ChartsBoard() {
   const getOpenBalance = (ev: AppEvent): number => eventOpenAmount(ev);
 
   const reportFilterOptions = useMemo(() => {
-    const years = new Set<string>();
     const categories = new Set<string>();
     const eventTypes = new Set<string>(Object.values(EventType));
     events.forEach(ev => {
-      years.add(eventYearKey(ev));
-      if (ev.paymentDate || ev.paidAmount) years.add(incomeYearKey(ev));
       categories.add(eventCategoryKey(ev));
       if (ev.eventType) eventTypes.add(ev.eventType);
     });
     return {
-      years: Array.from(years).sort((a, b) => b.localeCompare(a)),
       categories: Array.from(categories).sort(),
       eventTypes: Array.from(eventTypes).sort(),
       paymentStatuses: Object.values(PaymentStatus),
@@ -391,12 +396,37 @@ export default function ChartsBoard() {
   }, [events]);
 
   const clearReportFilters = () => {
-    setReportFilters({ dateFrom: yearStartIso(), dateTo: todayIso(), dateMode: 'event' });
-    setSelectedReportYears(new Set());
+    setReportYear(DEFAULT_DATA_YEAR);
+    setReportFilters({
+      dateFrom: yearStartIso(DEFAULT_DATA_YEAR),
+      dateTo: yearEndIso(DEFAULT_DATA_YEAR),
+      dateMode: 'event',
+    });
+    setFinanceFilters(prev => ({
+      ...prev,
+      dateFrom: yearStartIso(DEFAULT_DATA_YEAR),
+      dateTo: yearEndIso(DEFAULT_DATA_YEAR),
+    }));
+    setSelectedReportYears(new Set([String(DEFAULT_DATA_YEAR)]));
     setSelectedReportCategories(new Set());
     setSelectedReportEventTypes(new Set());
     setSelectedReportPaymentStatuses(new Set());
     setSelectedReportEventStatuses(new Set());
+  };
+
+  const selectReportYear = (year: number) => {
+    setReportYear(year);
+    setSelectedReportYears(new Set([String(year)]));
+    setReportFilters(prev => ({
+      ...prev,
+      dateFrom: yearStartIso(year),
+      dateTo: yearEndIso(year),
+    }));
+    setFinanceFilters(prev => ({
+      ...prev,
+      dateFrom: yearStartIso(year),
+      dateTo: yearEndIso(year),
+    }));
   };
 
   const reportEvents = useMemo(() => {
@@ -617,10 +647,11 @@ export default function ChartsBoard() {
 
   const financeSnapshot = useMemo(() => {
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonthKey = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const actualCurrentYear = now.getFullYear();
+    const currentYear = reportYear;
+    const currentMonthNumber = currentYear < actualCurrentYear ? 12 : now.getMonth() + 1;
+    const currentMonthKey = `${currentYear}-${String(currentMonthNumber).padStart(2, '0')}`;
     const yearStartKey = `${currentYear}-01`;
-    const currentMonthNumber = now.getMonth() + 1;
 
     const monthlyMap: Record<string, {
       monthKey: string;
@@ -941,7 +972,7 @@ export default function ChartsBoard() {
         .filter(entry => entry.date.startsWith(String(currentYear)))
         .sort((a, b) => b.date.localeCompare(a.date)),
     };
-  }, [reportEvents, financeEntries, greenInvoiceIncome, financeFilters]);
+  }, [reportEvents, financeEntries, greenInvoiceIncome, financeFilters, reportYear]);
 
   const monthlyTimelineRows = financeSnapshot.monthlyTaxPlan;
   const selectedFinanceMonth = monthlyTimelineRows[selectedFinanceMonthIndex] || monthlyTimelineRows[0];
@@ -1413,12 +1444,9 @@ export default function ChartsBoard() {
                   className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-indigo-100"
                 />
               </div>
-              <MiniMultiSelect
-                label="שנים"
-                options={reportFilterOptions.years}
-                selected={selectedReportYears}
-                onChange={setSelectedReportYears}
-                getCount={(year) => events.filter(e => eventYearKey(e) === year || incomeYearKey(e) === year).length}
+              <YearFilter
+                value={reportYear}
+                onChange={(year) => year && selectReportYear(year)}
               />
               <MiniMultiSelect
                 label="קטגוריות"

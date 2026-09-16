@@ -12,7 +12,7 @@
 //   initUpload  { fileHash, fileName, fileMime, fileSize }
 //               → בדיקת כפילות לפי hash; אם חדש: signed upload URL.
 //   create      { data: {...מטא־דאטה}, source: {kind, ref} } → יצירת רשומה + מקור.
-//   list        { direction?, reviewStatus?, monthKey? } → רשימה + מקורות + חשדות כפילות.
+//   list        { direction?, reviewStatus?, monthKey?, year? } → רשימה + מקורות + חשדות כפילות.
 //   update      { id, data } → עדכון שדות מותרים בלבד.
 //   archive     { id } → העברה לארכיון (ניתן לשחזור; הקובץ לא נמחק לעולם).
 //   restore     { id } → שחזור מהארכיון.
@@ -193,6 +193,10 @@ export const handler = async (event) => {
         const from = `${body.monthKey}-01`;
         const to = new Date(y, m, 0).toISOString().slice(0, 10);
         q = q.gte('doc_date', from).lte('doc_date', to);
+      } else if ([2023, 2024, 2025, 2026].includes(Number(body.year))) {
+        q = q
+          .gte('doc_date', `${Number(body.year)}-01-01`)
+          .lte('doc_date', `${Number(body.year)}-12-31`);
       }
       const { data: rows, error } = await q;
       if (error) throw error;
@@ -248,12 +252,16 @@ export const handler = async (event) => {
     // ── fileUrl: signed URL לצפייה ───────────────────────────────────────
     if (action === 'fileUrl') {
       const id = String(body.id || '');
-      const { data: doc, error } = await supabase.from('documents').select('file_path').eq('id', id).maybeSingle();
+      const { data: doc, error } = await supabase.from('documents').select('file_path, file_name').eq('id', id).maybeSingle();
       if (error) throw error;
       if (!doc?.file_path) return json(404, { success: false, error: 'למסמך אין קובץ' });
       const { data: signed, error: signErr } = await supabase.storage
         .from(BUCKET)
-        .createSignedUrl(doc.file_path, 3600);
+        .createSignedUrl(
+          doc.file_path,
+          3600,
+          body.download === true ? { download: doc.file_name || true } : undefined,
+        );
       if (signErr) throw signErr;
       return json(200, { success: true, url: signed.signedUrl });
     }

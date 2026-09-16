@@ -21,6 +21,7 @@ import {
 import { listDocuments, getDocsApiKey, FinanceDocument } from '../services/documents';
 import { searchGreenInvoiceIncomeDocuments, GreenInvoiceIncomeDocument } from '../services/greenInvoice';
 import { settingsService } from '../services/supabase';
+import YearFilter, { DEFAULT_DATA_YEAR } from '../components/YearFilter';
 
 const GI_STORAGE_KEY = 'ME_CFM_GREEN_INVOICE_INCOME_V1';
 
@@ -32,9 +33,17 @@ const todayIso = () => {
 };
 
 const TaxBoard: React.FC = () => {
-  const year = new Date().getFullYear();
-  const currentMonthKey = todayIso().slice(0, 7);
-  const monthsElapsed = new Date().getMonth() + 1;
+  const [year, setYear] = useState(DEFAULT_DATA_YEAR);
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthKey = year === currentYear
+    ? todayIso().slice(0, 7)
+    : `${year}-12`;
+  const monthsElapsed = year < currentYear
+    ? 12
+    : year === currentYear
+      ? now.getMonth() + 1
+      : 0;
 
   const [entries, setEntries] = useState<FinanceEntry[]>(loadFinanceEntriesLocal);
   const [entriesLoaded, setEntriesLoaded] = useState(false);
@@ -87,14 +96,18 @@ const TaxBoard: React.FC = () => {
       const result = await searchGreenInvoiceIncomeDocuments({ fromDate: `${year}-01-01`, toDate: `${year}-12-31` });
       if (!result.success) { alert(`שגיאה בסנכרון חשבונית ירוקה: ${result.error || 'לא ידוע'}`); return; }
       const docs = result.documents || [];
+      const mergedDocs = [
+        ...giDocs.filter(doc => !String(doc.date || '').startsWith(String(year))),
+        ...docs,
+      ];
       const lastSync = new Date().toISOString();
-      setGiDocs(docs);
+      setGiDocs(mergedDocs);
       setGiLastSync(lastSync);
-      localStorage.setItem(GI_STORAGE_KEY, JSON.stringify({ documents: docs, lastSync }));
+      localStorage.setItem(GI_STORAGE_KEY, JSON.stringify({ documents: mergedDocs, lastSync }));
       // עדכון גם בענן — כדי שלוח הדוחות יראה את אותם נתונים
       try {
         const s = await settingsService.get();
-        await settingsService.update({ data: { ...(s?.data || {}), greenInvoiceIncomeDocuments: docs, greenInvoiceIncomeLastSync: lastSync } });
+        await settingsService.update({ data: { ...(s?.data || {}), greenInvoiceIncomeDocuments: mergedDocs, greenInvoiceIncomeLastSync: lastSync } });
       } catch { /* ignore */ }
     } finally {
       setGiSyncing(false);
@@ -127,7 +140,9 @@ const TaxBoard: React.FC = () => {
 
     // הוצאות ממאגר המסמכים — מאושרים בלבד נכנסים לחישוב
     const confirmedDocs = expenseDocs.filter(d => d.reviewStatus === 'confirmed' && (d.docDate || '').startsWith(String(year)));
-    const pendingDocsCount = expenseDocs.filter(d => d.reviewStatus !== 'confirmed').length;
+    const pendingDocsCount = expenseDocs.filter(
+      d => d.reviewStatus !== 'confirmed' && (d.docDate || '').startsWith(String(year)),
+    ).length;
     const docExpenseByMonth = new Map<string, { gross: number; vat: number }>();
     let docExpenseGrossYtd = 0, vatInputYtd = 0;
     for (const d of confirmedDocs) {
@@ -173,8 +188,8 @@ const TaxBoard: React.FC = () => {
       const output = p.months.reduce((s, mk) => s + (incomeByMonth.get(mk)?.vat || 0), 0);
       const input = p.months.reduce((s, mk) => s + (docExpenseByMonth.get(mk)?.vat || 0), 0);
       const income = p.months.reduce((s, mk) => s + (incomeByMonth.get(mk)?.gross || 0), 0);
-      const isPast = p.months[1] < currentMonthKey;
-      const isCurrent = p.months.includes(currentMonthKey);
+      const isPast = year < currentYear || (year === currentYear && p.months[1] < currentMonthKey);
+      const isCurrent = year === currentYear && p.months.includes(currentMonthKey);
       return { ...p, output, input, toPay: Math.max(0, output - input), income, isPast, isCurrent };
     });
     const currentPeriod = periods.find(p => p.isCurrent) || periods[0];
@@ -231,7 +246,7 @@ const TaxBoard: React.FC = () => {
       salaryMonthly, homeFixedMonthly, homeVariableThisMonth, homeInflow, homeOutflow, homeBalance,
       debtPaymentMonthly,
     };
-  }, [giDocs, expenseDocs, entries, taxSettings, withholdingRate, year, currentMonthKey, monthsElapsed]);
+  }, [giDocs, expenseDocs, entries, taxSettings, withholdingRate, year, currentYear, currentMonthKey, monthsElapsed]);
 
   // ── הוספת רישום מהירה ──────────────────────────────────────────────────────
   const addEntry = () => {
@@ -273,6 +288,7 @@ const TaxBoard: React.FC = () => {
           <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md border border-amber-100">הערכה — לא תחליף לרו"ח</span>
         </div>
         <div className="flex items-center gap-2">
+          <YearFilter value={year} onChange={(nextYear) => nextYear && setYear(nextYear)} />
           <button
             onClick={() => setHomeView(v => !v)}
             className={`inline-flex items-center gap-1.5 text-xs font-black px-3 py-1.5 rounded-xl border transition ${homeView ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300'}`}
@@ -293,7 +309,8 @@ const TaxBoard: React.FC = () => {
 
       {giLastSync && (
         <div className="text-[11px] font-bold text-slate-400 -mt-3">
-          נתוני חשבונית ירוקה עודכנו: {new Date(giLastSync).toLocaleString('he-IL')} · {giDocs.length} מסמכים
+          נתוני חשבונית ירוקה עודכנו: {new Date(giLastSync).toLocaleString('he-IL')} ·{' '}
+          {giDocs.filter(doc => String(doc.date || '').startsWith(String(year))).length} מסמכים בשנת {year}
         </div>
       )}
       {docsError && (

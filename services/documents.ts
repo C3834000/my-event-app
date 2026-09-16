@@ -143,6 +143,7 @@ export async function listDocuments(filters?: {
   direction?: DocDirection;
   reviewStatus?: DocReviewStatus;
   monthKey?: string;
+  year?: number;
   archivedOnly?: boolean;
 }): Promise<FinanceDocument[]> {
   const res = await post<{ documents: FinanceDocument[] }>({ action: 'list', ...(filters || {}) });
@@ -165,7 +166,7 @@ export async function restoreDocument(id: string): Promise<void> {
   await post({ action: 'restore', id });
 }
 
-export async function getDocumentFileUrl(id: string): Promise<string> {
-  const res = await post<{ url: string }>({ action: 'fileUrl', id });
+export async function getDocumentFileUrl(id: string, download = false): Promise<string> {
+  const res = await post<{ url: string }>({ action: 'fileUrl', id, download });
   return res.url;
 }
