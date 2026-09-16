@@ -129,6 +129,18 @@ export interface AppEvent {
   giDocUrl?: string;
   /** סוג החשבונית שנשלחה ללקוח */
   invoiceSent?: string;
+  pickupStationId?: string;
+  reminderSentAt?: string;
+  pickupConfirmedAt?: string;
+}
+
+export interface PickupStation {
+  id: string;
+  name: string;
+  phone: string;
+  address?: string;
+  active: boolean;
+  createdAt: string;
 }
 
 export interface Lead {
