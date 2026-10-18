@@ -1,9 +1,27 @@
 const DEFAULT_BASE = 'https://api.greeninvoice.co.il/api/v1';
+const DEFAULT_AUTH = 'https://api.morning.co';
+const SANDBOX_AUTH = 'https://api.sandbox.morning.dev';
 
 let tokenCache = { token: null, expiresAt: 0 };
 
 function getBaseUrl(env) {
   return (env.GREEN_INVOICE_BASE_URL || DEFAULT_BASE).replace(/\/$/, '');
+}
+
+function getAuthUrl(env) {
+  if (env.GREEN_INVOICE_AUTH_URL) return String(env.GREEN_INVOICE_AUTH_URL).replace(/\/$/, '');
+  const base = String(env.GREEN_INVOICE_BASE_URL || '').toLowerCase();
+  if (base.includes('sandbox')) return SANDBOX_AUTH;
+  return DEFAULT_AUTH;
+}
+
+function tokenExpiryMs(data) {
+  const exp = Number(data?.expiresAt ?? data?.expires_at);
+  if (Number.isFinite(exp) && exp > 1e12) return exp;
+  if (Number.isFinite(exp) && exp > 1e9) return exp * 1000;
+  const expiresIn = Number(data?.expires_in ?? data?.expiresIn);
+  if (Number.isFinite(expiresIn) && expiresIn > 0) return Date.now() + expiresIn * 1000;
+  return Date.now() + 50 * 60 * 1000;
 }
 
 async function fetchJson(url, options = {}) {
@@ -29,23 +47,35 @@ async function getToken(env) {
   if (tokenCache.token && Date.now() < tokenCache.expiresAt - 60000) {
     return { token: tokenCache.token, base };
   }
-  const { res, data } = await fetchJson(`${base}/account/token`, {
+  // מיוני 2026 הנתיב הישן /account/token הוסר. ההרשאה עוברת ב-OAuth של מורנינג.
+  const { res, data } = await fetchJson(`${getAuthUrl(env)}/idp/v1/oauth/token`, {
     method: 'POST',
-    body: JSON.stringify({ id, secret }),
+    body: JSON.stringify({
+      grant_type: 'client_credentials',
+      client_id: id,
+      client_secret: secret,
+      id,
+      secret,
+    }),
   });
   if (!res.ok) {
-    const msg = data?.error?.message || data?.message || data?.error || `HTTP ${res.status}`;
-    const err = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    const raw = data?.errorMessage || data?.error?.message || data?.message || data?.error_description;
+    const msg = (typeof raw === 'string' && raw && raw !== 'invalid_client')
+      ? raw
+      : (res.status === 401
+        ? 'מפתח ה-API או הסוד של חשבונית ירוקה נדחו. ודאו ש-GREEN_INVOICE_API_ID ו-GREEN_INVOICE_SECRET ב-Netlify הם המפתח והסוד מ«כלי מפתחים».'
+        : `HTTP ${res.status}`);
+    const err = new Error(msg);
     err.code = 'AUTH_FAILED';
     throw err;
   }
-  const token = data?.token;
+  const token = data?.accessToken || data?.access_token || data?.token;
   if (!token) {
     const err = new Error('No token in Green Invoice response');
     err.code = 'AUTH_FAILED';
     throw err;
   }
-  tokenCache = { token, expiresAt: Date.now() + 50 * 60 * 1000 };
+  tokenCache = { token, expiresAt: tokenExpiryMs(data) };
   return { token, base };
 }
 
