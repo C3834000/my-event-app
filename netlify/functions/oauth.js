@@ -26,7 +26,7 @@ const JSON_HEADERS = {
 const HTML_HEADERS = {
   'Content-Type': 'text/html; charset=utf-8',
   'Cache-Control': 'no-store',
-  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
 };
@@ -93,7 +93,7 @@ function verify(token, expectedPrefix) {
 }
 
 function parseBody(event) {
-  const raw = event.body || '';
+  const raw = event.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString('utf8') : (event.body || '');
   const contentType = String(event.headers?.['content-type'] || event.headers?.['Content-Type'] || '');
   if (contentType.includes('application/json')) {
     try {
@@ -115,18 +115,29 @@ function pathOf(event) {
   return '';
 }
 
-function validRedirectUri(value) {
+function connectorClient(value) {
   try {
     const url = new URL(String(value || ''));
     const host = url.hostname.toLowerCase();
-    if (url.protocol === 'https:' && (host === 'chatgpt.com' || host.endsWith('.chatgpt.com'))) {
-      return url.pathname.startsWith('/connector/oauth/') ||
-        url.pathname === '/connector_platform_oauth_redirect';
+    const path = url.pathname.replace(/\/$/, '') || '/';
+    if (url.protocol === 'https:' && host === 'grok.com' && path === '/connectors-oauth-exchange-code') {
+      return 'grok';
     }
-    return url.protocol === 'http:' && (host === '127.0.0.1' || host === 'localhost');
+    if (url.protocol === 'https:' && (host === 'cursor.com' || host === 'www.cursor.com') && path === '/agents/mcp/oauth/callback') {
+      return 'cursor';
+    }
+    if (url.protocol === 'https:' && (host === 'chatgpt.com' || host.endsWith('.chatgpt.com'))) {
+      if (path.startsWith('/connector/oauth/') || path === '/connector_platform_oauth_redirect') return 'chatgpt';
+    }
+    if (url.protocol === 'http:' && (host === '127.0.0.1' || host === 'localhost')) return 'local';
+    return '';
   } catch {
-    return false;
+    return '';
   }
+}
+
+function validRedirectUri(value) {
+  return Boolean(connectorClient(value));
 }
 
 function validResource(value) {
@@ -182,7 +193,10 @@ function escapeHtml(value) {
 }
 
 function authorizationPage(params, error = '') {
+  const client = connectorClient(params.redirect_uri);
+  const product = client === 'cursor' ? 'Grok Bot' : client === 'grok' ? 'Grok' : 'ChatGPT';
   const hidden = [
+    'response_type',
     'client_id',
     'redirect_uri',
     'state',
@@ -199,7 +213,7 @@ function authorizationPage(params, error = '') {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>חיבור ChatGPT ל־CRM</title>
+  <title>חיבור ${product} ל־CRM</title>
   <style>
     body{font-family:system-ui,sans-serif;background:#f6f7f9;color:#172033;margin:0;min-height:100vh;display:grid;place-items:center}
     main{width:min(440px,calc(100% - 32px));background:white;border:1px solid #d9dee8;border-radius:16px;padding:28px;box-sizing:border-box}
@@ -213,11 +227,11 @@ function authorizationPage(params, error = '') {
 </head>
 <body>
   <main>
-    <h1>חיבור ChatGPT ל־CRM</h1>
-    <p>ChatGPT מבקש גישת קריאה בלבד לנתוני הלקוחות, האירועים, הלידים, המשימות והתזרים.</p>
-    <p class="scope">הרשאה: קריאת CRM ותזרים בלבד. אין אפשרות ליצור, לשנות או למחוק נתונים.</p>
+    <h1>חיבור ${product} ל־CRM</h1>
+    <p>${product} מבקש גישת קריאה בלבד לנתוני הלקוחות, האירועים, הלידים, המשימות, התזרים ומאגר החשבוניות.</p>
+    <p class="scope">הרשאה: קריאה בלבד. אין אפשרות ליצור, לשנות או למחוק נתונים. הבוט «איסוף חשבוניות» יוכל לראות מסמכים שממתינים לבדיקה.</p>
     ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
-    <form method="post" action="/oauth/authorize">
+    <form method="post" action="${ORIGIN}/oauth/authorize">
       ${hidden}
       <label for="access_key">מפתח הגישה ל־CRM</label>
       <input id="access_key" name="access_key" type="password" required autocomplete="current-password" autofocus>
@@ -281,17 +295,21 @@ function handleRegister(event) {
   const body = parseBody(event);
   const redirectUris = Array.isArray(body.redirect_uris) ? body.redirect_uris : [];
   if (!redirectUris.length || redirectUris.some((uri) => !validRedirectUri(uri))) {
-    return jsonError(400, 'invalid_redirect_uri', 'Only ChatGPT connector or local Codex callback URLs are allowed');
+    const rejected = redirectUris.filter((uri) => !validRedirectUri(uri));
+    console.log(rejected);
+    return jsonError(400, 'invalid_redirect_uri', `Only ChatGPT, Grok, Cursor, or local Codex callback URLs are allowed. Rejected: ${rejected.join(', ')}`);
   }
   const digest = createHash('sha256')
     .update(JSON.stringify({ redirectUris, name: body.client_name || '', nonce: randomBytes(8).toString('hex') }))
     .digest('base64url')
     .slice(0, 32);
+  const client = connectorClient(redirectUris[0]);
+  const prefix = client === 'grok' ? 'grok' : 'chatgpt';
   return response(201, {
-    client_id: `chatgpt_${digest}`,
+    client_id: `${prefix}_${digest}`,
     client_id_issued_at: Math.floor(Date.now() / 1000),
     redirect_uris: redirectUris,
-    client_name: body.client_name || 'ChatGPT CRM connector',
+    client_name: body.client_name || (client === 'grok' ? 'Grok איסוף חשבוניות' : 'ChatGPT CRM connector'),
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: 'none',

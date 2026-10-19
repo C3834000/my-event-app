@@ -1,6 +1,7 @@
 import { authorize, handleOptions, logError } from './lib/apiCommon.mjs';
 import { handler as crmHandler } from './crm-data.js';
 import { handler as cashflowHandler } from './cashflow.js';
+import { handler as documentsHandler } from './documents.js';
 
 const MCP_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -16,7 +17,8 @@ const RESOURCE_METADATA = 'https://myecrm2026.netlify.app/.well-known/oauth-prot
 const AUTH_CHALLENGE = `Bearer resource_metadata="${RESOURCE_METADATA}", error="invalid_token", error_description="Connect the CRM account to continue"`;
 const SERVER_INFO = { name: 'me-crm', title: 'CRM כספים', version: '1.0.0' };
 const INSTRUCTIONS = [
-  'Read-only live CRM. Never write or guess money figures.',
+  'Read-only live CRM for the Grok bot איסוף חשבוניות. Never write or guess money figures.',
+  'Use listDocuments for collected invoices and receipts waiting for review.',
   'Prefer getCashflow for receivables, tax debts, income, expenses, and cashflow.',
   'Use getCrmData for events, customers, leads, and tasks.',
   'Answer in Hebrew with ₪ amounts.',
@@ -52,6 +54,23 @@ const TOOLS = [
         from: { type: 'string', description: 'Filter start YYYY-MM-DD' },
         to: { type: 'string', description: 'Filter end YYYY-MM-DD' },
         limit: { type: 'integer', minimum: 1, maximum: 2000, default: 200 },
+      },
+    },
+  },
+  {
+    name: 'listDocuments',
+    description: 'Collected invoices and receipts in the CRM document archive. Read only. Use reviewStatus needs_review for documents waiting to be checked.',
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    securitySchemes: [{ type: 'oauth2', scopes: ['crm.read'] }],
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        direction: { type: 'string', enum: ['income', 'expense', 'tracking'], description: 'income, expense, or tracking' },
+        reviewStatus: { type: 'string', enum: ['needs_review', 'confirmed'], description: 'needs_review = waiting, confirmed = approved' },
+        year: { type: 'integer', description: 'Document year, for example 2026' },
+        monthKey: { type: 'string', description: 'Month YYYY-MM' },
+        limit: { type: 'integer', minimum: 1, maximum: 80, default: 40 },
       },
     },
   },
@@ -115,6 +134,52 @@ function toolText(payload) {
   return [{ type: 'text', text: JSON.stringify(payload) }];
 }
 
+function compactDocument(doc) {
+  return {
+    id: doc.id,
+    direction: doc.direction,
+    docType: doc.docType,
+    counterparty: doc.counterparty,
+    docNumber: doc.docNumber,
+    docDate: doc.docDate,
+    totalAmount: doc.totalAmount,
+    vatAmount: doc.vatAmount,
+    netAmount: doc.netAmount,
+    currency: doc.currency,
+    reviewStatus: doc.reviewStatus,
+    notes: doc.notes ? String(doc.notes).slice(0, 180) : '',
+    duplicateSuspect: Boolean(doc.duplicateSuspect),
+    fileName: doc.fileName,
+  };
+}
+
+async function listDocuments(args) {
+  const key = process.env.DOCS_API_KEY;
+  if (!key) return { success: false, error: 'מאגר המסמכים לא מוגדר בשרת' };
+  const result = await documentsHandler({
+    httpMethod: 'POST',
+    headers: { 'x-docs-key': key, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      action: 'list',
+      direction: args.direction,
+      reviewStatus: args.reviewStatus,
+      monthKey: args.monthKey,
+      year: args.year,
+    }),
+  });
+  let parsed = {};
+  try { parsed = result.body ? JSON.parse(result.body) : {}; } catch { parsed = { success: false, error: 'Invalid documents response' }; }
+  if (result.statusCode >= 400 || parsed.success === false) return parsed;
+  const limit = Math.min(Math.max(Number(args.limit) || 40, 1), 80);
+  const documents = (parsed.documents || []).slice(0, limit).map(compactDocument);
+  return {
+    success: true,
+    count: documents.length,
+    needsReview: documents.filter(doc => doc.reviewStatus === 'needs_review').length,
+    documents,
+  };
+}
+
 async function handleMessage(msg, event) {
   const method = String(msg?.method || '');
   const id = msg?.id ?? null;
@@ -122,7 +187,10 @@ async function handleMessage(msg, event) {
 
   if (method === 'initialize') {
     const requested = String(params.protocolVersion || PROTOCOL);
-    const protocolVersion = requested.startsWith('2024') ? FALLBACK_PROTOCOL : PROTOCOL;
+    // Grok disconnects if the server answers with an older version than it asked for.
+    const protocolVersion = /^\d{4}-\d{2}-\d{2}$/.test(requested)
+      ? requested
+      : (requested.startsWith('2024') ? FALLBACK_PROTOCOL : PROTOCOL);
     return rpcResult(id, {
       protocolVersion,
       capabilities: { tools: { listChanged: false } },
@@ -184,6 +252,14 @@ async function handleMessage(msg, event) {
         });
       }
 
+      if (name === 'listDocuments') {
+        const parsed = await listDocuments(args);
+        return rpcResult(id, {
+          isError: parsed.success === false,
+          content: toolText(parsed),
+        });
+      }
+
       return rpcResult(id, {
         isError: true,
         content: toolText({ success: false, error: `Unknown tool: ${name}` }),
@@ -217,6 +293,13 @@ export const handler = async (event) => {
 
   if (event.httpMethod !== 'POST') {
     return mcpJson(405, { success: false, error: 'Method not allowed' });
+  }
+
+  const auth = authorize(event);
+  if (!auth.ok) {
+    return mcpJson(auth.statusCode || 401, rpcError(null, -32001, auth.error || 'Unauthorized'), {
+      'WWW-Authenticate': AUTH_CHALLENGE,
+    });
   }
 
   let payload;
