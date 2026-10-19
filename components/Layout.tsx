@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { Menu, Lock } from 'lucide-react';
 
@@ -66,6 +66,8 @@ const LoginScreen: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 };
 
 const Layout: React.FC = () => {
+  const { pathname } = useLocation();
+  const fullBleed = pathname === '/tasks';
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(
     sessionStorage.getItem(AUTH_KEY) === 'true'
@@ -101,7 +103,7 @@ const Layout: React.FC = () => {
       {/* Main Content - Scrollable */}
       <main className="flex-1 overflow-y-auto">
         <div className="p-4 md:p-8">
-          <div className="max-w-7xl mx-auto">
+          <div className={fullBleed ? undefined : 'max-w-7xl mx-auto'}>
             <Outlet />
           </div>
         </div>

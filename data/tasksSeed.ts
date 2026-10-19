@@ -156,24 +156,150 @@ export type TopCategoryId =
   | 'רעיונות'
   | 'לסיווג';
 
+export type CategoryColor = 'blue' | 'green' | 'purple' | 'orange' | 'amber' | 'slate' | 'rose';
+
 export type TopCategoryMeta = {
   id: TopCategoryId;
+  color: CategoryColor;
   border: string;
   tag: string;
   chip: string;
   chipOn: string;
   bar: string;
+  column: string;
+  header: string;
+  focusSection: string;
+  focusBadge: string;
+  focusCard: string;
+  restBorder: string;
+  pill: string;
+  pillDone: string;
 };
 
-/** שישה תחומים + תיבת «לסיווג». המחלקות מלאות כדי ש-Tailwind מה-CDN יזהה אותן. */
+/**
+ * שישה תחומים + תיבת «לסיווג». כל מחלקה כתובה במלואה (בלי bg-${color})
+ * כדי ש-Tailwind מה-CDN לא יזרוק אותה.
+ */
 export const TOP_CATEGORIES: TopCategoryMeta[] = [
-  { id: 'קליכיף', border: 'border-r-blue-500', tag: 'bg-blue-50 text-blue-700', chip: 'bg-blue-50 text-blue-800 border-blue-200', chipOn: 'bg-blue-600 text-white border-blue-600', bar: 'bg-blue-500' },
-  { id: 'כספים', border: 'border-r-green-500', tag: 'bg-green-50 text-green-700', chip: 'bg-green-50 text-green-800 border-green-200', chipOn: 'bg-green-600 text-white border-green-600', bar: 'bg-green-500' },
-  { id: 'מתיקין', border: 'border-r-purple-500', tag: 'bg-purple-50 text-purple-700', chip: 'bg-purple-50 text-purple-800 border-purple-200', chipOn: 'bg-purple-600 text-white border-purple-600', bar: 'bg-purple-500' },
-  { id: 'בית ומשפחה', border: 'border-r-orange-500', tag: 'bg-orange-50 text-orange-700', chip: 'bg-orange-50 text-orange-800 border-orange-200', chipOn: 'bg-orange-600 text-white border-orange-600', bar: 'bg-orange-500' },
-  { id: 'אישי', border: 'border-r-amber-500', tag: 'bg-amber-50 text-amber-800', chip: 'bg-amber-50 text-amber-800 border-amber-200', chipOn: 'bg-amber-500 text-white border-amber-500', bar: 'bg-amber-500' },
-  { id: 'רעיונות', border: 'border-r-slate-400', tag: 'bg-slate-100 text-slate-600', chip: 'bg-slate-100 text-slate-600 border-slate-200', chipOn: 'bg-slate-500 text-white border-slate-500', bar: 'bg-slate-400' },
-  { id: 'לסיווג', border: 'border-r-rose-500', tag: 'bg-rose-50 text-rose-700', chip: 'bg-rose-50 text-rose-800 border-rose-200', chipOn: 'bg-rose-600 text-white border-rose-600', bar: 'bg-rose-500' },
+  {
+    id: 'קליכיף',
+    color: 'blue',
+    border: 'border-r-blue-500',
+    tag: 'bg-blue-50 text-blue-700',
+    chip: 'bg-blue-50 text-blue-800 border-blue-200',
+    chipOn: 'bg-blue-600 text-white border-blue-600',
+    bar: 'bg-blue-500',
+    column: 'border-blue-200 bg-blue-50 dark:bg-blue-900/20',
+    header: 'bg-gradient-to-l from-blue-500 to-blue-600',
+    focusSection: 'bg-blue-100/60 dark:bg-blue-900/30 border-blue-200',
+    focusBadge: 'bg-blue-600 text-white',
+    focusCard: 'bg-gradient-to-l from-blue-500 to-blue-700',
+    restBorder: 'border-r-blue-500',
+    pill: 'bg-blue-100 text-blue-700',
+    pillDone: 'bg-blue-600 text-white',
+  },
+  {
+    id: 'כספים',
+    color: 'green',
+    border: 'border-r-green-500',
+    tag: 'bg-green-50 text-green-700',
+    chip: 'bg-green-50 text-green-800 border-green-200',
+    chipOn: 'bg-green-600 text-white border-green-600',
+    bar: 'bg-green-500',
+    column: 'border-green-200 bg-green-50 dark:bg-green-900/20',
+    header: 'bg-gradient-to-l from-green-500 to-green-600',
+    focusSection: 'bg-green-100/60 dark:bg-green-900/30 border-green-200',
+    focusBadge: 'bg-green-600 text-white',
+    focusCard: 'bg-gradient-to-l from-green-500 to-green-700',
+    restBorder: 'border-r-green-500',
+    pill: 'bg-green-100 text-green-700',
+    pillDone: 'bg-green-600 text-white',
+  },
+  {
+    id: 'מתיקין',
+    color: 'purple',
+    border: 'border-r-purple-500',
+    tag: 'bg-purple-50 text-purple-700',
+    chip: 'bg-purple-50 text-purple-800 border-purple-200',
+    chipOn: 'bg-purple-600 text-white border-purple-600',
+    bar: 'bg-purple-500',
+    column: 'border-purple-200 bg-purple-50 dark:bg-purple-900/20',
+    header: 'bg-gradient-to-l from-purple-500 to-purple-600',
+    focusSection: 'bg-purple-100/60 dark:bg-purple-900/30 border-purple-200',
+    focusBadge: 'bg-purple-600 text-white',
+    focusCard: 'bg-gradient-to-l from-purple-500 to-purple-700',
+    restBorder: 'border-r-purple-500',
+    pill: 'bg-purple-100 text-purple-700',
+    pillDone: 'bg-purple-600 text-white',
+  },
+  {
+    id: 'בית ומשפחה',
+    color: 'orange',
+    border: 'border-r-orange-500',
+    tag: 'bg-orange-50 text-orange-700',
+    chip: 'bg-orange-50 text-orange-800 border-orange-200',
+    chipOn: 'bg-orange-600 text-white border-orange-600',
+    bar: 'bg-orange-500',
+    column: 'border-orange-200 bg-orange-50 dark:bg-orange-900/20',
+    header: 'bg-gradient-to-l from-orange-500 to-orange-600',
+    focusSection: 'bg-orange-100/60 dark:bg-orange-900/30 border-orange-200',
+    focusBadge: 'bg-orange-600 text-white',
+    focusCard: 'bg-gradient-to-l from-orange-500 to-orange-700',
+    restBorder: 'border-r-orange-500',
+    pill: 'bg-orange-100 text-orange-700',
+    pillDone: 'bg-orange-600 text-white',
+  },
+  {
+    id: 'אישי',
+    color: 'amber',
+    border: 'border-r-amber-500',
+    tag: 'bg-amber-50 text-amber-800',
+    chip: 'bg-amber-50 text-amber-800 border-amber-200',
+    chipOn: 'bg-amber-500 text-white border-amber-500',
+    bar: 'bg-amber-500',
+    column: 'border-amber-200 bg-amber-50 dark:bg-amber-900/20',
+    header: 'bg-gradient-to-l from-amber-500 to-amber-600',
+    focusSection: 'bg-amber-100/60 dark:bg-amber-900/30 border-amber-200',
+    focusBadge: 'bg-amber-600 text-white',
+    focusCard: 'bg-gradient-to-l from-amber-500 to-amber-700',
+    restBorder: 'border-r-amber-500',
+    pill: 'bg-amber-100 text-amber-700',
+    pillDone: 'bg-amber-600 text-white',
+  },
+  {
+    id: 'רעיונות',
+    color: 'slate',
+    border: 'border-r-slate-400',
+    tag: 'bg-slate-100 text-slate-600',
+    chip: 'bg-slate-100 text-slate-600 border-slate-200',
+    chipOn: 'bg-slate-500 text-white border-slate-500',
+    bar: 'bg-slate-400',
+    column: 'border-slate-200 bg-slate-50 dark:bg-slate-900/20',
+    header: 'bg-gradient-to-l from-slate-500 to-slate-600',
+    focusSection: 'bg-slate-100/60 dark:bg-slate-900/30 border-slate-200',
+    focusBadge: 'bg-slate-600 text-white',
+    focusCard: 'bg-gradient-to-l from-slate-500 to-slate-700',
+    restBorder: 'border-r-slate-500',
+    pill: 'bg-slate-100 text-slate-700',
+    pillDone: 'bg-slate-600 text-white',
+  },
+  {
+    id: 'לסיווג',
+    color: 'rose',
+    border: 'border-r-rose-500',
+    tag: 'bg-rose-50 text-rose-700',
+    chip: 'bg-rose-50 text-rose-800 border-rose-200',
+    chipOn: 'bg-rose-600 text-white border-rose-600',
+    bar: 'bg-rose-500',
+    column: 'border-rose-200 bg-rose-50 dark:bg-rose-900/20',
+    header: 'bg-gradient-to-l from-rose-500 to-rose-600',
+    focusSection: 'bg-rose-100/60 dark:bg-rose-900/30 border-rose-200',
+    focusBadge: 'bg-rose-600 text-white',
+    focusCard: 'bg-gradient-to-l from-rose-500 to-rose-700',
+    restBorder: 'border-r-rose-500',
+    pill: 'bg-rose-100 text-rose-700',
+    pillDone: 'bg-rose-600 text-white',
+  },
 ];
 
 const TOP_CATEGORY_MAP: Record<string, TopCategoryId | 'hidden'> = {

@@ -187,6 +187,11 @@ export interface Task {
   estimatedTimeMin: number;
   progress: number; 
   dueDate?: string;
+  /**
+   * יום פוקוס מקומי YYYY-MM-DD (מ-toDateKey, לא ISO).
+   * המשימה בפוקוס של היום רק כשהערך שווה להיום. null / יום אחר = לא בפוקוס.
+   */
+  focusDate?: string | null;
   /** שעת יעד ביום היעד (HH:mm) */
   dueTime?: string;
   completedDate?: string;

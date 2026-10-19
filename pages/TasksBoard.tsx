@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, TaskCategory, TaskPriority, TaskFrequency, SubTask } from '../types';
 import { Check, Trash2, Plus, Edit, X, Upload, Search, ChevronDown, ListTree } from 'lucide-react';
@@ -8,10 +8,13 @@ import {
   TOP_CATEGORIES,
   TOP_DEFAULT_CATEGORY,
   TopCategoryId,
+  TopCategoryMeta,
   buildTasksSeed,
   getTopCategory,
 } from '../data/tasksSeed';
 import TaskCard from '../components/TaskCard';
+import MyDayDrawer from '../components/MyDayDrawer';
+import { MAX_FOCUS_PER_CATEGORY, canAddFocus, isFocusToday } from '../utils/focus';
 
 const TIME_PRESETS = [
   { label: '10 דק׳', min: 10 },
@@ -59,10 +62,34 @@ const nextWeekStartDate = () => {
   return toDateKey(d);
 };
 
-const compareTasks = (a: Task, b: Task) => {
+const compareRest = (a: Task, b: Task, todayKey: string) => {
   if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
-  if ((b.priority || 0) !== (a.priority || 0)) return (b.priority || 0) - (a.priority || 0);
-  return (a.dueTime || '99:99').localeCompare(b.dueTime || '99:99');
+  const aOver = !a.isCompleted && !!a.dueDate && a.dueDate < todayKey;
+  const bOver = !b.isCompleted && !!b.dueDate && b.dueDate < todayKey;
+  if (aOver !== bOver) return aOver ? -1 : 1;
+  const ad = a.dueDate || '9999-99-99';
+  const bd = b.dueDate || '9999-99-99';
+  if (ad !== bd) return ad < bd ? -1 : 1;
+  return (b.priority || 0) - (a.priority || 0);
+};
+
+const taskBlob = (task: Task) =>
+  [task.title, task.category, task.notes, task.helper, ...(task.subTasks || []).map((s) => s.title)]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+const COL_KEY = 'tasks-column-open';
+const REST_PAGE = 10;
+
+const readOpenCols = (): Record<string, boolean> => {
+  try {
+    const raw = localStorage.getItem(COL_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
 };
 
 const isHiddenTask = (task: Task) => {
@@ -70,115 +97,6 @@ const isHiddenTask = (task: Task) => {
   if (task.category === 'ארכיון' || task.category === 'רעיונות') return true;
   const top = getTopCategory(task.category);
   return top === 'hidden' || top === 'רעיונות';
-};
-
-type TaskTimeGroup = {
-  key: string;
-  label: string;
-  kind: 'day' | 'week' | 'other';
-  tasks: Task[];
-};
-
-const buildTimeGroups = (list: Task[]): TaskTimeGroup[] => {
-  const today = startOfDay(new Date());
-  const thisWeekStart = startOfWeekSunday(today);
-  const thisWeekEnd = addDays(thisWeekStart, 6);
-
-  type Bucket = { key: string; label: string; kind: TaskTimeGroup['kind']; sort: number; tasks: Task[] };
-  const buckets = new Map<string, Bucket>();
-
-  const ensure = (key: string, label: string, kind: TaskTimeGroup['kind'], sort: number) => {
-    let b = buckets.get(key);
-    if (!b) {
-      b = { key, label, kind, sort, tasks: [] };
-      buckets.set(key, b);
-    }
-    return b;
-  };
-
-  for (const task of list) {
-    if (!task.dueDate) {
-      ensure('nodate', 'בלי תאריך', 'other', 9_000_000).tasks.push(task);
-      continue;
-    }
-    const due = startOfDay(new Date(task.dueDate + 'T12:00:00'));
-    if (Number.isNaN(due.getTime())) {
-      ensure('nodate', 'בלי תאריך', 'other', 9_000_000).tasks.push(task);
-      continue;
-    }
-
-    const dueKey = toDateKey(due);
-    const weekStart = startOfWeekSunday(due);
-
-    if (due < thisWeekStart) {
-      const weekEnd = addDays(weekStart, 6);
-      const key = `past-${toDateKey(weekStart)}`;
-      ensure(
-        key,
-        `שבוע שעבר · ${formatShortDate(weekStart)}–${formatShortDate(weekEnd)}`,
-        'week',
-        weekStart.getTime() - 1_000_000_000_000,
-      ).tasks.push(task);
-    } else if (due <= thisWeekEnd) {
-      const name = DAY_NAMES[due.getDay()];
-      const isToday = dueKey === toDateKey(today);
-      const label = isToday ? `היום · ${name} ${formatShortDate(due)}` : `${name} ${formatShortDate(due)}`;
-      ensure(`day-${dueKey}`, label, 'day', due.getTime()).tasks.push(task);
-    } else {
-      const weekEnd = addDays(weekStart, 6);
-      const nextWeekStart = addDays(thisWeekStart, 7);
-      const isNext = toDateKey(weekStart) === toDateKey(nextWeekStart);
-      const key = `week-${toDateKey(weekStart)}`;
-      const label = isNext
-        ? `שבוע הבא · ${formatShortDate(weekStart)}–${formatShortDate(weekEnd)}`
-        : `שבוע ${formatShortDate(weekStart)}–${formatShortDate(weekEnd)}`;
-      ensure(key, label, 'week', weekStart.getTime()).tasks.push(task);
-    }
-  }
-
-  return [...buckets.values()]
-    .sort((a, b) => a.sort - b.sort)
-    .map(({ key, label, kind, tasks }) => ({
-      key,
-      label,
-      kind,
-      tasks: [...tasks].sort(compareTasks),
-    }));
-};
-
-type TodayView = {
-  focus: Task[];
-  overdue: Task[];
-  weekRest: Task[];
-  todayKey: string;
-};
-
-const buildTodayView = (list: Task[]): TodayView => {
-  const today = startOfDay(new Date());
-  const todayKey = toDateKey(today);
-  const weekEndKey = toDateKey(addDays(startOfWeekSunday(today), 6));
-  const overdueStart = toDateKey(addDays(today, -14));
-
-  const dueToday = list.filter((t) => !t.isCompleted && t.dueDate === todayKey).sort(compareTasks);
-  const focus = dueToday.slice(0, 5);
-  const focusIds = new Set(focus.map((t) => t.id));
-
-  const overdue = list
-    .filter((t) => {
-      if (t.isCompleted || !t.dueDate) return false;
-      return t.dueDate < todayKey && t.dueDate >= overdueStart;
-    })
-    .sort(compareTasks);
-
-  const weekRest = list
-    .filter((t) => {
-      if (t.isCompleted || !t.dueDate) return false;
-      if (focusIds.has(t.id)) return false;
-      return t.dueDate >= todayKey && t.dueDate <= weekEndKey;
-    })
-    .sort(compareTasks);
-
-  return { focus, overdue, weekRest, todayKey };
 };
 
 type CleanupReason = 'באיחור מעל 14 יום' | 'בלי כותרת' | 'כפילות';
@@ -204,6 +122,90 @@ const cleanupRows = (tasks: Task[]): { task: Task; reasons: CleanupReason[] }[] 
   return rows;
 };
 
+const CategoryColumn: React.FC<{
+  meta: TopCategoryMeta;
+  focus: Task[];
+  rest: Task[];
+  openCount: number;
+  expanded: boolean;
+  showAllRest: boolean;
+  single: boolean;
+  todayKey: string;
+  onToggleColumn: () => void;
+  onShowMore: () => void;
+  onToggleTask: (id: string) => void;
+  onOpenTask: (task: Task) => void;
+  onPin: (task: Task) => void;
+}> = ({ meta, focus, rest, openCount, expanded, showAllRest, single, todayKey, onToggleColumn, onShowMore, onToggleTask, onOpenTask, onPin }) => {
+  const shownRest = showAllRest ? rest : rest.slice(0, REST_PAGE);
+  const more = rest.length - shownRest.length;
+  const slots = Math.max(0, MAX_FOCUS_PER_CATEGORY - focus.length);
+  return (
+    <section className={`rounded-2xl border overflow-hidden flex flex-col max-h-[calc(100vh-330px)] min-w-0 ${meta.column}`}>
+      <button
+        type="button"
+        onClick={onToggleColumn}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-white font-extrabold md:pointer-events-none ${meta.header}`}
+      >
+        <span className="truncate">{meta.id}</span>
+        <span className="flex items-center gap-1.5 shrink-0">
+          <span className="bg-white/25 rounded-full px-2 py-0.5 text-xs font-bold">{openCount}</span>
+          <ChevronDown size={16} className={`md:hidden transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        </span>
+      </button>
+      <div className={`shrink-0 border-b border-dashed px-2 py-2 ${meta.focusSection}`}>
+        <div className="flex items-center justify-between mb-1.5 px-0.5">
+          <span className="text-[11px] font-black text-slate-700">⭐ פוקוס היום</span>
+          <span className={`text-[10px] font-black rounded-full px-1.5 py-0.5 ${meta.focusBadge}`}>
+            {focus.length}/{MAX_FOCUS_PER_CATEGORY}
+          </span>
+        </div>
+        <div className={single ? 'grid grid-cols-1 md:grid-cols-3 gap-2' : 'space-y-2'}>
+          {focus.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              todayKey={todayKey}
+              variant="focus"
+              onToggle={() => onToggleTask(task.id)}
+              onOpen={() => onOpenTask(task)}
+              onPinToday={() => onPin(task)}
+            />
+          ))}
+          {Array.from({ length: slots }).map((_, i) => (
+            <div
+              key={`slot-${i}`}
+              className="rounded-xl border border-dashed border-slate-300 bg-white/50 px-2 py-3 text-center text-[11px] font-bold text-slate-500"
+            >
+              ＋ לחץ ★ על משימה כדי להוסיף
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className={`flex-1 overflow-y-auto min-h-0 px-2 py-2 ${expanded ? '' : 'max-md:hidden'}`}>
+        <p className="text-[11px] font-black text-slate-500 mb-1.5">שאר המשימות · {rest.length}</p>
+        <div className={single ? 'grid gap-2 grid-cols-[repeat(auto-fill,minmax(230px,1fr))]' : 'space-y-2'}>
+          {shownRest.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              todayKey={todayKey}
+              onToggle={() => onToggleTask(task.id)}
+              onOpen={() => onOpenTask(task)}
+              onPinToday={() => onPin(task)}
+            />
+          ))}
+        </div>
+        {more > 0 && (
+          <button type="button" onClick={onShowMore} className="w-full mt-2 text-xs font-bold text-slate-500 py-1">
+            הצג עוד {more}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+};
+
 type BoardView = 'today' | 'week' | 'all';
 
 const TasksBoard: React.FC = () => {
@@ -215,11 +217,9 @@ const TasksBoard: React.FC = () => {
   const [topFilter, setTopFilter] = useState<TopCategoryId | 'all'>('all');
   const [showHidden, setShowHidden] = useState(false);
   const [view, setView] = useState<BoardView>('today');
-  const [overdueOpen, setOverdueOpen] = useState(false);
-  const [weekOpen, setWeekOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries([...TOP_CATEGORIES.map((c) => c.id), 'archive'].map((id) => [id, true])),
-  );
+  const [openCols, setOpenCols] = useState<Record<string, boolean>>(readOpenCols);
+  const [restExpanded, setRestExpanded] = useState<Record<string, boolean>>({});
+  const [toast, setToast] = useState<string | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [cleanupSelected, setCleanupSelected] = useState<string[]>([]);
   const [quickTitle, setQuickTitle] = useState('');
@@ -228,52 +228,64 @@ const TasksBoard: React.FC = () => {
   const quickInputRef = useRef<HTMLInputElement>(null);
 
   const todayKey = toDateKey(startOfDay(new Date()));
+  const weekEndKey = toDateKey(addDays(startOfWeekSunday(new Date()), 6));
 
-  const visibleTasks = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    return tasks.filter((task) => {
-      const pickedIdeas = topFilter === 'רעיונות' && !task.isCompleted;
-      if (!showHidden && !pickedIdeas && isHiddenTask(task)) return false;
-      if (topFilter !== 'all' && getTopCategory(task.category) !== topFilter) return false;
-      if (!q) return true;
-      const blob = [task.title, task.category, task.notes, task.helper, ...(task.subTasks || []).map((s) => s.title)]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return blob.includes(q);
-    });
-  }, [tasks, searchTerm, topFilter, showHidden]);
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 2800);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
-  const summarySource = useMemo(
-    () => tasks.filter((t) => showHidden || !isHiddenTask(t)),
-    [tasks, showHidden],
+  useEffect(() => {
+    if (!showHidden && topFilter === 'רעיונות') setTopFilter('all');
+  }, [showHidden, topFilter]);
+
+  const boardCategories = useMemo(
+    () => TOP_CATEGORIES.filter((c) => (showHidden || c.id !== 'רעיונות') && (topFilter === 'all' || c.id === topFilter)),
+    [showHidden, topFilter],
   );
-  const summary = useMemo(() => buildTodayView(summarySource), [summarySource]);
-  const todayView = useMemo(() => buildTodayView(visibleTasks), [visibleTasks]);
 
-  const weekGroups = useMemo(() => {
-    const weekEndKey = toDateKey(addDays(startOfWeekSunday(new Date()), 6));
-    const inWeek = visibleTasks.filter((t) => t.dueDate && t.dueDate >= todayKey && t.dueDate <= weekEndKey);
-    return buildTimeGroups(inWeek);
-  }, [visibleTasks, todayKey]);
+  const columns = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return boardCategories.map((meta) => {
+      const inCategory = tasks.filter((t) => getTopCategory(t.category) === meta.id);
+      const focus = inCategory.filter((t) => isFocusToday(t, todayKey));
+      const focusIds = new Set(focus.map((t) => t.id));
+      const rest = inCategory
+        .filter((t) => {
+          if (focusIds.has(t.id)) return false;
+          if (!showHidden && isHiddenTask(t)) return false;
+          if (q && !taskBlob(t).includes(q)) return false;
+          if (view === 'today') return (t.priority || 0) >= TaskPriority.High;
+          if (view === 'week') {
+            const dueThisWeek = !!(t.dueDate && t.dueDate >= todayKey && t.dueDate <= weekEndKey);
+            return dueThisWeek || (t.priority || 0) >= TaskPriority.Medium;
+          }
+          return true;
+        })
+        .sort((a, b) => compareRest(a, b, todayKey));
+      const openCount = inCategory.filter((t) => {
+        if (t.isCompleted) return false;
+        if (!showHidden && isHiddenTask(t)) return false;
+        if (q && !taskBlob(t).includes(q)) return false;
+        return true;
+      }).length;
+      return { meta, focus, rest, openCount };
+    });
+  }, [tasks, boardCategories, searchTerm, showHidden, view, todayKey, weekEndKey]);
 
-  const groupedSections = (list: Task[]) => {
-    const sections: { key: string; label: string; tasks: Task[] }[] = TOP_CATEGORIES.map((meta) => ({
-      key: meta.id,
-      label: meta.id,
-      tasks: list.filter((t) => getTopCategory(t.category) === meta.id).sort(compareTasks),
-    })).filter((s) => s.tasks.length > 0);
-    const archived = list.filter((t) => getTopCategory(t.category) === 'hidden').sort(compareTasks);
-    if (archived.length) sections.push({ key: 'archive', label: 'ארכיון', tasks: archived });
-    return sections;
-  };
-
-  const allSections = useMemo(() => groupedSections(visibleTasks), [visibleTasks]);
-
-  const restSections = useMemo(() => {
-    const shown = new Set([...todayView.focus, ...todayView.overdue, ...todayView.weekRest].map((t) => t.id));
-    return groupedSections(visibleTasks.filter((t) => !shown.has(t.id)));
-  }, [visibleTasks, todayView]);
+  const focusStats = useMemo(() => {
+    const all = tasks.filter((t) => isFocusToday(t, todayKey));
+    const pills = TOP_CATEGORIES.map((meta) => {
+      const list = all.filter((t) => getTopCategory(t.category) === meta.id);
+      return { meta, done: list.filter((t) => t.isCompleted).length, total: list.length };
+    }).filter((p) => p.total > 0);
+    return {
+      done: all.filter((t) => t.isCompleted).length,
+      total: all.length,
+      pills,
+    };
+  }, [tasks, todayKey]);
 
   const chipCounts = useMemo(() => {
     const base = tasks.filter((t) => showHidden || !t.isCompleted);
@@ -321,7 +333,32 @@ const TasksBoard: React.FC = () => {
     quickInputRef.current?.focus();
   };
 
-  const pinToday = (task: Task) => updateTask(task.id, { dueDate: todayKey });
+  const pinToday = (task: Task) => {
+    if (isFocusToday(task, todayKey)) {
+      updateTask(task.id, { focusDate: null });
+      return;
+    }
+    const top = getTopCategory(task.category);
+    if (top !== 'hidden' && !canAddFocus(tasks, top, todayKey)) {
+      setToast('יש כבר 3 משימות פוקוס בקטגוריה הזו');
+      return;
+    }
+    updateTask(task.id, { focusDate: todayKey });
+  };
+
+  const toggleColumn = (id: string) => {
+    if (window.matchMedia('(min-width: 768px)').matches) return;
+    setOpenCols((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      localStorage.setItem(COL_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const openTask = (task: Task) => {
+    setEditingTask(task);
+    setShowSubTasksForm(false);
+  };
 
   const applyCleanup = (ids: string[], action: 'done' | 'next' | 'archive' | 'delete') => {
     if (!ids.length) return;
@@ -340,26 +377,11 @@ const TasksBoard: React.FC = () => {
     setCleanupSelected((prev) => prev.filter((id) => !ids.includes(id)));
   };
 
-  const renderCards = (list: Task[]) => (
-    <div className="space-y-2">
-      {list.map((task) => (
-        <TaskCard
-          key={task.id}
-          task={task}
-          todayKey={todayKey}
-          onToggle={() => toggleTask(task.id)}
-          onOpen={() => {
-            setEditingTask(task);
-            setShowSubTasksForm(false);
-          }}
-          onPinToday={() => pinToday(task)}
-        />
-      ))}
-    </div>
-  );
-
   const now = new Date();
-  const headerLine = `${DAY_NAMES[now.getDay()]} ${formatShortDate(now)} · ${summary.focus.length} בפוקוס · ${summary.overdue.length} באיחור`;
+  const overdueCount = tasks.filter((t) => !t.isCompleted && t.dueDate && t.dueDate < todayKey).length;
+  const headerLine = `${DAY_NAMES[now.getDay()]} ${formatShortDate(now)} · ${overdueCount} באיחור`;
+  const single = topFilter !== 'all';
+  const focusPct = focusStats.total ? Math.round((focusStats.done / focusStats.total) * 100) : 0;
 
   const tabs: { id: BoardView; label: string }[] = [
     { id: 'today', label: 'היום' },
@@ -387,7 +409,7 @@ const TasksBoard: React.FC = () => {
   );
 
   return (
-    <div className="max-w-3xl mx-auto space-y-3 dir-rtl pb-24 md:pb-8">
+    <div className="w-full space-y-3 dir-rtl pb-36">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-black text-slate-800 truncate">{headerLine}</p>
         <div className="flex items-center gap-1 shrink-0">
@@ -444,15 +466,15 @@ const TasksBoard: React.FC = () => {
         </label>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {TOP_CATEGORIES.map((cat) => {
+      <div className="flex gap-1.5 overflow-x-auto flex-nowrap pb-1">
+        {TOP_CATEGORIES.filter((c) => showHidden || c.id !== 'רעיונות').map((cat) => {
           const on = topFilter === cat.id;
           return (
             <button
               key={cat.id}
               type="button"
               onClick={() => setTopFilter(on ? 'all' : cat.id)}
-              className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${on ? cat.chipOn : cat.chip}`}
+              className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${on ? cat.chipOn : cat.chip}`}
             >
               {cat.id}
               <span className="opacity-70"> {chipCounts[cat.id]}</span>
@@ -463,90 +485,45 @@ const TasksBoard: React.FC = () => {
 
       {tabBar(false)}
 
-      {visibleTasks.length === 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 py-12 text-center">
-          <p className="text-slate-400 font-bold text-sm">אין משימות להצגה</p>
+      <div className="bg-white rounded-2xl border border-slate-200 px-3 py-2 space-y-2">
+        <p className="text-sm font-black text-slate-800">⭐ הפוקוס של היום: {focusStats.done} מתוך {focusStats.total} בוצעו</p>
+        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-l from-amber-400 to-emerald-500" style={{ width: `${focusPct}%` }} />
         </div>
-      )}
+        {focusStats.pills.length > 0 && (
+          <div className="flex gap-1.5 flex-wrap">
+            {focusStats.pills.map((p) => (
+              <span
+                key={p.meta.id}
+                className={`text-[11px] font-bold rounded-full px-2 py-0.5 ${p.total > 0 && p.done === p.total ? p.meta.pillDone : p.meta.pill}`}
+              >
+                {p.meta.id} {p.done}/{p.total}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
 
-      {view === 'today' && visibleTasks.length > 0 && (
-        <div className="space-y-3">
-          {todayView.focus.length > 0 && renderCards(todayView.focus)}
-          {todayView.overdue.length > 0 && (
-            <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <button type="button" onClick={() => setOverdueOpen((v) => !v)} className="w-full flex items-center justify-between px-3 py-2 text-sm font-black text-rose-700">
-                <span>באיחור · {todayView.overdue.length}</span>
-                <ChevronDown size={16} className={overdueOpen ? 'rotate-180' : ''} />
-              </button>
-              {overdueOpen && <div className="px-2 pb-2">{renderCards(todayView.overdue)}</div>}
-            </section>
-          )}
-          {todayView.weekRest.length > 0 && (
-            <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <button type="button" onClick={() => setWeekOpen((v) => !v)} className="w-full flex items-center justify-between px-3 py-2 text-sm font-black text-slate-600">
-                <span>השבוע · {todayView.weekRest.length}</span>
-                <ChevronDown size={16} className={weekOpen ? 'rotate-180' : ''} />
-              </button>
-              {weekOpen && <div className="px-2 pb-2">{renderCards(todayView.weekRest)}</div>}
-            </section>
-          )}
-          {restSections.map((section) => {
-            const open = !!openGroups[section.key];
-            return (
-              <section key={section.key} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setOpenGroups((prev) => ({ ...prev, [section.key]: !prev[section.key] }))}
-                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-black text-slate-700"
-                >
-                  <span>
-                    {section.label}
-                    <span className="text-slate-400 font-bold"> {section.tasks.length}</span>
-                  </span>
-                  <ChevronDown size={16} className={open ? 'rotate-180' : ''} />
-                </button>
-                {open && <div className="px-2 pb-2">{renderCards(section.tasks)}</div>}
-              </section>
-            );
-          })}
-        </div>
-      )}
-
-      {view === 'week' && visibleTasks.length > 0 && (
-        <div className="space-y-4">
-          {weekGroups.length === 0 && <p className="text-sm text-slate-400 font-bold text-center py-6">אין משימות עד סוף השבוע</p>}
-          {weekGroups.map((group) => (
-            <section key={group.key}>
-              <h3 className="text-xs font-black text-slate-500 mb-1.5">{group.label}</h3>
-              {renderCards(group.tasks)}
-            </section>
-          ))}
-        </div>
-      )}
-
-      {view === 'all' && visibleTasks.length > 0 && (
-        <div className="space-y-2">
-          {allSections.map((section) => {
-            const open = !!openGroups[section.key];
-            return (
-              <section key={section.key} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setOpenGroups((prev) => ({ ...prev, [section.key]: !prev[section.key] }))}
-                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-black text-slate-700"
-                >
-                  <span>
-                    {section.label}
-                    <span className="text-slate-400 font-bold"> {section.tasks.length}</span>
-                  </span>
-                  <ChevronDown size={16} className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
-                </button>
-                {open && <div className="px-2 pb-2">{renderCards(section.tasks)}</div>}
-              </section>
-            );
-          })}
-        </div>
-      )}
+      <div className={single ? 'min-w-0' : 'flex flex-col gap-3 md:grid md:grid-flow-col md:auto-cols-fr md:gap-3 md:items-start min-w-0'}>
+        {columns.map((col) => (
+          <CategoryColumn
+            key={col.meta.id}
+            meta={col.meta}
+            focus={col.focus}
+            rest={col.rest}
+            openCount={col.openCount}
+            expanded={!!openCols[col.meta.id]}
+            showAllRest={!!restExpanded[col.meta.id]}
+            single={single}
+            todayKey={todayKey}
+            onToggleColumn={() => toggleColumn(col.meta.id)}
+            onShowMore={() => setRestExpanded((prev) => ({ ...prev, [col.meta.id]: true }))}
+            onToggleTask={(id) => toggleTask(id)}
+            onOpenTask={openTask}
+            onPin={pinToday}
+          />
+        ))}
+      </div>
 
       <div className="bg-white rounded-xl border border-dashed border-sky-200 p-2 flex items-center gap-2">
         <input
@@ -585,11 +562,19 @@ const TasksBoard: React.FC = () => {
       <button
         type="button"
         onClick={() => quickInputRef.current?.focus()}
-        className="md:hidden fixed bottom-16 left-4 z-40 w-12 h-12 rounded-full bg-sky-600 text-white shadow-lg flex items-center justify-center"
+        className="md:hidden fixed bottom-36 left-3 z-40 w-12 h-12 rounded-full bg-sky-600 text-white shadow-lg flex items-center justify-center"
         aria-label="משימה חדשה"
       >
         <Plus size={22} />
       </button>
+
+      <MyDayDrawer tasks={tasks} todayKey={todayKey} onToggle={toggleTask} onOpen={openTask} onPinToday={pinToday} />
+
+      {toast && (
+        <div role="status" className="fixed top-4 left-1/2 -translate-x-1/2 z-[90] bg-slate-900 text-white text-sm font-bold px-4 py-2 rounded-full shadow-lg">
+          {toast}
+        </div>
+      )}
 
       {cleanupOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
