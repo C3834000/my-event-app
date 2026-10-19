@@ -232,7 +232,8 @@ const TasksBoard: React.FC = () => {
   const visibleTasks = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return tasks.filter((task) => {
-      if (!showHidden && isHiddenTask(task)) return false;
+      const pickedIdeas = topFilter === 'רעיונות' && !task.isCompleted;
+      if (!showHidden && !pickedIdeas && isHiddenTask(task)) return false;
       if (topFilter !== 'all' && getTopCategory(task.category) !== topFilter) return false;
       if (!q) return true;
       const blob = [task.title, task.category, task.notes, task.helper, ...(task.subTasks || []).map((s) => s.title)]
@@ -275,7 +276,7 @@ const TasksBoard: React.FC = () => {
   }, [visibleTasks, todayView]);
 
   const chipCounts = useMemo(() => {
-    const base = tasks.filter((t) => showHidden || !isHiddenTask(t));
+    const base = tasks.filter((t) => showHidden || !t.isCompleted);
     const map = Object.fromEntries(TOP_CATEGORIES.map((c) => [c.id, 0])) as Record<TopCategoryId, number>;
     for (const t of base) {
       const top = getTopCategory(t.category);
