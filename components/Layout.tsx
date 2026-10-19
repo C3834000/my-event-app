@@ -4,21 +4,35 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { Menu, Lock } from 'lucide-react';
 
-const ADMIN_PASSWORD = 'klikef2026';
 const AUTH_KEY = 'crm_admin_auth';
 
 const LoginScreen: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD) {
-      sessionStorage.setItem(AUTH_KEY, 'true');
-      onLogin();
-    } else {
-      setError(true);
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        sessionStorage.setItem(AUTH_KEY, 'true');
+        onLogin();
+        return;
+      }
+      setError(res.status === 503 ? 'הכניסה לא הוגדרה בשרת' : 'סיסמה שגויה');
       setPassword('');
+    } catch {
+      setError('לא ניתן להתחבר לשרת');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -36,13 +50,13 @@ const LoginScreen: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           <input
             type="password"
             value={password}
-            onChange={e => { setPassword(e.target.value); setError(false); }}
+            onChange={e => { setPassword(e.target.value); setError(''); }}
             placeholder="סיסמה"
             autoFocus
             className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-center text-lg focus:border-purple-500 focus:outline-none"
           />
-          {error && <p className="text-red-500 text-sm text-center">סיסמה שגויה</p>}
-          <button type="submit" className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition-colors">
+          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+          <button type="submit" disabled={busy} className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors">
             כניסה
           </button>
         </form>

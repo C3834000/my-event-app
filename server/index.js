@@ -8,6 +8,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
 
@@ -42,6 +43,19 @@ function getTransporter() {
     auth: { user, pass },
   });
 }
+
+// POST /api/admin-auth — הסיסמה נקראת מ-ADMIN_PASSWORD, לא מהקוד
+app.post('/api/admin-auth', (req, res) => {
+  const expected = process.env.ADMIN_PASSWORD || '';
+  if (!expected) {
+    return res.status(503).json({ ok: false, error: 'ADMIN_PASSWORD is not configured' });
+  }
+  const password = String((req.body || {}).password || '');
+  const a = crypto.createHash('sha256').update(password, 'utf8').digest();
+  const b = crypto.createHash('sha256').update(expected, 'utf8').digest();
+  const ok = crypto.timingSafeEqual(a, b);
+  return res.status(ok ? 200 : 401).json({ ok });
+});
 
 // POST /api/send-email
 // Body: { to, subject, text?, html? }

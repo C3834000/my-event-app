@@ -112,32 +112,113 @@ const ROWS: SeedRow[] = [
   { title: 'לטפל בכלים, מצעים וקיפול בבית', category: 'בית', minutes: 45, day: 'week', helper: 'עוזר' },
 ];
 
-/** סדר תצוגה לקבוצות (משימה ראשית = קטגוריה) */
+/** סדר תצוגה לקטגוריות שבאמת בשימוש, כולל אלו שחסרו בכפתורי הסינון */
 export const TASK_CATEGORY_ORDER: TaskCategory[] = [
-  'דחוף',
-  'דחוף / לסיווג',
-  'אירועים',
+  'קליכיף',
+  'קליכיף שוטף',
+  'קליכיף שיווק',
+  'שיווק',
+  'תוכנית מדע',
   'תוכנה',
   'קליקלייט',
-  'קליכיף',
   'וידאו',
   'משחקים',
   'תוכנית קיץ',
-  'תוכנית מדע',
-  'שיווק',
   'תוכן',
+  'אירועים',
   'מערכת',
+  'כספים',
+  'מתיקין',
+  'בית',
+  'בית ומשפחה',
+  'חתונה',
+  'משפחה',
+  'אישי',
+  'רעיונות',
   'שיחות',
   'תפעול',
-  'כספים',
   'ציוד',
-  'אישי',
-  'משפחה',
-  'בית',
   'כללי',
+  'דחוף',
+  'דחוף / לסיווג',
+  'לסיווג',
+  'ארכיון',
 ];
 
 export const TASK_CATEGORIES: TaskCategory[] = [...TASK_CATEGORY_ORDER];
+
+export type TopCategoryId =
+  | 'קליכיף'
+  | 'כספים'
+  | 'מתיקין'
+  | 'בית ומשפחה'
+  | 'אישי'
+  | 'רעיונות'
+  | 'לסיווג';
+
+export type TopCategoryMeta = {
+  id: TopCategoryId;
+  border: string;
+  tag: string;
+  chip: string;
+  chipOn: string;
+  bar: string;
+};
+
+/** שישה תחומים + תיבת «לסיווג». המחלקות מלאות כדי ש-Tailwind מה-CDN יזהה אותן. */
+export const TOP_CATEGORIES: TopCategoryMeta[] = [
+  { id: 'קליכיף', border: 'border-r-blue-500', tag: 'bg-blue-50 text-blue-700', chip: 'bg-blue-50 text-blue-800 border-blue-200', chipOn: 'bg-blue-600 text-white border-blue-600', bar: 'bg-blue-500' },
+  { id: 'כספים', border: 'border-r-green-500', tag: 'bg-green-50 text-green-700', chip: 'bg-green-50 text-green-800 border-green-200', chipOn: 'bg-green-600 text-white border-green-600', bar: 'bg-green-500' },
+  { id: 'מתיקין', border: 'border-r-purple-500', tag: 'bg-purple-50 text-purple-700', chip: 'bg-purple-50 text-purple-800 border-purple-200', chipOn: 'bg-purple-600 text-white border-purple-600', bar: 'bg-purple-500' },
+  { id: 'בית ומשפחה', border: 'border-r-orange-500', tag: 'bg-orange-50 text-orange-700', chip: 'bg-orange-50 text-orange-800 border-orange-200', chipOn: 'bg-orange-600 text-white border-orange-600', bar: 'bg-orange-500' },
+  { id: 'אישי', border: 'border-r-amber-500', tag: 'bg-amber-50 text-amber-800', chip: 'bg-amber-50 text-amber-800 border-amber-200', chipOn: 'bg-amber-500 text-white border-amber-500', bar: 'bg-amber-500' },
+  { id: 'רעיונות', border: 'border-r-slate-400', tag: 'bg-slate-100 text-slate-600', chip: 'bg-slate-100 text-slate-600 border-slate-200', chipOn: 'bg-slate-500 text-white border-slate-500', bar: 'bg-slate-400' },
+  { id: 'לסיווג', border: 'border-r-rose-500', tag: 'bg-rose-50 text-rose-700', chip: 'bg-rose-50 text-rose-800 border-rose-200', chipOn: 'bg-rose-600 text-white border-rose-600', bar: 'bg-rose-500' },
+];
+
+const TOP_CATEGORY_MAP: Record<string, TopCategoryId | 'hidden'> = {
+  'קליכיף': 'קליכיף',
+  'קליכיף שוטף': 'קליכיף',
+  'קליכיף שיווק': 'קליכיף',
+  'שיווק': 'קליכיף',
+  'תוכנית מדע': 'קליכיף',
+  'תוכנה': 'קליכיף',
+  'כספים': 'כספים',
+  'מתיקין': 'מתיקין',
+  'בית': 'בית ומשפחה',
+  'חתונה': 'בית ומשפחה',
+  'משפחה': 'בית ומשפחה',
+  'בית ומשפחה': 'בית ומשפחה',
+  'אישי': 'אישי',
+  'רעיונות': 'רעיונות',
+  'כללי': 'לסיווג',
+  'דחוף': 'לסיווג',
+  'דחוף / לסיווג': 'לסיווג',
+  'לסיווג': 'לסיווג',
+  'ארכיון': 'hidden',
+};
+
+/** תחום ראשי לתצוגה. קטגוריה לא מוכרת נופלת ל«לסיווג». «ארכיון» מוסתר. */
+export function getTopCategory(cat: string | undefined | null): TopCategoryId | 'hidden' {
+  const key = (cat || '').trim();
+  if (!key) return 'לסיווג';
+  return TOP_CATEGORY_MAP[key] ?? 'לסיווג';
+}
+
+export function topCategoryMeta(id: TopCategoryId): TopCategoryMeta {
+  return TOP_CATEGORIES.find((c) => c.id === id) ?? TOP_CATEGORIES[TOP_CATEGORIES.length - 1];
+}
+
+/** קטגוריית ברירת מחדל כשמוסיפים משימה מתוך צ'יפ של תחום ראשי */
+export const TOP_DEFAULT_CATEGORY: Record<TopCategoryId, TaskCategory> = {
+  'קליכיף': 'קליכיף',
+  'כספים': 'כספים',
+  'מתיקין': 'מתיקין',
+  'בית ומשפחה': 'בית',
+  'אישי': 'אישי',
+  'רעיונות': 'רעיונות',
+  'לסיווג': 'לסיווג',
+};
 
 export function buildTasksSeed(existingTitles: Set<string> = new Set()): Task[] {
   const now = Date.now();

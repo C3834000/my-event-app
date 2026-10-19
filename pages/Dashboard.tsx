@@ -68,6 +68,19 @@ const getHolidayForDate = (date: Date): string => {
   return HOLIDAYS[`${dd}-${mm}`] || '';
 };
 
+const localDateKey = (d = new Date()) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const PriorityDot: React.FC<{ priority: number }> = ({ priority }) => {
+  if (priority >= 5) return <span className="shrink-0 w-2 h-2 rounded-full bg-red-500 mt-1" title="דחוף" />;
+  if (priority >= 3) return <span className="shrink-0 w-2 h-2 rounded-full bg-orange-400 mt-1" title="רגיל" />;
+  return null;
+};
+
 const TaskCard: React.FC<{ task: any; onToggle: (id: string) => void; onUpdate: (id: string, updates: any) => void }> = ({ task, onToggle, onUpdate }) => {
   const [showDetails, setShowDetails] = useState(false);
   
@@ -75,14 +88,7 @@ const TaskCard: React.FC<{ task: any; onToggle: (id: string) => void; onUpdate: 
     <div className="bg-slate-50 rounded-lg border border-slate-200 hover:border-purple-300 hover:bg-purple-50/30 transition-all">
       <div className="p-2 cursor-pointer" onClick={() => setShowDetails(!showDetails)}>
         <div className="flex items-start gap-2 mb-1">
-          <div className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-black ${
-            task.priority === 5 ? 'bg-red-500 text-white' : 
-            task.priority === 4 ? 'bg-orange-400 text-white' : 
-            task.priority === 3 ? 'bg-yellow-400 text-slate-800' : 
-            'bg-slate-300 text-slate-700'
-          }`}>
-            {task.priority === 5 ? 'HIGH' : task.priority === 4 ? 'HIGH' : task.priority === 3 ? 'MED' : 'LOW'}
-          </div>
+          <PriorityDot priority={task.priority} />
           <h4 className="font-bold text-xs text-slate-800 flex-1">{task.title}</h4>
           <button 
             onClick={(e) => { e.stopPropagation(); onToggle(task.id); }}
@@ -142,7 +148,7 @@ const Dashboard: React.FC = () => {
   const { kpis, tasks, events, toggleTask, activities, customers, updateTask, leads, uploadAllToCloud } = useApp();
   const [debtModalOpen, setDebtModalOpen] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string | null>(localDateKey());
   const [dayModalDate, setDayModalDate] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
@@ -351,6 +357,11 @@ const Dashboard: React.FC = () => {
 
     return slots;
   }, [selectedDate, selectedDayEvents, tasks]);
+
+  const untimedDayTasks = useMemo(() => {
+    if (!selectedDate) return [];
+    return tasks.filter(t => !t.isCompleted && t.dueDate === selectedDate && !t.dueTime);
+  }, [tasks, selectedDate]);
   
   const calculateTaskScore = (task: any): number => {
     const today = new Date();
@@ -371,7 +382,7 @@ const Dashboard: React.FC = () => {
   };
 
   const smartTasks = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateKey();
     const openTasks = tasks.filter(t => !t.isCompleted);
     
     const todayTasks = openTasks.filter(t => t.dueDate === today);
@@ -598,6 +609,22 @@ const Dashboard: React.FC = () => {
               })}
             </div>
           </div>
+
+          {selectedDate && untimedDayTasks.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 shrink-0">
+              <h3 className="text-xs font-black text-slate-800 mb-1.5">
+                {selectedDate === localDateKey() ? 'משימות להיום' : 'משימות ליום זה'}
+              </h3>
+              <div className="space-y-1 max-h-28 overflow-y-auto custom-scrollbar">
+                {untimedDayTasks.map(task => (
+                  <div key={task.id} className="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-100 px-2 py-1">
+                    <PriorityDot priority={task.priority} />
+                    <span className="text-xs font-bold text-slate-800 truncate flex-1">{task.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* עדכונים שוטפים (החלפת התצוגה הקודמת של תוכנית יומית) */}
           <div className="bg-yellow-50 rounded-xl border-2 border-yellow-300 p-3 flex-1 overflow-hidden flex flex-col min-h-0">
@@ -1054,6 +1081,19 @@ const Dashboard: React.FC = () => {
               <button onClick={() => setDayModalDate(null)} className="p-1.5 hover:bg-white/20 rounded-lg"><X size={18}/></button>
             </div>
             <div className="p-4 overflow-y-auto custom-scrollbar space-y-2">
+              {dayModalDate && tasks.some(t => !t.isCompleted && t.dueDate === dayModalDate && !t.dueTime) && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 space-y-1">
+                  <h4 className="text-xs font-black text-slate-700">
+                    {dayModalDate === localDateKey() ? 'משימות להיום' : 'משימות ליום זה'}
+                  </h4>
+                  {tasks.filter(t => !t.isCompleted && t.dueDate === dayModalDate && !t.dueTime).map(task => (
+                    <div key={task.id} className="flex items-center gap-2 bg-white rounded-lg px-2 py-1.5 border border-slate-100">
+                      <PriorityDot priority={task.priority} />
+                      <span className="text-sm font-bold text-slate-800 flex-1">{task.title}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {dayModalEvents.length === 0 ? (
                 <p className="text-sm text-slate-400 text-center py-8">אין אירועים ביום זה</p>
               ) : (

@@ -57,9 +57,13 @@ export enum TaskPriority {
 
 export type TaskCategory =
   | 'קליכיף'
+  | 'קליכיף שוטף'
+  | 'קליכיף שיווק'
   | 'קליקלייט'
   | 'אישי'
   | 'בית'
+  | 'בית ומשפחה'
+  | 'חתונה'
   | 'משפחה'
   | 'תוכנית מדע'
   | 'תוכנית קיץ'
@@ -70,13 +74,17 @@ export type TaskCategory =
   | 'משחקים'
   | 'אירועים'
   | 'כספים'
+  | 'מתיקין'
   | 'תפעול'
   | 'ציוד'
   | 'שיחות'
   | 'מערכת'
+  | 'רעיונות'
   | 'כללי'
   | 'דחוף'
-  | 'דחוף / לסיווג';
+  | 'דחוף / לסיווג'
+  | 'לסיווג'
+  | 'ארכיון';
 
 export interface Customer {
   id: string;
@@ -190,6 +198,8 @@ export interface Task {
   requiredResources?: string;
   /** מי יעזור במשימה */
   helper?: string;
+  /** הערות חופשיות (גם מייבוא עמודת «הערות») */
+  notes?: string;
   frequency?: TaskFrequency;
   subTasks?: SubTask[];
 }

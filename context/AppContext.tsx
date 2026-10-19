@@ -151,7 +151,7 @@ interface AppContextType {
   /** שורות CSV עם Item ID + תאריך תשלום — מעדכן אירועים לפי externalId */
   applyPaymentDatesFromImport: (rows: Record<string, unknown>[]) => number;
   importCustomers: (data: any[]) => void;
-  importTasks: (data: any[]) => void;
+  importTasks: (data: any[]) => { added: number; skipped: number };
   /** מוסיף משימות מוכנות (מדלג על כותרות שכבר קיימות). מחזיר כמה נוספו. */
   importTaskObjects: (tasks: Task[]) => number;
   importLeads: (data: Lead[]) => void;
@@ -1054,7 +1054,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (toRemove.length === 0) return 0;
 
     const ids = new Set(toRemove.map((l) => l.id));
-    recordDeletedIds('leads', Array.from(ids));
+    recordDeletedIds('leads', Array.from(ids).map((id) => String(id)));
     setLeads((prev) => prev.filter((l) => !ids.has(l.id)));
     await Promise.all(
       toRemove.map((l) =>
@@ -1366,25 +1366,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const importTasks = (data: any[]) => {
-    const toAdd: Task[] = data.map((row: any, i: number) => {
+    const existing = new Set(tasks.map((t) => t.title.trim()));
+    const seen = new Set<string>();
+    const toAdd: Task[] = [];
+    let skipped = 0;
+    data.forEach((row: any, i: number) => {
+      const title = (row.תיאור ?? row.title ?? row.Title ?? row.כותרת ?? '').toString().trim();
+      if (!title || existing.has(title) || seen.has(title)) {
+        skipped += 1;
+        return;
+      }
+      seen.add(title);
       const statusStr = (row.סטטוס ?? row.status ?? row.progress ?? '').toString();
       const progressNum = (() => { const m = statusStr.match(/(\d+)/); return m ? Number(m[1]) : 0; })();
       const isDone = /בוצע\s*100|הושלם|completed|כן/i.test(statusStr);
       const rawId = (row['Item ID (auto generated)'] ?? row['Item ID'] ?? row.id ?? '').toString().trim();
-      return {
+      const notes = (row.הערות ?? row.notes ?? '').toString().trim() || undefined;
+      toAdd.push({
         id: rawId || `t_${Date.now()}_${i}`,
-        title: (row.תיאור ?? row.title ?? row.Title ?? row.כותרת ?? '').toString().trim() || 'משימה',
+        title,
         isCompleted: isDone,
         priority: [TaskPriority.Low, TaskPriority.Medium, TaskPriority.High][Number(row.עדיפות ?? row.priority ?? 1) - 1] ?? TaskPriority.Medium,
         category: (row.קטגוריה ?? row.category ?? 'כללי') as TaskCategory,
         estimatedTimeMin: Number(row['משך זמן משוער בדקות'] ?? row.estimatedTimeMin ?? row.זמן ?? 0) || 0,
         progress: isDone ? 100 : progressNum,
         dueDate: parseDateField(row['תאריך יעד'] ?? row.dueDate ?? row.תאריך_יעד),
-      };
+        notes,
+      });
     });
-    setTasks(prev => [...toAdd, ...prev]);
-    cloudSync(() => tasksService.bulkInsert(toAdd));
-    addActivity('system', `יובאו ${toAdd.length} משימות`);
+    if (toAdd.length) {
+      setTasks(prev => [...toAdd, ...prev]);
+      cloudSync(() => tasksService.bulkInsert(toAdd));
+      addActivity('system', `יובאו ${toAdd.length} משימות`);
+    }
+    return { added: toAdd.length, skipped };
   };
 
   const importTaskObjects = (incoming: Task[]) => {
