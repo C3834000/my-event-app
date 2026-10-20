@@ -102,7 +102,7 @@ const Layout: React.FC = () => {
 
       {/* Main Content - Scrollable */}
       <main className="flex-1 overflow-y-auto">
-        <div className="p-4 md:p-8">
+        <div className={fullBleed ? 'p-3 md:p-4' : 'p-4 md:p-8'}>
           <div className={fullBleed ? undefined : 'max-w-7xl mx-auto'}>
             <Outlet />
           </div>

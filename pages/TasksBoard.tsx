@@ -175,7 +175,7 @@ const CategoryColumn: React.FC<{
           {Array.from({ length: slots }).map((_, i) => (
             <div
               key={`slot-${i}`}
-              className="rounded-xl border border-dashed border-slate-300 bg-white/50 px-2 py-3 text-center text-[11px] font-bold text-slate-500"
+              className="rounded-xl border border-dashed border-slate-300 bg-white/50 px-2.5 py-2.5 text-right text-[11px] font-bold text-slate-500"
             >
               ＋ לחץ ★ על משימה כדי להוסיף
             </div>

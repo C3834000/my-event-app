@@ -52,12 +52,12 @@ const TaskCard: React.FC<Props> = ({ task, todayKey, onToggle, onOpen, onPinToda
           ? `w-full text-right rounded-xl shadow-sm px-3 py-2.5 cursor-pointer text-white ${meta?.focusCard ?? 'bg-slate-600'} ${
               task.isCompleted ? 'opacity-60' : ''
             }`
-          : `w-full text-right bg-white rounded-xl border border-slate-200 border-r-4 ${meta?.restBorder ?? meta?.border ?? 'border-r-slate-300'} shadow-sm hover:border-slate-300 transition-colors px-3 py-2.5 cursor-pointer ${
+          : `w-full text-right bg-white rounded-xl border border-slate-200 border-r-4 ${meta?.restBorder ?? meta?.border ?? 'border-r-slate-300'} shadow-sm hover:border-slate-300 transition-colors px-2.5 py-2 cursor-pointer ${
               task.isCompleted ? 'opacity-50' : ''
             }`
       }
     >
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-start gap-2">
         <button
           type="button"
           onClick={(e) => {
@@ -78,38 +78,20 @@ const TaskCard: React.FC<Props> = ({ task, todayKey, onToggle, onOpen, onPinToda
           {task.isCompleted && <Check size={12} strokeWidth={3} />}
         </button>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start gap-2">
-            <p
-              className={
-                focus
-                  ? `flex-1 font-bold text-[15px] leading-snug line-clamp-3 ${task.isCompleted ? 'line-through' : ''}`
-                  : `flex-1 font-bold text-sm leading-snug line-clamp-2 ${task.isCompleted ? 'line-through text-slate-400' : 'text-slate-800'}`
-              }
-            >
-              {task.title}
-            </p>
-            {!focus && task.priority >= 5 && <span className="mt-1.5 w-2 h-2 rounded-full bg-red-500 shrink-0" title="דחוף" />}
-            {!focus && task.priority === 3 && <span className="mt-1.5 w-2 h-2 rounded-full bg-orange-400 shrink-0" title="רגיל" />}
-            <button
-              type="button"
-              title="להיום"
-              aria-label={pinned ? 'הסר מהפוקוס' : 'להיום'}
-              onClick={(e) => {
-                e.stopPropagation();
-                onPinToday();
-              }}
-              className={
-                focus
-                  ? 'shrink-0 p-0.5 text-yellow-300'
-                  : `shrink-0 p-0.5 rounded-md hover:bg-amber-50 ${pinned ? 'text-amber-500' : 'text-slate-300 hover:text-amber-500'}`
-              }
-            >
-              <Star size={16} className={focus || pinned ? (focus ? 'fill-yellow-300' : 'fill-amber-400') : ''} />
-            </button>
-          </div>
-          <div className={`mt-1 flex items-center gap-1.5 flex-wrap text-[11px] ${focus ? '' : ''}`}>
-            {!focus && subLabel && <span className="text-slate-400 font-medium">{subLabel}</span>}
+        <div className="flex-1 min-w-0 text-right">
+          <p
+            className={
+              focus
+                ? `font-bold text-[15px] leading-snug line-clamp-3 break-words ${task.isCompleted ? 'line-through' : ''}`
+                : `font-bold text-sm leading-snug line-clamp-2 break-words ${task.isCompleted ? 'line-through text-slate-400' : 'text-slate-800'}`
+            }
+          >
+            {task.title}
+          </p>
+          <div className="mt-1 flex items-center gap-1.5 flex-wrap text-[11px]">
+            {!focus && task.priority >= 5 && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" title="דחוף" />}
+            {!focus && task.priority === 3 && <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" title="רגיל" />}
+            {!focus && subLabel && <span className="text-slate-400 font-medium truncate max-w-full">{subLabel}</span>}
             {due &&
               (focus ? (
                 <span className={`font-bold ${overdue ? 'bg-red-500 text-white rounded-full px-1.5 py-0.5' : 'text-white/80'}`}>{due}</span>
@@ -121,6 +103,22 @@ const TaskCard: React.FC<Props> = ({ task, todayKey, onToggle, onOpen, onPinToda
                 {doneSubs}/{subs.length}
               </span>
             )}
+            <button
+              type="button"
+              title="להיום"
+              aria-label={pinned ? 'הסר מהפוקוס' : 'להיום'}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPinToday();
+              }}
+              className={
+                focus
+                  ? 'mr-auto shrink-0 p-0.5 text-yellow-300'
+                  : `mr-auto shrink-0 p-0.5 rounded-md hover:bg-amber-50 ${pinned ? 'text-amber-500' : 'text-slate-300 hover:text-amber-500'}`
+              }
+            >
+              <Star size={16} className={focus ? 'fill-yellow-300' : pinned ? 'fill-amber-400' : ''} />
+            </button>
           </div>
           {!focus && task.progress > 0 && task.progress < 100 && (
             <div className="mt-1.5 h-1 rounded-full bg-slate-100 overflow-hidden">
