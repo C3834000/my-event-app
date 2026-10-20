@@ -18,7 +18,7 @@ import {
   VAT_RATE, NATIONAL_INSURANCE_RATE, annualIncomeTax, vatFromGross,
   vatPeriodsForYear, donationCredit,
 } from '../services/taxCalc';
-import { listDocuments, getDocsApiKey, FinanceDocument } from '../services/documents';
+import { listDocuments, getDocsApiKey, getFxRates, FinanceDocument } from '../services/documents';
 import { searchGreenInvoiceIncomeDocuments, GreenInvoiceIncomeDocument } from '../services/greenInvoice';
 import { settingsService } from '../services/supabase';
 import YearFilter, { DEFAULT_DATA_YEAR } from '../components/YearFilter';
@@ -30,6 +30,22 @@ const fmtSigned = (n: number) => `${n < 0 ? '−' : ''}₪${Math.abs(Math.round(
 const todayIso = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+// המרת מסמך מט"ח לש"ח: שער יציג של בנק ישראל ביום המסמך,
+// ואם לא פורסם שער באותו יום (שישי/שבת/חג) — השער האחרון שפורסם עד 14 יום לפניו.
+type FxRates = Record<string, Record<string, number>>;
+const docCurrency = (d: FinanceDocument) => String(d.currency || 'ILS').trim().toUpperCase() || 'ILS';
+const fxRateFor = (rates: FxRates | null, currency: string, date: string): number | null => {
+  if (currency === 'ILS') return 1;
+  const series = rates?.[currency];
+  if (!series || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const t = new Date(`${date}T00:00:00Z`).getTime();
+  for (let back = 0; back <= 14; back++) {
+    const key = new Date(t - back * 86400000).toISOString().slice(0, 10);
+    if (series[key]) return series[key];
+  }
+  return null;
 };
 
 const TaxBoard: React.FC = () => {
@@ -52,6 +68,8 @@ const TaxBoard: React.FC = () => {
   const [giSyncing, setGiSyncing] = useState(false);
   const [expenseDocs, setExpenseDocs] = useState<FinanceDocument[]>([]);
   const [docsError, setDocsError] = useState('');
+  const [fxRates, setFxRates] = useState<FxRates | null>(null);
+  const [fxError, setFxError] = useState('');
   const [taxSettings, setTaxSettings] = useState<TaxSettings>(DEFAULT_TAX_SETTINGS);
   const withholdingRate = taxSettings.withholdingRate;
   const [homeView, setHomeView] = useState(false);
@@ -84,6 +102,24 @@ const TaxBoard: React.FC = () => {
     }
     return () => { active = false; };
   }, []);
+
+  // שערי מט"ח לכל מסמכי ההוצאה שאינם בש"ח (טווח התאריכים שלהם)
+  useEffect(() => {
+    const foreign = expenseDocs.filter(d => docCurrency(d) !== 'ILS' && /^\d{4}-\d{2}-\d{2}/.test(d.docDate || ''));
+    if (!foreign.length) return;
+    let active = true;
+    const dates = foreign.map(d => (d.docDate || '').slice(0, 10)).sort();
+    const currencies = Array.from(new Set<string>(foreign.map(docCurrency)));
+    getFxRates(currencies, dates[0], dates[dates.length - 1])
+      .then(r => {
+        if (!active) return;
+        setFxRates(r.rates);
+        const errs = Object.entries(r.errors);
+        setFxError(errs.length ? `שערי מט"ח לא נטענו עבור ${errs.map(([c]) => c).join(', ')}` : '');
+      })
+      .catch(e => { if (active) setFxError(`שערי מט"ח לא נטענו: ${String(e?.message || e)}`); });
+    return () => { active = false; };
+  }, [expenseDocs]);
 
   const persistEntries = (next: FinanceEntry[]) => {
     setEntries(next);
@@ -145,10 +181,16 @@ const TaxBoard: React.FC = () => {
     ).length;
     const docExpenseByMonth = new Map<string, { gross: number; vat: number }>();
     let docExpenseGrossYtd = 0, vatInputYtd = 0;
+    let fxConvertedCount = 0, fxMissingCount = 0;
     for (const d of confirmedDocs) {
       const mk = (d.docDate || '').slice(0, 7);
-      const gross = Number(d.totalAmount || 0);
-      const vat = Number(d.vatAmount || 0);
+      // סכומי המסמך במטבע המקור → ש"ח (מסמך מט"ח בלי שער זמין לא נכלל, ומוצגת אזהרה)
+      const cur = docCurrency(d);
+      const rate = fxRateFor(fxRates, cur, (d.docDate || '').slice(0, 10));
+      if (rate == null) { fxMissingCount++; continue; }
+      if (cur !== 'ILS') fxConvertedCount++;
+      const gross = Number(d.totalAmount || 0) * rate;
+      const vat = Number(d.vatAmount || 0) * rate;
       const row = docExpenseByMonth.get(mk) || { gross: 0, vat: 0 };
       row.gross += gross; row.vat += vat;
       docExpenseByMonth.set(mk, row);
@@ -237,7 +279,7 @@ const TaxBoard: React.FC = () => {
     return {
       grossIncomeYtd, vatOutputYtd, netIncomeYtd,
       docExpenseGrossYtd, docExpenseNetYtd, vatInputYtd, manualBusinessYtd, businessExpensesYtd,
-      pendingDocsCount, confirmedDocsCount: confirmedDocs.length,
+      pendingDocsCount, confirmedDocsCount: confirmedDocs.length, fxConvertedCount, fxMissingCount,
       periods, currentPeriod, periodToReport,
       taxableYtd, annualizedTaxable, taxBeforeCredits, creditFromDonations, taxAfterCredits,
       donationsYtd, withheldYtd, annualizedWithheld, taxBalance, nationalInsurance,
@@ -246,7 +288,7 @@ const TaxBoard: React.FC = () => {
       salaryMonthly, homeFixedMonthly, homeVariableThisMonth, homeInflow, homeOutflow, homeBalance,
       debtPaymentMonthly,
     };
-  }, [giDocs, expenseDocs, entries, taxSettings, withholdingRate, year, currentYear, currentMonthKey, monthsElapsed]);
+  }, [giDocs, expenseDocs, fxRates, entries, taxSettings, withholdingRate, year, currentYear, currentMonthKey, monthsElapsed]);
 
   // ── הוספת רישום מהירה ──────────────────────────────────────────────────────
   const addEntry = () => {
@@ -316,6 +358,16 @@ const TaxBoard: React.FC = () => {
       {docsError && (
         <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold rounded-xl px-3 py-2">
           <AlertTriangle size={14} /> {docsError}
+        </div>
+      )}
+      {(snap.fxConvertedCount > 0 || snap.fxMissingCount > 0) && (
+        <div className={`flex items-center gap-2 text-xs font-bold rounded-xl px-3 py-2 border ${snap.fxMissingCount > 0 ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+          {snap.fxMissingCount > 0 ? <AlertTriangle size={14} /> : <FileText size={14} />}
+          {snap.fxConvertedCount > 0 && `${snap.fxConvertedCount} מסמכי מט"ח הומרו לש"ח לפי השער היציג של בנק ישראל ביום המסמך`}
+          {snap.fxConvertedCount > 0 && snap.fxMissingCount > 0 && ' · '}
+          {snap.fxMissingCount > 0 && (fxRates || fxError
+            ? `${snap.fxMissingCount} מסמכי מט"ח לא נכללו בחישוב — אין שער זמין${fxError ? ` (${fxError})` : ''}`
+            : `טוען שערי מט"ח עבור ${snap.fxMissingCount} מסמכים…`)}
         </div>
       )}
       {snap.pendingDocsCount > 0 && (

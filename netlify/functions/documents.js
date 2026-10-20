@@ -180,6 +180,46 @@ export const handler = async (event) => {
       return json(200, { success: true, document: toCamel(inserted), suspects });
     }
 
+    // ── fxRates: שער יציג של בנק ישראל להמרת מסמכי מט"ח לש"ח (קריאה בלבד) ──
+    // { currencies: ['USD',...], from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
+    // → { rates: { USD: { 'YYYY-MM-DD': 3.71, ... } }, errors: { CUR: msg } }
+    // הטווח מורחב 14 יום אחורה כדי שלמסמך מיום ללא פרסום (שישי/שבת/חג) יימצא השער האחרון שפורסם.
+    if (action === 'fxRates') {
+      const iso = /^\d{4}-\d{2}-\d{2}$/;
+      if (!iso.test(String(body.from || ''))) return json(400, { success: false, error: 'from חייב להיות YYYY-MM-DD' });
+      const to = iso.test(String(body.to || '')) ? body.to : null;
+      const start = new Date(new Date(`${body.from}T00:00:00Z`).getTime() - 14 * 86400000).toISOString().slice(0, 10);
+      const currencies = [...new Set((Array.isArray(body.currencies) ? body.currencies : [])
+        .map(c => String(c || '').trim().toUpperCase()))]
+        .filter(c => /^[A-Z]{3}$/.test(c) && c !== 'ILS')
+        .slice(0, 10);
+      const rates = {};
+      const errors = {};
+      for (const cur of currencies) {
+        try {
+          const url = `https://edge.boi.org.il/FusionEdgeServer/sdmx/v2/data/dataflow/BOI.STATISTICS/EXR/1.0/RER_${cur}_ILS?format=csv&startperiod=${start}${to ? `&endperiod=${to}` : ''}`;
+          const r = await fetch(url, { headers: { Accept: 'text/csv' } });
+          if (!r.ok) throw new Error(`BOI HTTP ${r.status}`);
+          const lines = (await r.text()).trim().split(/\r?\n/);
+          const head = (lines.shift() || '').split(',');
+          const iT = head.indexOf('TIME_PERIOD'), iV = head.indexOf('OBS_VALUE'), iM = head.indexOf('UNIT_MULT');
+          if (iT < 0 || iV < 0) throw new Error('תשובת בנק ישראל בפורמט לא צפוי');
+          const series = {};
+          for (const line of lines) {
+            const c = line.split(',');
+            const v = Number(c[iV]);
+            const mult = iM >= 0 ? Number(c[iM] || 0) : 0; // למשל JPY מפורסם ל-100 יחידות
+            if (iso.test(c[iT] || '') && Number.isFinite(v) && v > 0) series[c[iT]] = v / Math.pow(10, mult || 0);
+          }
+          if (!Object.keys(series).length) throw new Error('אין שערים בטווח');
+          rates[cur] = series;
+        } catch (e) {
+          errors[cur] = e.message || String(e);
+        }
+      }
+      return json(200, { success: true, source: 'Bank of Israel representative rate (RER_<CUR>_ILS)', rates, errors });
+    }
+
     // ── list ──────────────────────────────────────────────────────────────
     if (action === 'list') {
       let q = supabase.from('documents').select('*').order('doc_date', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false });

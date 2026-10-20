@@ -139,6 +139,17 @@ export async function createDocument(
   return post({ action: 'create', data, source });
 }
 
+// שערים יציגים של בנק ישראל (ש"ח ליחידת מטבע) לפי תאריך, להמרת מסמכי מט"ח
+export async function getFxRates(currencies: string[], from: string, to: string): Promise<{
+  rates: Record<string, Record<string, number>>;
+  errors: Record<string, string>;
+}> {
+  const res = await post<{ rates?: Record<string, Record<string, number>>; errors?: Record<string, string> }>(
+    { action: 'fxRates', currencies, from, to },
+  );
+  return { rates: res.rates || {}, errors: res.errors || {} };
+}
+
 export async function listDocuments(filters?: {
   direction?: DocDirection;
   reviewStatus?: DocReviewStatus;
