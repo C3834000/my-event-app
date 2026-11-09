@@ -669,6 +669,38 @@ const TasksBoard: React.FC = () => {
         )}
       </div>
 
+      <div className="bg-white rounded-xl border border-dashed border-sky-200 p-2 flex items-center gap-2">
+        <input
+          ref={quickInputRef}
+          className="flex-1 bg-transparent outline-none text-sm font-bold px-2 py-1.5 placeholder:text-sky-400/80"
+          placeholder="+ משימה חדשה — Enter"
+          value={quickTitle}
+          onChange={(e) => setQuickTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleQuickAdd();
+            }
+          }}
+        />
+        {topFilter === 'all' && (
+          <select
+            className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none max-w-[9rem]"
+            value={quickCategory}
+            onChange={(e) => setQuickCategory(e.target.value as TaskCategory)}
+          >
+            {taskCategories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        )}
+        <button type="button" onClick={handleQuickAdd} disabled={!quickTitle.trim()} className="p-1.5 text-sky-600 disabled:opacity-30" title="הוסף">
+          <Plus size={18} />
+        </button>
+      </div>
+
       <div className="md:grid md:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)] md:gap-3 md:items-start md:pl-9 min-w-0">
         <div className="flex flex-col gap-3 min-w-0 md:max-h-[calc(100vh-200px)] md:min-h-[540px] md:overflow-y-auto md:pl-1">
           {archiveUnlocked && archiveOpen && (
@@ -729,38 +761,6 @@ const TasksBoard: React.FC = () => {
       </div>
 
       {selectedTask && !isDesktop && <div className="md:hidden fixed inset-0 z-[95] bg-slate-100 p-2">{detailsPanel(() => setSelectedId(null))}</div>}
-
-      <div className="bg-white rounded-xl border border-dashed border-sky-200 p-2 flex items-center gap-2">
-        <input
-          ref={quickInputRef}
-          className="flex-1 bg-transparent outline-none text-sm font-bold px-2 py-1.5 placeholder:text-sky-400/80"
-          placeholder="+ משימה חדשה — Enter"
-          value={quickTitle}
-          onChange={(e) => setQuickTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              handleQuickAdd();
-            }
-          }}
-        />
-        {topFilter === 'all' && (
-          <select
-            className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none max-w-[9rem]"
-            value={quickCategory}
-            onChange={(e) => setQuickCategory(e.target.value as TaskCategory)}
-          >
-            {taskCategories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        )}
-        <button type="button" onClick={handleQuickAdd} disabled={!quickTitle.trim()} className="p-1.5 text-sky-600 disabled:opacity-30" title="הוסף">
-          <Plus size={18} />
-        </button>
-      </div>
 
       {tabBar(true)}
 
