@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { settingsService } from '../services/supabase';
 
 /**
@@ -473,12 +473,16 @@ export function getCategoryConfig(): CategoryConfig {
   return config;
 }
 
+/** שמירה לענן שעוד לא הסתיימה — בזמן הזה לא מושכים מהענן, כדי לא לדרוס את השינוי */
+let pendingSaves = 0;
+
 /** שומר הגדרות חדשות מקומית ובענן. */
 export function setCategoryConfig(next: CategoryConfig): void {
   config = normalizeCategoryConfig(next);
   writeLocal(config);
   emit();
   const saved = config;
+  pendingSaves += 1;
   void (async () => {
     try {
       const s = await settingsService.get();
@@ -486,27 +490,52 @@ export function setCategoryConfig(next: CategoryConfig): void {
       await settingsService.update({ data });
     } catch (e) {
       console.warn('☁️ שמירת קטגוריות לענן:', (e as Error).message);
+    } finally {
+      pendingSaves -= 1;
     }
   })();
 }
 
-let cloudLoaded = false;
-/** טוען פעם אחת את ההגדרות מהענן (אם נשמרו שם) ומחליף את המקומיות. */
+let loading = false;
+/** מושך את ההגדרות מהענן ומחליף את המקומיות אם השתנו (שינוי מדפדפן / מחשב אחר). */
 export async function loadCategoryConfigFromCloud(): Promise<void> {
-  if (cloudLoaded) return;
-  cloudLoaded = true;
+  if (loading || pendingSaves > 0) return;
+  loading = true;
   try {
     const s = await settingsService.get();
     const remote = s?.data?.taskCategories;
-    if (!remote) return;
+    if (!remote || pendingSaves > 0) return;
     const next = normalizeCategoryConfig(remote);
     if (JSON.stringify(next) === JSON.stringify(config)) return;
     config = next;
     writeLocal(config);
     emit();
   } catch {
-    cloudLoaded = false;
+    // אין חיבור — ממשיכים עם ההגדרות המקומיות
+  } finally {
+    loading = false;
   }
+}
+
+const CLOUD_REFRESH_MS = 30_000;
+
+/** מסנכרן את הקטגוריות מהענן: בטעינה, כל 30 שניות, וכשחוזרים ללשונית. */
+export function useCategoryCloudSync(enabled = true): void {
+  useEffect(() => {
+    if (!enabled) return;
+    void loadCategoryConfigFromCloud();
+    const timer = window.setInterval(() => void loadCategoryConfigFromCloud(), CLOUD_REFRESH_MS);
+    const onFocus = () => {
+      if (document.visibilityState === 'visible') void loadCategoryConfigFromCloud();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [enabled]);
 }
 
 const subscribe = (l: () => void) => {

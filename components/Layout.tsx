@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import { useCategoryCloudSync } from '../data/taskCategories';
 import { Menu, Lock } from 'lucide-react';
 
 const AUTH_KEY = 'crm_admin_auth';
@@ -72,6 +73,8 @@ const Layout: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(
     sessionStorage.getItem(AUTH_KEY) === 'true'
   );
+  // קטגוריות המשימות מתעדכנות מהענן בכל דף (גם בלוח האירועים)
+  useCategoryCloudSync(isAuthenticated);
 
   if (!isAuthenticated) {
     return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
