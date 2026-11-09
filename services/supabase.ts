@@ -158,25 +158,17 @@ export const formsService = {
 };
 
 // ===== SETTINGS =====
-// טבלת settings היא key/value (id, key, value jsonb) — לא שורה אחת עם עמודות שרירותיות.
-// כל "השקית" הכללית של הגדרות האפליקציה (AppSettings, activities, taskCategories, financeEntries וכו')
-// נשמרת תחת מפתח קבוע אחד ('main'), כדי ששדות חדשים לא ידרשו הוספת עמודה בטבלה.
-const MAIN_SETTINGS_KEY = 'main';
-
 export const settingsService = {
-  async get(): Promise<{ data: any }> {
+  async get(): Promise<any> {
     try {
       const rows = await dbRequest('getAll', 'settings');
-      const mainRow = (rows || []).find((r: any) => r.key === MAIN_SETTINGS_KEY);
-      return { data: mainRow?.value || {} };
+      return rows?.[0] || {};
     } catch {
-      return { data: {} };
+      return {};
     }
   },
-  async update(settings: { data: any }): Promise<{ data: any }> {
-    const value = settings?.data ?? {};
-    await dbRequest('upsert', 'settings', { data: { id: MAIN_SETTINGS_KEY, key: MAIN_SETTINGS_KEY, value } });
-    return { data: value };
+  async update(settings: any): Promise<any> {
+    return dbRequest('upsert', 'settings', { data: { id: 'main', ...settings } });
   },
 };
 

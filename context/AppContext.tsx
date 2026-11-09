@@ -502,10 +502,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateSettings = (newSettings: Partial<AppSettings>) => {
     setSettings(prev => {
       const next = { ...prev, ...newSettings };
-      cloudSync(async () => {
-        const s = await settingsService.get();
-        await settingsService.update({ data: { ...(s?.data || {}), appSettings: next } });
-      });
+      cloudSync(() => settingsService.update(next));
       return next;
     });
   };
