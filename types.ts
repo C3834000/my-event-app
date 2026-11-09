@@ -90,6 +90,13 @@ export type TaskCategory =
 
 export type EmailDirection = 'inbound' | 'outbound';
 
+export interface EmailAttachment {
+  filename: string;
+  contentType?: string;
+  size?: number;
+  url: string;
+}
+
 export interface Email {
   id: string;
   customerId?: string | null;
@@ -107,6 +114,7 @@ export interface Email {
   inReplyTo?: string;
   sentAt?: string;
   createdAt?: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface Customer {

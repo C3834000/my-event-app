@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Email } from '../types';
-import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users } from 'lucide-react';
+import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users, Paperclip } from 'lucide-react';
 
 type Thread = {
   threadId: string;
@@ -20,6 +20,13 @@ const formatDateTime = (iso?: string) => {
 };
 
 const stripRe = (subject: string) => subject.replace(/^(re|fw|fwd)\s*:\s*/i, '').trim();
+
+const formatBytes = (bytes?: number) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 const MailBoard: React.FC = () => {
   const { emails, customers, leads, getCustomerById, emailsSyncing, syncGmail, replyToEmail } = useApp();
@@ -203,7 +210,12 @@ const MailBoard: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-black text-sm text-slate-800 truncate">{name}</span>
+                    <span className="font-black text-sm text-slate-800 truncate flex items-center gap-1">
+                      {name}
+                      {t.messages.some((m) => m.attachments?.length) && (
+                        <Paperclip size={11} className="text-slate-400 shrink-0" />
+                      )}
+                    </span>
                     <span className="text-[10px] text-slate-400 shrink-0">{formatDateTime(t.lastSentAt)}</span>
                   </div>
                   <p className="text-xs font-bold text-slate-600 truncate mt-0.5">{t.subject}</p>
@@ -272,6 +284,25 @@ const MailBoard: React.FC = () => {
                     </div>
                     {/* מציגים טקסט בלבד (לא HTML גולמי מהמייל) כדי למנוע הרצת קוד זדוני שהגיע מהשולח */}
                     <p className="text-sm whitespace-pre-wrap break-words">{m.bodyText || m.snippet}</p>
+                    {!!m.attachments?.length && (
+                      <div className={`mt-2 pt-2 border-t space-y-1 ${m.direction === 'outbound' ? 'border-sky-400/40' : 'border-slate-100'}`}>
+                        {m.attachments.map((att, i) => (
+                          <a
+                            key={i}
+                            href={att.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`flex items-center gap-1.5 text-xs font-bold hover:underline ${
+                              m.direction === 'outbound' ? 'text-sky-100' : 'text-sky-700'
+                            }`}
+                          >
+                            <Paperclip size={12} className="shrink-0" />
+                            <span className="truncate">{att.filename}</span>
+                            {!!att.size && <span className="opacity-70 shrink-0">({formatBytes(att.size)})</span>}
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

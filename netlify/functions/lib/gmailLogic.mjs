@@ -6,6 +6,9 @@ import { getSupabase, logError } from './apiCommon.mjs';
 /** כמה ימים אחורה לייבא בסנכרון הראשון (כדי לא לייבא היסטוריה שלמה בפעם הראשונה) */
 const INITIAL_BACKFILL_DAYS = 90;
 const SETTINGS_KEY = 'gmail_sync';
+const ATTACHMENTS_BUCKET = 'email-attachments';
+/** לא מעלים צרופות גדולות מדי, כדי לא לנפח את האחסון בטעות (רוב ספקי המייל ממילא מגבילים ל-~25MB) */
+const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 
 function normalizeEmailKey(email) {
   return String(email || '').trim().toLowerCase();
@@ -53,7 +56,34 @@ function matchParty(addresses, byEmail) {
   return { customerId: null, leadId: null };
 }
 
-async function syncMailbox({ client, path, direction, byEmail, ownAddress, sinceUid, sinceDate }) {
+function safeFilename(name) {
+  const base = String(name || 'attachment').replace(/[/\\?%*:|"<>]/g, '_').trim();
+  return base.slice(0, 180) || 'attachment';
+}
+
+/** מעלה צרופות ל-Storage ומחזיר מטא-דאטה + URL ציבורי לכל אחת (קישורים בלבד נשמרים בטבלת emails). */
+async function uploadAttachments(supabase, messageKey, attachments) {
+  const out = [];
+  for (let i = 0; i < (attachments || []).length; i++) {
+    const att = attachments[i];
+    if (!att?.content?.length || att.content.length > MAX_ATTACHMENT_BYTES) continue;
+    const filename = safeFilename(att.filename);
+    const path = `${messageKey}/${i}-${filename}`;
+    const { error } = await supabase.storage.from(ATTACHMENTS_BUCKET).upload(path, att.content, {
+      contentType: att.contentType || 'application/octet-stream',
+      upsert: true,
+    });
+    if (error) {
+      logError('gmail-sync:attachment', error);
+      continue;
+    }
+    const { data } = supabase.storage.from(ATTACHMENTS_BUCKET).getPublicUrl(path);
+    out.push({ filename, contentType: att.contentType, size: att.content.length, url: data.publicUrl });
+  }
+  return out;
+}
+
+async function syncMailbox({ client, supabase, path, direction, byEmail, ownAddress, sinceUid, sinceDate }) {
   const lock = await client.getMailboxLock(path);
   try {
     const searchQuery = sinceUid > 0 ? { uid: `${sinceUid + 1}:*` } : { since: sinceDate };
@@ -73,6 +103,9 @@ async function syncMailbox({ client, path, direction, byEmail, ownAddress, since
       const otherParty = direction === 'inbound' ? [fromAddr] : toAddrs;
       const match = matchParty(otherParty, byEmail);
 
+      const messageKey = (parsed.messageId || `${path}-${message.uid}`).replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 120);
+      const attachments = await uploadAttachments(supabase, messageKey, parsed.attachments);
+
       rows.push({
         id: crypto.randomUUID(),
         customer_id: match.customerId,
@@ -89,6 +122,7 @@ async function syncMailbox({ client, path, direction, byEmail, ownAddress, since
         thread_id: resolveThreadId(parsed),
         in_reply_to: parsed.inReplyTo || null,
         sent_at: (parsed.date || message.internalDate || new Date()).toISOString(),
+        attachments: attachments.length ? attachments : null,
       });
     }
 
@@ -156,6 +190,7 @@ export async function runGmailSync(env) {
       const sinceUid = Number(cursor[mb.key]?.lastUid) || 0;
       const { maxUid, rows } = await syncMailbox({
         client,
+        supabase,
         path: mb.path,
         direction: mb.direction,
         byEmail,
