@@ -80,6 +80,8 @@ export interface GmailSyncResult {
   matched?: number;
   /** false = עדיין ממשיך למשוך היסטוריה ישנה יותר, שבוע בכל ריצה */
   backfillComplete?: boolean;
+  /** true = הסנכרון רץ ברקע ולא מחכים לתוצאה */
+  started?: boolean;
   error?: string;
   hint?: string;
 }
@@ -88,6 +90,7 @@ export interface GmailSyncResult {
 export async function syncGmailNow(): Promise<GmailSyncResult> {
   try {
     const res = await fetch(apiUrl('gmail-sync-now'), { method: 'POST' });
+    if (res.status === 202) return { ok: true, started: true };
     const data = await res.json().catch(() => ({}));
     return {
       ok: !!data.ok,

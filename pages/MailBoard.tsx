@@ -145,7 +145,9 @@ const MailBoard: React.FC = () => {
 
   const handleSync = async () => {
     const result = await syncGmail();
-    if (result.ok) {
+    if (result.ok && result.started) {
+      showToast('הסנכרון התחיל ברקע — המיילים יופיעו תוך כדקה-שתיים');
+    } else if (result.ok) {
       const historyNote = result.backfillComplete === false ? ' · ממשיך למשוך היסטוריה ישנה יותר בהדרגה' : '';
       showToast(`סונכרנו ${result.synced ?? 0} מיילים${result.matched ? ` (${result.matched} שויכו ללקוח)` : ''}${historyNote}`);
     } else {

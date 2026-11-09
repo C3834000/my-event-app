@@ -1479,7 +1479,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEmailsSyncing(true);
     try {
       const result = await syncGmailNow();
-      if (result.ok) await loadEmails();
+      if (result.ok) {
+        await loadEmails();
+        if (result.started) {
+          window.setTimeout(loadEmails, 30000);
+          window.setTimeout(loadEmails, 90000);
+        }
+      }
       return result;
     } finally {
       setEmailsSyncing(false);
