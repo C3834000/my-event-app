@@ -93,6 +93,13 @@ export async function syncGmailNow(): Promise<GmailSyncResult> {
   }
 }
 
+export interface OutgoingAttachment {
+  filename: string;
+  contentType?: string;
+  /** תוכן הקובץ מקודד ב-base64 (בלי התחילית data:...;base64,) */
+  contentBase64: string;
+}
+
 export interface ReplyEmailParams {
   to: string;
   subject: string;
@@ -102,6 +109,7 @@ export interface ReplyEmailParams {
   threadId?: string;
   customerId?: string | null;
   leadId?: string | null;
+  attachments?: OutgoingAttachment[];
 }
 
 /** שולח תגובה אמיתית מתוך Gmail (עם כותרות threading) ושומר אותה בטבלת emails. */

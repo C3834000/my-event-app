@@ -233,9 +233,35 @@ export async function sendGmailReply(body, env) {
     return { ok: false, statusCode: 503, error: 'Email not configured on server' };
   }
 
-  const { to, subject, text, html, inReplyToMessageId, threadId, customerId, leadId } = body || {};
+  const { to, subject, text, html, inReplyToMessageId, threadId, customerId, leadId, attachments: rawAttachments } = body || {};
   if (!to || !subject) {
     return { ok: false, statusCode: 400, error: 'Missing to or subject' };
+  }
+
+  // מגבלה שמרנית (לא זהה ל-15MB של הסנכרון): גוף הבקשה עובר כ-JSON/base64 דרך פונקציית Netlify,
+  // שיש לה תקרת גודל נמוכה בהרבה מ-15MB — לכן כאן שומרים על קובץ קטן ועל סה"כ קטן.
+  const MAX_SEND_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+  const MAX_SEND_ATTACHMENTS_TOTAL_BYTES = 4 * 1024 * 1024;
+
+  let attachmentBuffers = [];
+  if (Array.isArray(rawAttachments) && rawAttachments.length) {
+    let total = 0;
+    for (const a of rawAttachments) {
+      let buf;
+      try {
+        buf = Buffer.from(String(a.contentBase64 || ''), 'base64');
+      } catch {
+        return { ok: false, statusCode: 400, error: `קובץ לא תקין: ${a.filename || ''}` };
+      }
+      if (buf.length > MAX_SEND_ATTACHMENT_BYTES) {
+        return { ok: false, statusCode: 400, error: `הקובץ "${a.filename}" גדול מדי (מקסימום 3MB לקובץ)` };
+      }
+      total += buf.length;
+      if (total > MAX_SEND_ATTACHMENTS_TOTAL_BYTES) {
+        return { ok: false, statusCode: 400, error: 'סך הקבצים המצורפים גדול מדי (מקסימום 4MB בסך הכל)' };
+      }
+      attachmentBuffers.push({ filename: a.filename || 'attachment', contentType: a.contentType, content: buf });
+    }
   }
 
   const port = Number(SMTP_PORT) || 587;
@@ -258,6 +284,9 @@ export async function sendGmailReply(body, env) {
       text: text || (html ? String(html).replace(/<[^>]+>/g, '') : ''),
       html: html || undefined,
       ...(inReplyToMessageId ? { inReplyTo: inReplyToMessageId, references: inReplyToMessageId } : {}),
+      ...(attachmentBuffers.length
+        ? { attachments: attachmentBuffers.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })) }
+        : {}),
     });
   } catch (err) {
     const message = err.message || String(err);
@@ -273,6 +302,11 @@ export async function sendGmailReply(body, env) {
   }
 
   const supabase = getSupabase();
+  const messageKey = (info.messageId || crypto.randomUUID()).replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 120);
+  const uploadedAttachments = supabase && attachmentBuffers.length
+    ? await uploadAttachments(supabase, messageKey, attachmentBuffers)
+    : [];
+
   const row = {
     id: crypto.randomUUID(),
     customer_id: customerId || null,
@@ -289,6 +323,7 @@ export async function sendGmailReply(body, env) {
     thread_id: threadId || info.messageId || null,
     in_reply_to: inReplyToMessageId || null,
     sent_at: new Date().toISOString(),
+    attachments: uploadedAttachments.length ? uploadedAttachments : null,
   };
 
   if (supabase) {

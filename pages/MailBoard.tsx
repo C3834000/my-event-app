@@ -1,7 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Email } from '../types';
-import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users, Paperclip } from 'lucide-react';
+import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users, Paperclip, X } from 'lucide-react';
+
+const MAX_SEND_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+const MAX_SEND_ATTACHMENTS_TOTAL_BYTES = 4 * 1024 * 1024;
+
+/** ממיר קובץ ל-base64 בלי התחילית data:...;base64, (בחתיכות — כדי לא לקרוס על קבצים גדולים) */
+async function fileToBase64(file: File): Promise<string> {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < buf.length; i += chunkSize) {
+    binary += String.fromCharCode(...buf.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
 
 type Thread = {
   threadId: string;
@@ -35,10 +49,29 @@ const MailBoard: React.FC = () => {
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [composeFiles, setComposeFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 4000);
+  };
+
+  const handlePickFiles = (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    const picked = Array.from(fileList);
+    for (const f of picked) {
+      if (f.size > MAX_SEND_ATTACHMENT_BYTES) {
+        showToast(`הקובץ "${f.name}" גדול מדי (מקסימום 3MB לקובץ)`);
+        return;
+      }
+    }
+    const nextTotal = [...composeFiles, ...picked].reduce((s, f) => s + f.size, 0);
+    if (nextTotal > MAX_SEND_ATTACHMENTS_TOTAL_BYTES) {
+      showToast('סך הקבצים המצורפים גדול מדי (מקסימום 4MB בסך הכל)');
+      return;
+    }
+    setComposeFiles((prev) => [...prev, ...picked]);
   };
 
   const emailsSyncingRef = useRef(emailsSyncing);
@@ -120,7 +153,7 @@ const MailBoard: React.FC = () => {
   };
 
   const handleReply = async () => {
-    if (!selectedThread || !replyText.trim()) return;
+    if (!selectedThread || (!replyText.trim() && !composeFiles.length)) return;
     const last = selectedThread.messages[selectedThread.messages.length - 1];
     const toAddress =
       [...selectedThread.messages].reverse().find((m) => m.direction === 'inbound')?.fromEmail || last.toEmail || '';
@@ -130,6 +163,13 @@ const MailBoard: React.FC = () => {
     }
     setSending(true);
     try {
+      const attachments = await Promise.all(
+        composeFiles.map(async (f) => ({
+          filename: f.name,
+          contentType: f.type || undefined,
+          contentBase64: await fileToBase64(f),
+        }))
+      );
       const result = await replyToEmail({
         to: toAddress,
         subject: `Re: ${selectedThread.subject}`,
@@ -138,9 +178,11 @@ const MailBoard: React.FC = () => {
         threadId: selectedThread.threadId,
         customerId: selectedThread.customerId,
         leadId: selectedThread.leadId,
+        attachments: attachments.length ? attachments : undefined,
       });
       if (result.ok) {
         setReplyText('');
+        setComposeFiles([]);
         showToast('המייל נשלח');
       } else {
         showToast(result.hint || result.error || 'השליחה נכשלה');
@@ -307,22 +349,62 @@ const MailBoard: React.FC = () => {
                 ))}
               </div>
 
-              <div className="p-3 border-t border-slate-100 flex items-end gap-2">
-                <textarea
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  placeholder="כתבו תגובה..."
-                  rows={2}
-                  className="flex-1 resize-none bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm outline-none focus:border-sky-300 focus:bg-white"
-                />
-                <button
-                  onClick={handleReply}
-                  disabled={sending || !replyText.trim()}
-                  className="bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white p-3 rounded-xl shrink-0"
-                  title="שלח תגובה"
-                >
-                  <Send size={18} />
-                </button>
+              <div className="p-3 border-t border-slate-100 space-y-2">
+                {composeFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {composeFiles.map((f, i) => (
+                      <span
+                        key={i}
+                        className="flex items-center gap-1.5 text-xs font-bold bg-sky-50 text-sky-700 border border-sky-100 rounded-full pl-1 pr-2.5 py-1"
+                      >
+                        <Paperclip size={11} />
+                        <span className="truncate max-w-[160px]">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setComposeFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="hover:bg-sky-100 rounded-full p-0.5"
+                        >
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-end gap-2">
+                  <input
+                    type="file"
+                    multiple
+                    ref={fileInputRef}
+                    className="hidden"
+                    onChange={(e) => {
+                      handlePickFiles(e.target.files);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-3 text-slate-500 hover:bg-slate-100 rounded-xl shrink-0"
+                    title="צרף קובץ"
+                  >
+                    <Paperclip size={18} />
+                  </button>
+                  <textarea
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder="כתבו תגובה..."
+                    rows={2}
+                    className="flex-1 resize-none bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm outline-none focus:border-sky-300 focus:bg-white"
+                  />
+                  <button
+                    onClick={handleReply}
+                    disabled={sending || (!replyText.trim() && !composeFiles.length)}
+                    className="bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white p-3 rounded-xl shrink-0"
+                    title="שלח תגובה"
+                  >
+                    <Send size={18} />
+                  </button>
+                </div>
               </div>
             </>
           )}
