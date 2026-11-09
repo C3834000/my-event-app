@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Sun, X } from 'lucide-react';
 import { Task } from '../types';
-import { getTopCategory, TOP_CATEGORIES } from '../data/tasksSeed';
+import { getTopCategory, getTopCategories } from '../data/taskCategories';
 import { isFocusToday } from '../utils/focus';
 import TaskCard from './TaskCard';
 
@@ -19,7 +19,7 @@ const MyDayDrawer: React.FC<Props> = ({ tasks, todayKey, onToggle, onOpen, onPin
   const total = focus.length;
   const done = focus.filter((t) => t.isCompleted).length;
 
-  const groups = TOP_CATEGORIES.map((meta) => ({
+  const groups = getTopCategories().map((meta) => ({
     meta,
     tasks: focus.filter((t) => getTopCategory(t.category) === meta.id),
   })).filter((g) => g.tasks.length > 0);
@@ -63,7 +63,7 @@ const MyDayDrawer: React.FC<Props> = ({ tasks, todayKey, onToggle, onOpen, onPin
               {groups.length === 0 && <p className="text-sm text-slate-400 font-bold text-center py-8">אין עדיין משימות בפוקוס</p>}
               {groups.map((g) => (
                 <section key={g.meta.id}>
-                  <h3 className="text-xs font-black text-slate-500 mb-1.5">{g.meta.id}</h3>
+                  <h3 className="text-xs font-black text-slate-500 mb-1.5">{g.meta.label}</h3>
                   <div className="space-y-2">
                     {g.tasks.map((task) => (
                       <TaskCard

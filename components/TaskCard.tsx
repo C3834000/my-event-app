@@ -1,7 +1,7 @@
 import React from 'react';
 import { Check, Star } from 'lucide-react';
 import { Task } from '../types';
-import { getTopCategory, topCategoryMeta } from '../data/tasksSeed';
+import { getTopCategory, topCategoryMeta } from '../data/taskCategories';
 import { isFocusToday } from '../utils/focus';
 
 const shortDue = (task: Task): string => {
@@ -31,7 +31,7 @@ const TaskCard: React.FC<Props> = ({ task, todayKey, onToggle, onOpen, onPinToda
   const focus = variant === 'focus';
   const top = getTopCategory(task.category);
   const meta = top === 'hidden' ? null : topCategoryMeta(top);
-  const tagLabel = meta?.id ?? 'ארכיון';
+  const tagLabel = meta?.label ?? 'ארכיון';
   const subLabel = task.category && task.category !== tagLabel ? task.category : '';
   const due = shortDue(task);
   const overdue = !!(task.dueDate && task.dueDate < todayKey && !task.isCompleted);
