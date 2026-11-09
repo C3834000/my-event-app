@@ -88,6 +88,27 @@ export type TaskCategory =
   | 'לסיווג'
   | 'ארכיון';
 
+export type EmailDirection = 'inbound' | 'outbound';
+
+export interface Email {
+  id: string;
+  customerId?: string | null;
+  leadId?: string | null;
+  direction: EmailDirection;
+  fromEmail: string;
+  fromName?: string;
+  toEmail?: string;
+  subject?: string;
+  snippet?: string;
+  bodyText?: string;
+  bodyHtml?: string;
+  messageId?: string;
+  threadId?: string;
+  inReplyTo?: string;
+  sentAt?: string;
+  createdAt?: string;
+}
+
 export interface Customer {
   id: string;
   name: string;

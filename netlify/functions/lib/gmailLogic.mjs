@@ -1,0 +1,265 @@
+import { ImapFlow } from 'imapflow';
+import { simpleParser } from 'mailparser';
+import nodemailer from 'nodemailer';
+import { getSupabase, logError } from './apiCommon.mjs';
+
+/** כמה ימים אחורה לייבא בסנכרון הראשון (כדי לא לייבא היסטוריה שלמה בפעם הראשונה) */
+const INITIAL_BACKFILL_DAYS = 90;
+const SETTINGS_KEY = 'gmail_sync';
+
+function normalizeEmailKey(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function addressList(value) {
+  // mailparser: { value: [{ address, name }], text: '...' } | undefined
+  return (value?.value || []).map((a) => String(a.address || '').trim()).filter(Boolean);
+}
+
+function firstAddress(value) {
+  return addressList(value)[0] || '';
+}
+
+function snippetOf(text, html) {
+  const plain = text || String(html || '').replace(/<[^>]+>/g, ' ');
+  return plain.replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+
+/** מזהה שיחה יציב: עדיף ה-References/In-Reply-To הראשון בשרשרת, אחרת ה-Message-ID של ההודעה עצמה. */
+function resolveThreadId(parsed) {
+  const refs = parsed.references
+    ? (Array.isArray(parsed.references) ? parsed.references : [parsed.references])
+    : [];
+  if (refs.length) return String(refs[0]).trim();
+  if (parsed.inReplyTo) return String(parsed.inReplyTo).trim();
+  return String(parsed.messageId || '').trim();
+}
+
+async function findSentMailbox(client) {
+  try {
+    const list = await client.list();
+    const sent = list.find((m) => (m.specialUse || '') === '\\Sent');
+    return sent?.path || '[Gmail]/Sent Mail';
+  } catch {
+    return '[Gmail]/Sent Mail';
+  }
+}
+
+function matchParty(addresses, byEmail) {
+  for (const addr of addresses) {
+    const hit = byEmail.get(normalizeEmailKey(addr));
+    if (hit) return hit;
+  }
+  return { customerId: null, leadId: null };
+}
+
+async function syncMailbox({ client, path, direction, byEmail, ownAddress, sinceUid, sinceDate }) {
+  const lock = await client.getMailboxLock(path);
+  try {
+    const searchQuery = sinceUid > 0 ? { uid: `${sinceUid + 1}:*` } : { since: sinceDate };
+    const uids = await client.search(searchQuery, { uid: true });
+
+    if (!uids || !uids.length) return { maxUid: sinceUid, rows: [] };
+
+    const rows = [];
+    let maxUid = sinceUid;
+
+    for await (const message of client.fetch(uids, { uid: true, source: true, internalDate: true }, { uid: true })) {
+      maxUid = Math.max(maxUid, message.uid);
+      const parsed = await simpleParser(message.source);
+
+      const fromAddr = firstAddress(parsed.from);
+      const toAddrs = addressList(parsed.to);
+      const otherParty = direction === 'inbound' ? [fromAddr] : toAddrs;
+      const match = matchParty(otherParty, byEmail);
+
+      rows.push({
+        id: crypto.randomUUID(),
+        customer_id: match.customerId,
+        lead_id: match.leadId,
+        direction,
+        from_email: fromAddr || ownAddress,
+        from_name: parsed.from?.value?.[0]?.name || null,
+        to_email: toAddrs.join(', ') || null,
+        subject: parsed.subject || '(ללא נושא)',
+        snippet: snippetOf(parsed.text, parsed.html),
+        body_text: parsed.text || null,
+        body_html: typeof parsed.html === 'string' ? parsed.html : null,
+        message_id: parsed.messageId || null,
+        thread_id: resolveThreadId(parsed),
+        in_reply_to: parsed.inReplyTo || null,
+        sent_at: (parsed.date || message.internalDate || new Date()).toISOString(),
+      });
+    }
+
+    return { maxUid, rows };
+  } finally {
+    lock.release();
+  }
+}
+
+/**
+ * מסנכרן מיילים מ-Gmail (IMAP, אותה סיסמת אפליקציה של SMTP_USER/SMTP_PASS) לטבלת emails,
+ * ומשייך כל מייל ללקוח/ליד לפי כתובת המייל שלו.
+ */
+export async function runGmailSync(env) {
+  const user = env.SMTP_USER;
+  const pass = env.SMTP_PASS;
+  if (!user || !pass) {
+    return { ok: false, statusCode: 503, error: 'Gmail לא מוגדר (צריך SMTP_USER + SMTP_PASS — אותם משתנים ששימוש לשליחת מיילים)' };
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: false, statusCode: 503, error: 'Database not configured' };
+  }
+
+  const [{ data: customers }, { data: leads }, { data: settingsRow }] = await Promise.all([
+    supabase.from('customers').select('id, email'),
+    supabase.from('leads').select('id, email'),
+    supabase.from('settings').select('value').eq('key', SETTINGS_KEY).maybeSingle(),
+  ]);
+
+  const byEmail = new Map();
+  for (const c of customers || []) {
+    if (c.email) byEmail.set(normalizeEmailKey(c.email), { customerId: c.id, leadId: null });
+  }
+  for (const l of leads || []) {
+    const key = normalizeEmailKey(l.email);
+    if (l.email && !byEmail.has(key)) byEmail.set(key, { customerId: null, leadId: l.id });
+  }
+
+  const cursor = settingsRow?.value || {};
+  const sinceDate = new Date(Date.now() - INITIAL_BACKFILL_DAYS * 24 * 60 * 60 * 1000);
+
+  const client = new ImapFlow({
+    host: env.IMAP_HOST || 'imap.gmail.com',
+    port: Number(env.IMAP_PORT) || 993,
+    secure: true,
+    auth: { user, pass },
+    logger: false,
+  });
+
+  let totalRows = [];
+  const nextCursor = { ...cursor };
+
+  try {
+    await client.connect();
+
+    const sentPath = await findSentMailbox(client);
+    const mailboxes = [
+      { path: 'INBOX', direction: 'inbound', key: 'INBOX' },
+      { path: sentPath, direction: 'outbound', key: 'SENT' },
+    ];
+
+    for (const mb of mailboxes) {
+      const sinceUid = Number(cursor[mb.key]?.lastUid) || 0;
+      const { maxUid, rows } = await syncMailbox({
+        client,
+        path: mb.path,
+        direction: mb.direction,
+        byEmail,
+        ownAddress: user,
+        sinceUid,
+        sinceDate,
+      });
+      nextCursor[mb.key] = { lastUid: maxUid };
+      totalRows = totalRows.concat(rows);
+    }
+  } catch (err) {
+    logError('gmail-sync', err);
+    return { ok: false, statusCode: 500, error: err.message || String(err) };
+  } finally {
+    try {
+      await client.logout();
+    } catch {
+      // כבר מנותק
+    }
+  }
+
+  if (totalRows.length) {
+    const { error } = await supabase.from('emails').upsert(totalRows, { onConflict: 'message_id' });
+    if (error) {
+      logError('gmail-sync:upsert', error);
+      return { ok: false, statusCode: 500, error: error.message };
+    }
+  }
+
+  await supabase.from('settings').upsert({ id: 'gmail_sync', key: SETTINGS_KEY, value: nextCursor }, { onConflict: 'key' });
+
+  const matched = totalRows.filter((r) => r.customer_id || r.lead_id).length;
+  return { ok: true, statusCode: 200, synced: totalRows.length, matched };
+}
+
+/** שולח תגובה דרך Gmail SMTP (אותו חשבון ששולח כבר היום), עם כותרות threading, ושומר שורה בטבלת emails. */
+export async function sendGmailReply(body, env) {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, FROM_EMAIL, FROM_NAME } = env;
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+    return { ok: false, statusCode: 503, error: 'Email not configured on server' };
+  }
+
+  const { to, subject, text, html, inReplyToMessageId, threadId, customerId, leadId } = body || {};
+  if (!to || !subject) {
+    return { ok: false, statusCode: 400, error: 'Missing to or subject' };
+  }
+
+  const port = Number(SMTP_PORT) || 587;
+  const transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port,
+    secure: port === 465,
+    requireTLS: port !== 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
+
+  const from = `"${FROM_NAME || 'קליכיף'}" <${FROM_EMAIL || SMTP_USER}>`;
+
+  let info;
+  try {
+    info = await transporter.sendMail({
+      from,
+      to,
+      subject,
+      text: text || (html ? String(html).replace(/<[^>]+>/g, '') : ''),
+      html: html || undefined,
+      ...(inReplyToMessageId ? { inReplyTo: inReplyToMessageId, references: inReplyToMessageId } : {}),
+    });
+  } catch (err) {
+    const message = err.message || String(err);
+    const authFailed = /Invalid login|535|Authentication failed|EAUTH|bad credentials/i.test(message);
+    return {
+      ok: false,
+      statusCode: 500,
+      error: message,
+      hint: authFailed
+        ? 'אימות SMTP נכשל. ב-Gmail צריך "סיסמת אפליקציה" ב-SMTP_PASS (לא סיסמת הגוגל הרגילה).'
+        : undefined,
+    };
+  }
+
+  const supabase = getSupabase();
+  const row = {
+    id: crypto.randomUUID(),
+    customer_id: customerId || null,
+    lead_id: leadId || null,
+    direction: 'outbound',
+    from_email: FROM_EMAIL || SMTP_USER,
+    from_name: FROM_NAME || 'קליכיף',
+    to_email: Array.isArray(to) ? to.join(', ') : to,
+    subject,
+    snippet: snippetOf(text, html),
+    body_text: text || null,
+    body_html: html || null,
+    message_id: info.messageId || null,
+    thread_id: threadId || info.messageId || null,
+    in_reply_to: inReplyToMessageId || null,
+    sent_at: new Date().toISOString(),
+  };
+
+  if (supabase) {
+    const { error } = await supabase.from('emails').insert(row);
+    if (error) logError('gmail-reply:insert', error);
+  }
+
+  return { ok: true, statusCode: 200, email: row };
+}

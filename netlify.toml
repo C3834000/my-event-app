@@ -21,6 +21,10 @@
 [functions."leads-cleanup"]
   schedule = "0 5 * * *"
 
+# סנכרון מיילים מ-Gmail (c3834000@gmail.com) כל 15 דקות
+[functions."gmail-sync"]
+  schedule = "*/15 * * * *"
+
 # API rewrites MUST stay above the SPA fallback. force=true prevents
 # a published file (or _redirects catch-all) from serving index.html.
 [[redirects]]
@@ -98,6 +102,18 @@
 [[redirects]]
   from   = "/api/db"
   to     = "/.netlify/functions/db"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/api/gmail-sync"
+  to     = "/.netlify/functions/gmail-sync"
+  status = 200
+  force  = true
+
+[[redirects]]
+  from   = "/api/gmail-reply"
+  to     = "/.netlify/functions/gmail-reply"
   status = 200
   force  = true
 

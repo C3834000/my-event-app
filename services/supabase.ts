@@ -1,4 +1,4 @@
-import type { Customer, AppEvent, Lead, Task, CustomForm } from '../types';
+import type { Customer, AppEvent, Lead, Task, CustomForm, Email } from '../types';
 
 // In development, call the local Express server on port 4000.
 // In production (Netlify), call the function directly (avoids _redirects / SPA ordering issues).
@@ -128,6 +128,16 @@ export const tasksService = {
   async bulkInsert(tasks: Task[]): Promise<void> {
     if (!tasks.length) return;
     return dbRequest('bulkInsert', 'tasks', { data: tasks });
+  },
+};
+
+// ===== EMAILS =====
+export const emailsService = {
+  async getAll(): Promise<Email[]> {
+    return dbRequest('getAll', 'emails', { orderBy: 'sentAt', orderAsc: false });
+  },
+  async delete(id: string): Promise<void> {
+    return dbRequest('delete', 'emails', { id });
   },
 };
 

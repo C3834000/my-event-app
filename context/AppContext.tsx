@@ -1,15 +1,16 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { AppEvent, Customer, Lead, Task, EventStatus, PaymentStatus, EventType, TaskPriority, LeadStatus, CustomForm, FormField, TaskCategory, PaymentMethod } from '../types';
+import { AppEvent, Customer, Lead, Task, EventStatus, PaymentStatus, EventType, TaskPriority, LeadStatus, CustomForm, FormField, TaskCategory, PaymentMethod, Email } from '../types';
 import { mockCustomers, mockEvents, mockLeads, mockTasks } from '../services/mockData';
-import { sendEmail, formatSendEmailError } from '../services/emailService';
-import { 
-  customersService, 
-  eventsService, 
-  leadsService, 
-  tasksService, 
-  formsService, 
+import { sendEmail, formatSendEmailError, syncGmailNow, sendGmailReply, ReplyEmailParams, GmailSyncResult } from '../services/emailService';
+import {
+  customersService,
+  eventsService,
+  leadsService,
+  tasksService,
+  formsService,
   settingsService,
+  emailsService,
   migrateFromLocalStorage
 } from '../services/supabase';
 import { buildPaymentDateUpdates } from '../services/paymentDateImport';
@@ -179,6 +180,12 @@ interface AppContextType {
   };
   toggleIntegration: (service: 'google' | 'outlook') => Promise<boolean>;
   uploadAllToCloud: () => Promise<{ success: boolean; message: string }>;
+  emails: Email[];
+  emailsSyncing: boolean;
+  /** מריץ סנכרון מיידי מול Gmail (אותו דבר שרץ אוטומטית כל 15 דקות) */
+  syncGmail: () => Promise<GmailSyncResult>;
+  /** שולח תגובה אמיתית דרך Gmail ושומר אותה בלוח המיילים */
+  replyToEmail: (params: ReplyEmailParams) => Promise<{ ok: boolean; email?: Email; error?: string; hint?: string }>;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -218,6 +225,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [emails, setEmails] = useState<Email[]>([]);
+  const [emailsSyncing, setEmailsSyncing] = useState(false);
   const [customForms, setCustomForms] = useState<CustomForm[]>([DEFAULT_FORM]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
@@ -1453,6 +1462,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setKpis({ openDebt: debt, projectedIncome: projected, totalRevenue: total, availableClickers: 500 - reservedClickers });
   }, [events]);
 
+  const loadEmails = async () => {
+    try {
+      const rows = await emailsService.getAll();
+      setEmails(rows || []);
+    } catch (err) {
+      console.warn('טעינת מיילים נכשלה:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadEmails();
+  }, []);
+
+  const syncGmail = async (): Promise<GmailSyncResult> => {
+    setEmailsSyncing(true);
+    try {
+      const result = await syncGmailNow();
+      if (result.ok) await loadEmails();
+      return result;
+    } finally {
+      setEmailsSyncing(false);
+    }
+  };
+
+  const replyToEmail = async (params: ReplyEmailParams) => {
+    const result = await sendGmailReply(params);
+    if (result.ok && result.email) {
+      setEmails((prev) => [result.email, ...prev]);
+    }
+    return result;
+  };
+
   const uploadAllToCloud = async (): Promise<{ success: boolean; message: string }> => {
     try {
       const results = { customers: 0, events: 0, leads: 0, tasks: 0 };
@@ -1472,7 +1513,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addCustomer, updateCustomer, getCustomerById, addLead, updateLeadStatus, updateLead, convertLeadToCustomer, cleanupConvertedLeads, handlePublicBookingSubmit,
       sendBookingEmail, sendPortalEmail, sendEventUpdateEmail, addTask, updateTask, toggleTask, updateTaskProgress, deleteTask, importEvents, applyPaymentDatesFromImport, importCustomers, importTasks, importTaskObjects, importLeads, kpis, integrations, toggleIntegration, syncRemoteBookings,
       addCustomForm, updateCustomForm, deleteCustomForm, getFormById, syncAllEventsWithCustomers, uploadAllToCloud, reloadFromCloud,
-      cloudSyncOk, lastCloudSyncAt
+      cloudSyncOk, lastCloudSyncAt, emails, emailsSyncing, syncGmail, replyToEmail
     }}>
       {children}
     </AppContext.Provider>

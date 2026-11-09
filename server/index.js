@@ -23,6 +23,17 @@ function loadGreenInvoiceLogic() {
   return greenInvoiceModPromise;
 }
 
+const gmailLogicUrl = pathToFileURL(
+  path.join(__dirname, '..', 'netlify', 'functions', 'lib', 'gmailLogic.mjs')
+).href;
+let gmailModPromise;
+function loadGmailLogic() {
+  if (!gmailModPromise) {
+    gmailModPromise = import(gmailLogicUrl);
+  }
+  return gmailModPromise;
+}
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -99,6 +110,30 @@ app.post('/api/green-invoice', async (req, res) => {
   } catch (err) {
     console.error('Green Invoice:', err);
     res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
+
+// POST /api/gmail-sync — סנכרון מיילים מ-Gmail (אותה לוגיקה כמו Netlify, כולל ה-cron)
+app.post('/api/gmail-sync', async (req, res) => {
+  try {
+    const mod = await loadGmailLogic();
+    const result = await mod.runGmailSync(process.env);
+    res.status(result.statusCode || 200).json(result);
+  } catch (err) {
+    console.error('Gmail sync:', err);
+    res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
+// POST /api/gmail-reply — שליחת תגובה דרך Gmail + שמירה בטבלת emails
+app.post('/api/gmail-reply', async (req, res) => {
+  try {
+    const mod = await loadGmailLogic();
+    const result = await mod.sendGmailReply(req.body || {}, process.env);
+    res.status(result.statusCode || 200).json(result);
+  } catch (err) {
+    console.error('Gmail reply:', err);
+    res.status(500).json({ ok: false, error: err.message || String(err) });
   }
 });
 
