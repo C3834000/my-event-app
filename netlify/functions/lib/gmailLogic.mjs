@@ -111,6 +111,8 @@ async function fetchBatch({ client, supabase, path, direction, byEmail, ownAddre
       const toAddrs = addressList(parsed.to);
       const otherParty = direction === 'inbound' ? [fromAddr] : toAddrs;
       const match = matchParty(otherParty, byEmail);
+      // שומרים רק מיילים של לקוחות/לידים שקיימים במערכת — השאר מדלגים (לא נשמרים ולא מעלים צרופות)
+      if (!match.customerId && !match.leadId) continue;
 
       const messageKey = (parsed.messageId || `${path}-${message.uid}`).replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 120);
       const attachments = await uploadAttachments(supabase, messageKey, parsed.attachments);
