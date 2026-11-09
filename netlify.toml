@@ -21,9 +21,9 @@
 [functions."leads-cleanup"]
   schedule = "0 5 * * *"
 
-# סנכרון מיילים מ-Gmail (c3834000@gmail.com) כל 15 דקות
+# סנכרון מיילים מ-Gmail (c3834000@gmail.com) כל 5 דקות — כשלוח המיילים פתוח בדפדפן יש סנכרון תכוף יותר (ראו MailBoard.tsx)
 [functions."gmail-sync"]
-  schedule = "*/15 * * * *"
+  schedule = "*/5 * * * *"
 
 # API rewrites MUST stay above the SPA fallback. force=true prevents
 # a published file (or _redirects catch-all) from serving index.html.

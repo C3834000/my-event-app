@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Email } from '../types';
 import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users } from 'lucide-react';
@@ -33,6 +33,21 @@ const MailBoard: React.FC = () => {
     setToast(msg);
     setTimeout(() => setToast(null), 4000);
   };
+
+  const emailsSyncingRef = useRef(emailsSyncing);
+  emailsSyncingRef.current = emailsSyncing;
+
+  // סנכרון "חי": מיד כשנכנסים לעמוד, ואז ברקע — כל 20 שניות כשיש שיחה פתוחה (מעקב אחרי תכתובת פעילה),
+  // וכל 60 שניות כשרק מסתכלים על הרשימה. בלי זה, מיילים חדשים היו מחכים עד לריצת ה-cron (כל 5 דקות).
+  useEffect(() => {
+    if (!emailsSyncingRef.current) void syncGmail();
+    const intervalMs = selectedThreadId ? 20000 : 60000;
+    const id = window.setInterval(() => {
+      if (!emailsSyncingRef.current) void syncGmail();
+    }, intervalMs);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedThreadId]);
 
   const leadById = useMemo(() => new Map(leads.map((l) => [l.id, l])), [leads]);
 
