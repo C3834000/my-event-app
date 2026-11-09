@@ -16,7 +16,6 @@ import {
   getTopCategories,
   getTopCategory,
   isHiddenTop,
-  loadCategoryConfigFromCloud,
   topCategoryMeta,
   useCategoryConfig,
 } from '../data/taskCategories';
@@ -327,10 +326,6 @@ const TasksBoard: React.FC = () => {
     const t = window.setTimeout(() => setToast(null), 2800);
     return () => window.clearTimeout(t);
   }, [toast]);
-
-  useEffect(() => {
-    void loadCategoryConfigFromCloud();
-  }, []);
 
   useEffect(() => {
     if (topFilter === 'all') return;
