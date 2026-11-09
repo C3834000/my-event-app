@@ -25,7 +25,8 @@ type Props = {
   pinned: boolean;
   onSelect: () => void;
   onToggle: () => void;
-  onPin: () => void;
+  /** בלי onPin (למשל בארכיון) — לא מוצג כוכב */
+  onPin?: () => void;
 };
 
 /** שורה אחת במשימות: סימון, כותרת, תת-קטגוריה, תאריך, תתי-משימות וכוכב פוקוס. */
@@ -80,6 +81,7 @@ const TaskRow: React.FC<Props> = ({ task, meta, todayKey, selected, pinned, onSe
       )}
       {due && <span className={`text-[11px] font-bold shrink-0 ${overdue ? 'text-rose-600' : 'text-slate-500'}`}>{due}</span>}
 
+      {onPin && (
       <button
         type="button"
         title={pinned ? 'הסר מהפוקוס' : 'לפוקוס היום'}
@@ -92,6 +94,7 @@ const TaskRow: React.FC<Props> = ({ task, meta, todayKey, selected, pinned, onSe
       >
         <Star size={16} className={pinned ? 'fill-amber-400' : ''} />
       </button>
+      )}
     </div>
   );
 };

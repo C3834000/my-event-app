@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, TaskCategory, TaskPriority, TaskFrequency } from '../types';
-import { Plus, X, Upload, Search, ChevronDown, ListTree, Tags, MousePointerClick } from 'lucide-react';
+import { Plus, X, Upload, Search, ChevronDown, ListTree, Tags, MousePointerClick, Lock, LockOpen } from 'lucide-react';
 import { parseCSV } from '../services/utils';
 import { buildTasksSeed } from '../data/tasksSeed';
 import {
+  ARCHIVE_SUB,
+  CATEGORY_PALETTE,
   FALLBACK_SUB,
   TopCategoryId,
   TopCategoryMeta,
@@ -116,6 +118,31 @@ const cleanupRows = (tasks: Task[]): { task: Task; reasons: CleanupReason[] }[] 
   return rows;
 };
 
+/**
+ * נעילת הארכיון. נשמר רק גיבוב SHA-256 של הסיסמה, לא הסיסמה עצמה.
+ * זו נעילה בממשק בלבד: המשימות עצמן נטענות לדפדפן כמו כל השאר.
+ */
+const ARCHIVE_PASSWORD_SHA256 = '1acc92d4092f6b0fcdb8dc6789d0d413630fcfb766045acca0386264b1698837';
+const ARCHIVE_UNLOCK_KEY = 'tasks-archive-unlocked';
+
+const sha256Hex = async (text: string) => {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+};
+
+const readArchiveUnlocked = () => {
+  try {
+    return sessionStorage.getItem(ARCHIVE_UNLOCK_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const ARCHIVE_META: TopCategoryMeta = (() => {
+  const { label: _colorName, ...classes } = CATEGORY_PALETTE.slate;
+  return { ...classes, id: '__archive__', label: 'ארכיון', color: 'slate', hidden: true, defaultSub: ARCHIVE_SUB };
+})();
+
 const CategoryGroup: React.FC<{
   meta: TopCategoryMeta;
   focus: Task[];
@@ -130,7 +157,8 @@ const CategoryGroup: React.FC<{
   onToggleTask: (id: string) => void;
   onSelectTask: (task: Task) => void;
   onPin: (task: Task) => void;
-}> = ({ meta, focus, rest, openCount, expanded, showAllRest, todayKey, selectedId, onToggleGroup, onShowMore, onToggleTask, onSelectTask, onPin }) => {
+  archive?: boolean;
+}> = ({ meta, focus, rest, openCount, expanded, showAllRest, todayKey, selectedId, onToggleGroup, onShowMore, onToggleTask, onSelectTask, onPin, archive }) => {
   const shownRest = showAllRest ? rest : rest.slice(0, REST_PAGE);
   const more = rest.length - shownRest.length;
   const slots = Math.max(0, MAX_FOCUS_PER_CATEGORY - focus.length);
@@ -144,7 +172,7 @@ const CategoryGroup: React.FC<{
       selected={selectedId === task.id}
       onSelect={() => onSelectTask(task)}
       onToggle={() => onToggleTask(task.id)}
-      onPin={() => onPin(task)}
+      onPin={archive ? undefined : () => onPin(task)}
     />
   );
   return (
@@ -157,19 +185,25 @@ const CategoryGroup: React.FC<{
       >
         <span className="truncate">{meta.label}</span>
         <span className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[11px] font-bold opacity-90">⭐ {focus.length}/{MAX_FOCUS_PER_CATEGORY}</span>
+          {!archive && <span className="text-[11px] font-bold opacity-90">⭐ {focus.length}/{MAX_FOCUS_PER_CATEGORY}</span>}
           <span className="bg-white/25 rounded-full px-2 py-0.5 text-xs font-bold">{openCount}</span>
           <ChevronDown size={16} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
         </span>
       </button>
-      <div className={`px-2 py-2 space-y-1 ${meta.focusSection} border-b border-dashed`}>
-        {focus.map((task) => row(task, true))}
-        {slots > 0 && (
-          <p className="px-1 text-[11px] font-bold text-slate-500">
-            ＋ עוד {slots} {slots === 1 ? 'מקום' : 'מקומות'} בפוקוס. לחץ ★ על משימה
-          </p>
-        )}
-      </div>
+      {archive ? (
+        <p className={`px-3 py-1.5 text-[11px] font-bold text-slate-600 border-b border-dashed ${meta.focusSection}`}>
+          כדי להחזיר משימה ללוח, פתח אותה ושנה את התחום.
+        </p>
+      ) : (
+        <div className={`px-2 py-2 space-y-1 ${meta.focusSection} border-b border-dashed`}>
+          {focus.map((task) => row(task, true))}
+          {slots > 0 && (
+            <p className="px-1 text-[11px] font-bold text-slate-500">
+              ＋ עוד {slots} {slots === 1 ? 'מקום' : 'מקומות'} בפוקוס. לחץ ★ על משימה
+            </p>
+          )}
+        </div>
+      )}
       {expanded && (
         <div className="px-2 py-2 space-y-1">
           {shownRest.length === 0 && <p className="px-1 text-[11px] font-bold text-slate-400">אין משימות נוספות בתצוגה הזו</p>}
@@ -204,6 +238,11 @@ const useIsDesktop = () => {
 const TasksBoard: React.FC = () => {
   const { tasks, addTask, updateTask, toggleTask, deleteTask, importTasks, importTaskObjects } = useApp();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [archiveUnlocked, setArchiveUnlocked] = useState(readArchiveUnlocked);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [passwordValue, setPasswordValue] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
   const isDesktop = useIsDesktop();
   const [searchTerm, setSearchTerm] = useState('');
   const [topFilter, setTopFilter] = useState<TopCategoryId | 'all'>('all');
@@ -306,6 +345,52 @@ const TasksBoard: React.FC = () => {
   }, [tasks, showHidden, topCategories]);
 
   const junk = useMemo(() => cleanupRows(tasks), [tasks]);
+
+  const archiveTasks = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return tasks
+      .filter((t) => t.category === ARCHIVE_SUB && (!q || taskBlob(t).includes(q)))
+      .sort((a, b) => compareRest(a, b, todayKey));
+  }, [tasks, searchTerm, todayKey]);
+  const archiveCount = useMemo(() => tasks.filter((t) => t.category === ARCHIVE_SUB).length, [tasks]);
+
+  const onArchiveChip = () => {
+    if (archiveUnlocked) {
+      setArchiveOpen((v) => !v);
+      return;
+    }
+    setPasswordValue('');
+    setPasswordError(false);
+    setPasswordOpen(true);
+  };
+
+  const submitPassword = async () => {
+    const ok = (await sha256Hex(passwordValue.trim())) === ARCHIVE_PASSWORD_SHA256;
+    if (!ok) {
+      setPasswordError(true);
+      return;
+    }
+    try {
+      sessionStorage.setItem(ARCHIVE_UNLOCK_KEY, '1');
+    } catch {
+      // sessionStorage לא זמין — פתוח רק עד רענון
+    }
+    setArchiveUnlocked(true);
+    setArchiveOpen(true);
+    setPasswordOpen(false);
+    setPasswordValue('');
+  };
+
+  const lockArchive = () => {
+    try {
+      sessionStorage.removeItem(ARCHIVE_UNLOCK_KEY);
+    } catch {
+      // ignore
+    }
+    if (selectedId && tasks.find((t) => t.id === selectedId)?.category === ARCHIVE_SUB) setSelectedId(null);
+    setArchiveUnlocked(false);
+    setArchiveOpen(false);
+  };
 
   const categoryOptions = (current: TaskCategory): TaskCategory[] =>
     taskCategories.includes(current) ? taskCategories : [current, ...taskCategories];
@@ -512,6 +597,18 @@ const TasksBoard: React.FC = () => {
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={onArchiveChip}
+          className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold border transition-all flex items-center gap-1 ${
+            archiveUnlocked && archiveOpen ? ARCHIVE_META.chipOn : ARCHIVE_META.chip
+          }`}
+          title={archiveUnlocked ? 'הצג / הסתר ארכיון' : 'ארכיון (נדרשת סיסמה)'}
+        >
+          {archiveUnlocked ? <LockOpen size={12} /> : <Lock size={12} />}
+          ארכיון
+          {archiveUnlocked && <span className="opacity-70"> {archiveCount}</span>}
+        </button>
       </div>
 
       {tabBar(false)}
@@ -537,6 +634,31 @@ const TasksBoard: React.FC = () => {
 
       <div className="md:grid md:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)] md:gap-3 md:items-start md:pl-9 min-w-0">
         <div className="flex flex-col gap-3 min-w-0 md:max-h-[calc(100vh-200px)] md:min-h-[540px] md:overflow-y-auto md:pl-1">
+          {archiveUnlocked && archiveOpen && (
+            <div className="shrink-0 space-y-1">
+              <div className="flex justify-end">
+                <button type="button" onClick={lockArchive} className="text-[11px] font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1">
+                  <Lock size={12} /> נעל ארכיון
+                </button>
+              </div>
+              <CategoryGroup
+                archive
+                meta={ARCHIVE_META}
+                focus={[]}
+                rest={archiveTasks}
+                openCount={archiveTasks.length}
+                expanded={openCols[ARCHIVE_META.id] !== false}
+                showAllRest={!!restExpanded[ARCHIVE_META.id]}
+                todayKey={todayKey}
+                selectedId={selectedId}
+                onToggleGroup={() => toggleColumn(ARCHIVE_META.id)}
+                onShowMore={() => setRestExpanded((prev) => ({ ...prev, [ARCHIVE_META.id]: true }))}
+                onToggleTask={(id) => toggleTask(id)}
+                onSelectTask={openTask}
+                onPin={pinToday}
+              />
+            </div>
+          )}
           {columns.map((col) => (
             <CategoryGroup
               key={col.meta.id}
@@ -612,6 +734,47 @@ const TasksBoard: React.FC = () => {
       >
         <Plus size={22} />
       </button>
+
+      {passwordOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4" dir="rtl">
+          <form
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-5 space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitPassword();
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-slate-800 flex items-center gap-1.5">
+                <Lock size={16} /> כניסה לארכיון
+              </h3>
+              <button type="button" onClick={() => setPasswordOpen(false)} className="text-slate-400 hover:text-slate-800" aria-label="סגור">
+                <X size={18} />
+              </button>
+            </div>
+            <input
+              type="password"
+              inputMode="numeric"
+              autoFocus
+              autoComplete="off"
+              placeholder="סיסמה"
+              aria-label="סיסמה"
+              className={`w-full p-2.5 bg-slate-50 border rounded-xl outline-none font-bold text-center tracking-widest ${
+                passwordError ? 'border-rose-400' : 'border-slate-200 focus:border-sky-300'
+              }`}
+              value={passwordValue}
+              onChange={(e) => {
+                setPasswordValue(e.target.value);
+                setPasswordError(false);
+              }}
+            />
+            {passwordError && <p className="text-xs font-bold text-rose-600">סיסמה שגויה</p>}
+            <button type="submit" disabled={!passwordValue.trim()} className="w-full bg-slate-800 text-white py-2.5 rounded-xl font-black disabled:opacity-40">
+              כניסה
+            </button>
+          </form>
+        </div>
+      )}
 
       {categoriesOpen && (
         <CategoryManager tasks={tasks} updateTask={updateTask} onClose={() => setCategoriesOpen(false)} />
