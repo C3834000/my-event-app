@@ -68,3 +68,63 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
     return { success: false, error: message };
   }
 }
+
+function apiUrl(path: string): string {
+  const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+  return isProduction ? `/.netlify/functions/${path}` : `http://localhost:4000/api/${path}`;
+}
+
+export interface GmailSyncResult {
+  ok: boolean;
+  synced?: number;
+  matched?: number;
+  error?: string;
+  hint?: string;
+}
+
+/** מריץ סנכרון מיידי של תיבת ה-Gmail (אותו דבר שה-cron מריץ כל 15 דקות). */
+export async function syncGmailNow(): Promise<GmailSyncResult> {
+  try {
+    const res = await fetch(apiUrl('gmail-sync'), { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    return { ok: !!data.ok, synced: data.synced, matched: data.matched, error: data.error, hint: data.hint };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export interface OutgoingAttachment {
+  filename: string;
+  contentType?: string;
+  /** תוכן הקובץ מקודד ב-base64 (בלי התחילית data:...;base64,) */
+  contentBase64: string;
+}
+
+export interface ReplyEmailParams {
+  to: string;
+  subject: string;
+  text?: string;
+  html?: string;
+  inReplyToMessageId?: string;
+  threadId?: string;
+  customerId?: string | null;
+  leadId?: string | null;
+  attachments?: OutgoingAttachment[];
+}
+
+/** שולח תגובה אמיתית מתוך Gmail (עם כותרות threading) ושומר אותה בטבלת emails. */
+export async function sendGmailReply(
+  params: ReplyEmailParams
+): Promise<{ ok: boolean; email?: any; error?: string; hint?: string }> {
+  try {
+    const res = await fetch(apiUrl('gmail-reply'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...params, to: sanitizeEmailAddress(params.to) }),
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: !!data.ok, email: data.email, error: data.error, hint: data.hint };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}

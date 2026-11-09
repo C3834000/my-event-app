@@ -67,6 +67,7 @@ export type TaskCategory =
   | 'משפחה'
   | 'תוכנית מדע'
   | 'תוכנית קיץ'
+  | 'הקליק הנכון'
   | 'שיווק'
   | 'תוכן'
   | 'תוכנה'
@@ -79,6 +80,7 @@ export type TaskCategory =
   | 'ציוד'
   | 'שיחות'
   | 'מערכת'
+  | 'גיוס'
   | 'רעיונות'
   | 'כללי'
   | 'דחוף'
@@ -87,6 +89,35 @@ export type TaskCategory =
   | 'ארכיון'
   /** קטגוריות שהמשתמש הוסיף בניהול הקטגוריות */
   | (string & {});
+
+export type EmailDirection = 'inbound' | 'outbound';
+
+export interface EmailAttachment {
+  filename: string;
+  contentType?: string;
+  size?: number;
+  url: string;
+}
+
+export interface Email {
+  id: string;
+  customerId?: string | null;
+  leadId?: string | null;
+  direction: EmailDirection;
+  fromEmail: string;
+  fromName?: string;
+  toEmail?: string;
+  subject?: string;
+  snippet?: string;
+  bodyText?: string;
+  bodyHtml?: string;
+  messageId?: string;
+  threadId?: string;
+  inReplyTo?: string;
+  sentAt?: string;
+  createdAt?: string;
+  attachments?: EmailAttachment[];
+}
 
 export interface Customer {
   id: string;
