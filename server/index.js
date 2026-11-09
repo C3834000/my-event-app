@@ -113,8 +113,8 @@ app.post('/api/green-invoice', async (req, res) => {
   }
 });
 
-// POST /api/gmail-sync — סנכרון מיילים מ-Gmail (אותה לוגיקה כמו Netlify, כולל ה-cron)
-app.post('/api/gmail-sync', async (req, res) => {
+// POST /api/gmail-sync-now — סנכרון מיילים מ-Gmail לפי דרישה (אותה לוגיקה כמו ה-cron, בלי הגבלת ה-schedule של Netlify)
+app.post('/api/gmail-sync-now', async (req, res) => {
   try {
     const mod = await loadGmailLogic();
     const result = await mod.runGmailSync(process.env);

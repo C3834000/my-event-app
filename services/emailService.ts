@@ -85,7 +85,7 @@ export interface GmailSyncResult {
 /** מריץ סנכרון מיידי של תיבת ה-Gmail (אותו דבר שה-cron מריץ כל 15 דקות). */
 export async function syncGmailNow(): Promise<GmailSyncResult> {
   try {
-    const res = await fetch(apiUrl('gmail-sync'), { method: 'POST' });
+    const res = await fetch(apiUrl('gmail-sync-now'), { method: 'POST' });
     const data = await res.json().catch(() => ({}));
     return { ok: !!data.ok, synced: data.synced, matched: data.matched, error: data.error, hint: data.hint };
   } catch (err) {
