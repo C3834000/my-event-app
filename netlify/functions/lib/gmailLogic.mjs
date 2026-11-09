@@ -52,6 +52,21 @@ async function findSentMailbox(client) {
   }
 }
 
+/** פרסומות, דיוורים ומיילים אוטומטיים — לא נשמרים גם אם הכתובת שייכת ללקוח. */
+function isBulkOrAutomated(parsed, fromAddr) {
+  const headerText = (name) => {
+    const v = parsed.headers?.get?.(name);
+    if (v == null) return '';
+    return String(typeof v === 'object' && 'text' in v ? v.text : v).toLowerCase();
+  };
+  if (parsed.headers?.has?.('list-unsubscribe') || parsed.headers?.has?.('list-id')) return true;
+  if (['bulk', 'list', 'junk'].includes(headerText('precedence'))) return true;
+  const auto = headerText('auto-submitted');
+  if (auto && auto !== 'no') return true;
+  if (/^(no-?reply|do-?not-?reply|mailer-daemon|postmaster|newsletter|marketing|news|info|updates?|notifications?)@/i.test(fromAddr)) return true;
+  return false;
+}
+
 function matchParty(addresses, byEmail) {
   for (const addr of addresses) {
     const hit = byEmail.get(normalizeEmailKey(addr));
@@ -113,6 +128,7 @@ async function fetchBatch({ client, supabase, path, direction, byEmail, ownAddre
       const match = matchParty(otherParty, byEmail);
       // שומרים רק מיילים של לקוחות/לידים שקיימים במערכת — השאר מדלגים (לא נשמרים ולא מעלים צרופות)
       if (!match.customerId && !match.leadId) continue;
+      if (isBulkOrAutomated(parsed, fromAddr)) continue;
 
       const messageKey = (parsed.messageId || `${path}-${message.uid}`).replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 120);
       const attachments = await uploadAttachments(supabase, messageKey, parsed.attachments);
