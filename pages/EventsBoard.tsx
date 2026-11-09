@@ -4,7 +4,9 @@ import { useApp } from '../context/AppContext';
 import { EventStatus, PaymentStatus, EventType, AppEvent, PaymentMethod } from '../types';
 import { Plus, Search, Calendar as CalendarIcon, Download, X, MapPin, Users, Clock, ChevronDown, ChevronUp, MousePointer2, Info, Upload, Edit, UserPlus, FileCheck } from 'lucide-react';
 import { exportToCSV, parseCSV } from '../services/utils';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import EventTaskModal from '../components/EventTaskModal';
+import { tasksForEvent } from '../utils/eventTasks';
 import EditEventModal from '../components/EditEventModal';
 import { EVENT_TAGS } from '../constants/eventBoard';
 import { giDocTypeName } from '../services/greenInvoice';
@@ -173,8 +175,12 @@ const MultiSelectFilter: React.FC<{
 };
 
 const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCreateTask?: (event: AppEvent) => void }> = ({ event, onEdit, onCreateTask }) => {
-  const { getCustomerById, updateEvent, tasks } = useApp();
-  const linkedTask = tasks.find(t => t.id === event.taskId);
+  const { getCustomerById, updateEvent, updateTask, tasks } = useApp();
+  const linkedTasks = useMemo(() => tasksForEvent(tasks, event), [tasks, event]);
+  const unlinkTask = (taskId: string) => {
+    updateTask(taskId, { eventId: null });
+    if (event.taskId === taskId) updateEvent(event.id, { taskId: undefined });
+  };
   const customer = getCustomerById(event.customerId);
   const debt = event.amount - event.paidAmount;
   const isPaid = [PaymentStatus.Paid, PaymentStatus.PaidCash, PaymentStatus.PaidCredit, PaymentStatus.PaidCheck, PaymentStatus.PaidTransferL, PaymentStatus.PaidTransferH, PaymentStatus.PaidTransferM, PaymentStatus.PaidProvider].includes(event.paymentStatus);
@@ -294,36 +300,40 @@ const EventRow: React.FC<{ event: AppEvent; onEdit: (ev: AppEvent) => void; onCr
                     <option value="חשבונית מס/קבלה">✓ חשבונית מס/קבלה</option>
                     <option value="קבלה">✓ קבלה</option>
                   </select>
-                  {linkedTask ? (
-                    <span className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1 text-xs min-w-0">
-                      <span className="font-bold text-purple-600 shrink-0">📋</span>
-                      <span className="font-bold text-slate-800 truncate max-w-[14rem]" title={linkedTask.title}>{linkedTask.title}</span>
-                      {linkedTask.isCompleted ? (
+                  {linkedTasks.map(task => (
+                    <span key={task.id} className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1 text-xs min-w-0">
+                      <Link
+                        to={`/tasks?taskId=${encodeURIComponent(task.id)}`}
+                        onClick={e => e.stopPropagation()}
+                        className="flex items-center gap-1.5 min-w-0 hover:underline"
+                        title="פתח בלוח המשימות"
+                      >
+                        <span className="font-bold text-purple-600 shrink-0">📋</span>
+                        <span className={`font-bold truncate max-w-[14rem] ${task.isCompleted ? 'line-through text-slate-400' : 'text-slate-800'}`}>{task.title}</span>
+                      </Link>
+                      {task.isCompleted ? (
                         <span className="font-bold bg-green-500 text-white px-1.5 py-0.5 rounded shrink-0">✓</span>
-                      ) : linkedTask.progress > 0 ? (
-                        <span className="font-bold bg-blue-500 text-white px-1.5 py-0.5 rounded shrink-0">{linkedTask.progress}%</span>
-                      ) : (
-                        <span className="font-bold bg-slate-300 text-slate-700 px-1.5 py-0.5 rounded shrink-0">⏸️</span>
-                      )}
-                      <button 
+                      ) : task.progress > 0 ? (
+                        <span className="font-bold bg-blue-500 text-white px-1.5 py-0.5 rounded shrink-0">{task.progress}%</span>
+                      ) : null}
+                      <button
                         type="button"
-                        onClick={() => updateEvent(event.id, { taskId: undefined })}
+                        onClick={() => unlinkTask(task.id)}
                         className="text-red-500 hover:bg-red-50 p-0.5 rounded transition-all shrink-0"
-                        title="נתק משימה"
+                        title="נתק משימה מהאירוע"
                       >
                         <X size={13} />
                       </button>
                     </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onCreateTask?.(event)}
-                      className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-2.5 py-1.5 rounded-lg border border-purple-300 transition-all flex items-center gap-1"
-                    >
-                      <Plus size={13} />
-                      משימה
-                    </button>
-                  )}
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => onCreateTask?.(event)}
+                    className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-2.5 py-1.5 rounded-lg border border-purple-300 transition-all flex items-center gap-1"
+                  >
+                    <Plus size={13} />
+                    משימה
+                  </button>
               </div>
           </div>
       </div>
@@ -350,7 +360,6 @@ const EventsBoard: React.FC = () => {
   const [selectedEventStatuses, setSelectedEventStatuses] = useState<Set<string>>(new Set());
   const [dateFrom, setDateFrom] = useState(YEAR_START_KEY());
   const [dateTo, setDateTo] = useState(TODAY_KEY());
-  const [newTask, setNewTask] = useState({ title: '', category: 'כללי' as any, priority: 3 });
   const [cloudRefreshing, setCloudRefreshing] = useState(false);
   
   const ALL_EVENT_TYPE_VALUES = Object.values(EventType);
@@ -566,22 +575,6 @@ const EventsBoard: React.FC = () => {
       setCollapsedGroups(next);
   };
 
-  const handleCreateTaskForEvent = () => {
-    if (!creatingTaskForEvent || !newTask.title.trim()) return;
-    const taskId = `t_${Date.now()}`;
-    addTask({
-      id: taskId,
-      title: newTask.title,
-      category: newTask.category,
-      priority: newTask.priority,
-      isCompleted: false,
-      progress: 0,
-      estimatedTimeMin: 30,
-    });
-    updateEvent(creatingTaskForEvent.id, { taskId });
-    setNewTask({ title: '', category: 'כללי', priority: 3 });
-    setCreatingTaskForEvent(null);
-  };
 
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -831,40 +824,14 @@ const EventsBoard: React.FC = () => {
       )}
       
       {creatingTaskForEvent && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-xl font-bold">משימה חדשה – {creatingTaskForEvent.title}</h3>
-                  <button onClick={() => { setCreatingTaskForEvent(null); setNewTask({ title: '', category: 'כללי', priority: 3 }); }}><X size={24}/></button>
-                </div>
-                <div className="space-y-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-400">שם המשימה</label>
-                      <input className="w-full p-3 border rounded-lg font-bold" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} placeholder="הקלד שם משימה..."/>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-400">קטגוריה</label>
-                      <select className="w-full p-3 border rounded-lg font-bold" value={newTask.category} onChange={e => setNewTask({...newTask, category: e.target.value as any})}>
-                        <option value="קליכיף">קליכיף</option>
-                        <option value="אישי">אישי</option>
-                        <option value="בית">בית</option>
-                        <option value="תוכנית מדע">תוכנית מדע</option>
-                        <option value="שיווק">שיווק</option>
-                        <option value="כללי">כללי</option>
-                        <option value="דחוף / לסיווג">דחוף / לסיווג</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-400">עדיפות (1=נמוך, 5=גבוה)</label>
-                      <input type="number" min="1" max="5" className="w-full p-3 border rounded-lg font-bold" value={newTask.priority} onChange={e => setNewTask({...newTask, priority: Number(e.target.value)})}/>
-                    </div>
-                </div>
-                <div className="flex justify-end gap-3">
-                  <button onClick={() => { setCreatingTaskForEvent(null); setNewTask({ title: '', category: 'כללי', priority: 3 }); }} className="px-4 py-2 font-bold text-slate-400">ביטול</button>
-                  <button onClick={handleCreateTaskForEvent} className="bg-purple-600 text-white px-8 py-2 rounded-xl font-bold">צור משימה</button>
-                </div>
-            </div>
-        </div>
+        <EventTaskModal
+          event={creatingTaskForEvent}
+          onClose={() => setCreatingTaskForEvent(null)}
+          onCreate={task => {
+            addTask(task);
+            setCreatingTaskForEvent(null);
+          }}
+        />
       )}
     </div>
   );

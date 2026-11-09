@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowRight, Check, Plus, Star, Trash2, X } from 'lucide-react';
-import { SubTask, Task, TaskCategory, TaskFrequency, TaskPriority } from '../types';
+import { AppEvent, SubTask, Task, TaskCategory, TaskFrequency, TaskPriority } from '../types';
 import { TopCategoryMeta } from '../data/taskCategories';
 
 const TIME_PRESETS = [
@@ -54,13 +55,16 @@ type Props = {
   onDelete: () => void;
   /** בטלפון: חזרה לרשימה */
   onBack?: () => void;
+  /** האירוע שהמשימה קשורה אליו */
+  event?: AppEvent;
+  onUnlinkEvent?: () => void;
 };
 
 const label = 'text-[11px] font-black text-slate-500';
 const field = 'w-full mt-0.5 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-sky-300 font-bold text-sm';
 
 /** כל פרטי המשימה במסך אחד, עם עריכה ושמירה אוטומטית. */
-const TaskDetailsPanel: React.FC<Props> = ({ task, meta, categoryOptions, pinned, onUpdate, onToggle, onPin, onDelete, onBack }) => {
+const TaskDetailsPanel: React.FC<Props> = ({ task, meta, categoryOptions, pinned, onUpdate, onToggle, onPin, onDelete, onBack, event, onUnlinkEvent }) => {
   const [draft, setDraft] = useState<TextDraft>(() => draftOf(task));
   const [newSub, setNewSub] = useState('');
   // מתעדכן אחרי כל רינדור, כך שבניקוי (מעבר משימה / סגירה) הוא עדיין מחזיק את המשימה הקודמת והטיוטה שלה
@@ -152,6 +156,20 @@ const TaskDetailsPanel: React.FC<Props> = ({ task, meta, categoryOptions, pinned
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col gap-2.5 p-3 overflow-y-auto md:overflow-hidden">
+        {event && (
+          <div className="shrink-0 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-purple-50 border border-purple-200 text-sm">
+            <span className="shrink-0">📅</span>
+            <Link to={`/events?eventId=${encodeURIComponent(event.id)}`} className="flex-1 min-w-0 truncate font-bold text-purple-800 hover:underline" title="פתח את האירוע">
+              {event.title}
+              {event.date ? ` · ${event.date.slice(0, 10).split('-').reverse().join('.')}` : ''}
+            </Link>
+            {onUnlinkEvent && (
+              <button type="button" onClick={onUnlinkEvent} className="text-[11px] font-bold text-slate-400 hover:text-rose-600 shrink-0">
+                נתק
+              </button>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-2.5 gap-y-2 shrink-0">
           <div className="col-span-2">
             <label className={label}>תחום</label>
