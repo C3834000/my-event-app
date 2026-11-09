@@ -7,7 +7,7 @@ import { getSupabase, logError } from './apiCommon.mjs';
 const MAX_BACKFILL_DAYS = 90;
 /** כל ריצה חוזרת עוד שבוע אחורה — כדי לא למשוך הכל בבת אחת ולהסתכן בטיימאאוט של הפונקציה */
 const BACKFILL_STEP_DAYS = 7;
-const SETTINGS_KEY = 'gmail_sync';
+const SETTINGS_ROW_ID = 'main';
 const ATTACHMENTS_BUCKET = 'email-attachments';
 /** לא מעלים צרופות גדולות מדי, כדי לא לנפח את האחסון בטעות (רוב ספקי המייל ממילא מגבילים ל-~25MB) */
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
@@ -153,7 +153,7 @@ export async function runGmailSync(env) {
   const [{ data: customers }, { data: leads }, { data: settingsRow }] = await Promise.all([
     supabase.from('customers').select('id, email'),
     supabase.from('leads').select('id, email'),
-    supabase.from('settings').select('value').eq('key', SETTINGS_KEY).maybeSingle(),
+    supabase.from('settings').select('data').eq('id', SETTINGS_ROW_ID).maybeSingle(),
   ]);
 
   const byEmail = new Map();
@@ -165,7 +165,8 @@ export async function runGmailSync(env) {
     if (l.email && !byEmail.has(key)) byEmail.set(key, { customerId: null, leadId: l.id });
   }
 
-  const cursor = settingsRow?.value || {};
+  const settingsData = settingsRow?.data || {};
+  const cursor = settingsData.gmailSync || {};
   const targetDate = new Date(Date.now() - MAX_BACKFILL_DAYS * 24 * 60 * 60 * 1000);
 
   const client = new ImapFlow({
@@ -255,7 +256,10 @@ export async function runGmailSync(env) {
     }
   }
 
-  await supabase.from('settings').upsert({ id: 'gmail_sync', key: SETTINGS_KEY, value: nextCursor }, { onConflict: 'key' });
+  await supabase
+    .from('settings')
+    .update({ data: { ...settingsData, gmailSync: nextCursor } })
+    .eq('id', SETTINGS_ROW_ID);
 
   const matched = totalRows.filter((r) => r.customer_id || r.lead_id).length;
   const backfillComplete = Object.values(nextCursor).every(
