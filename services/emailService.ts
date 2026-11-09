@@ -89,7 +89,11 @@ export interface GmailSyncResult {
 /** מריץ סנכרון מיידי של תיבת ה-Gmail (אותו דבר שה-cron מריץ כל 5 דקות). */
 export async function syncGmailNow(): Promise<GmailSyncResult> {
   try {
-    const res = await fetch(apiUrl('gmail-sync-now'), { method: 'POST' });
+    const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+    const url = isProduction
+      ? '/.netlify/functions/gmail-sync-now-background'
+      : 'http://localhost:4000/api/gmail-sync-now';
+    const res = await fetch(url, { method: 'POST' });
     if (res.status === 202) return { ok: true, started: true };
     const data = await res.json().catch(() => ({}));
     return {
