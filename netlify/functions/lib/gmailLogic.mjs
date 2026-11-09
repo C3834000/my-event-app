@@ -7,6 +7,8 @@ import { getSupabase, logError } from './apiCommon.mjs';
 const MAX_BACKFILL_DAYS = 90;
 /** כל ריצה חוזרת עוד שבוע אחורה — כדי לא למשוך הכל בבת אחת ולהסתכן בטיימאאוט של הפונקציה */
 const BACKFILL_STEP_DAYS = 7;
+/** מקסימום הודעות לריצה אחת — כדי שהפונקציה תסיים בזמן וההתקדמות תישמר */
+const BATCH_LIMIT = 25;
 const SETTINGS_ROW_ID = 'main';
 const ATTACHMENTS_BUCKET = 'email-attachments';
 /** לא מעלים צרופות גדולות מדי, כדי לא לנפח את האחסון בטעות (רוב ספקי המייל ממילא מגבילים ל-~25MB) */
@@ -85,16 +87,21 @@ async function uploadAttachments(supabase, messageKey, attachments) {
   return out;
 }
 
-/** מושך ומפרסר הודעות לפי שאילתת IMAP חופשית (טווח UID להודעות חדשות, או טווח תאריכים ל-backfill). */
-async function fetchMessages({ client, supabase, path, direction, byEmail, ownAddress, searchQuery }) {
+/** מושך עד `limit` הודעות (הישנות ביותר קודם) שה-UID שלהן גדול מ-minUid. מחזיר גם כמה נשארו מעבר לזה. */
+async function fetchBatch({ client, supabase, path, direction, byEmail, ownAddress, searchQuery, minUid, limit }) {
   const lock = await client.getMailboxLock(path);
   try {
-    const uids = await client.search(searchQuery, { uid: true });
+    // "n:*" ב-IMAP מחזיר תמיד לפחות את ההודעה האחרונה, גם אם n גדול ממנה — לכן מסננים בעצמנו.
+    const found = ((await client.search(searchQuery, { uid: true })) || [])
+      .filter((u) => u > minUid)
+      .sort((a, b) => a - b);
 
-    if (!uids || !uids.length) return { maxUid: 0, rows: [] };
+    if (!found.length) return { maxUid: minUid, rows: [], remaining: 0 };
 
+    const uids = found.slice(0, limit);
+    const remaining = found.length - uids.length;
     const rows = [];
-    let maxUid = 0;
+    let maxUid = minUid;
 
     for await (const message of client.fetch(uids, { uid: true, source: true, internalDate: true }, { uid: true })) {
       maxUid = Math.max(maxUid, message.uid);
@@ -128,7 +135,16 @@ async function fetchMessages({ client, supabase, path, direction, byEmail, ownAd
       });
     }
 
-    return { maxUid, rows };
+    return { maxUid, rows, remaining };
+  } finally {
+    lock.release();
+  }
+}
+
+async function currentTopUid(client, path) {
+  const lock = await client.getMailboxLock(path);
+  try {
+    return Math.max(0, (client.mailbox?.uidNext || 1) - 1);
   } finally {
     lock.release();
   }
@@ -189,53 +205,51 @@ export async function runGmailSync(env) {
       { path: sentPath, direction: 'outbound', key: 'SENT' },
     ];
 
+    let budget = BATCH_LIMIT;
     for (const mb of mailboxes) {
-      const isFirstRun = !cursor[mb.key];
-      const prev = cursor[mb.key] || {};
-      const lastUid = Number(prev.lastUid) || 0;
-      let maxUidSeen = lastUid;
-      let boxRows = [];
-
-      if (!isFirstRun && lastUid > 0) {
-        // המשך רגיל: רק מה שהגיע מאז הפעם הקודמת
-        const { maxUid, rows } = await fetchMessages({
-          client, supabase, path: mb.path, direction: mb.direction, byEmail, ownAddress: user,
-          searchQuery: { uid: `${lastUid + 1}:*` },
-        });
-        maxUidSeen = Math.max(maxUidSeen, maxUid);
-        boxRows = boxRows.concat(rows);
+      let state = cursor[mb.key];
+      if (!state) {
+        // מייל-בוקס חדש: מתחילים לעקוב מה-UID העליון הנוכחי (מייל ישן לא ייכנס דרך המסלול הזה),
+        // וההיסטוריה נמשכת אחורה מהיום והלאה.
+        state = {
+          lastUid: await currentTopUid(client, mb.path),
+          backfillBefore: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          backfillResumeUid: 0,
+        };
       }
 
-      if (isFirstRun) {
-        // פעם ראשונה למייל-בוקס הזה: שואבים רק את השבוע האחרון, וקובעים ממנו את נקודת ההמשך קדימה
-        // ואת נקודת ההתחלה של ה-backfill אחורה (שאר ה-90 יום נמשכים בהדרגה בריצות הבאות).
-        // (isFirstRun נקבע לפי קיום המפתח ב-cursor, לא לפי lastUid — אחרת מייל-בוקס בלי הודעות
-        // בשבוע האחרון היה נתקע לנצח על אותו שבוע ולא מתקדם אל ההיסטוריה הישנה יותר.)
-        const seedSince = new Date(Date.now() - BACKFILL_STEP_DAYS * 24 * 60 * 60 * 1000);
-        const { maxUid, rows } = await fetchMessages({
+      // 1) מייל חדש מאז הריצה הקודמת
+      if (budget > 0) {
+        const r = await fetchBatch({
           client, supabase, path: mb.path, direction: mb.direction, byEmail, ownAddress: user,
-          searchQuery: { since: seedSince },
+          searchQuery: { uid: `${state.lastUid + 1}:*` }, minUid: state.lastUid, limit: budget,
         });
-        maxUidSeen = Math.max(maxUidSeen, maxUid);
-        boxRows = boxRows.concat(rows);
-        nextCursor[mb.key] = { lastUid: maxUidSeen, backfillBefore: seedSince.toISOString() };
-      } else {
-        // backfillBefore חסר (מייל-בוקס שכבר סונכרן לפני שהוספנו backfill הדרגתי) = נחשב כאילו כבר הושלם.
-        const backfillBefore = prev.backfillBefore ? new Date(prev.backfillBefore) : targetDate;
-        if (backfillBefore > targetDate) {
-          const nextBefore = new Date(Math.max(targetDate.getTime(), backfillBefore.getTime() - BACKFILL_STEP_DAYS * 24 * 60 * 60 * 1000));
-          const { rows } = await fetchMessages({
-            client, supabase, path: mb.path, direction: mb.direction, byEmail, ownAddress: user,
-            searchQuery: { since: nextBefore, before: backfillBefore },
-          });
-          boxRows = boxRows.concat(rows);
-          nextCursor[mb.key] = { lastUid: maxUidSeen, backfillBefore: nextBefore.toISOString() };
+        totalRows = totalRows.concat(r.rows);
+        budget -= r.rows.length;
+        state.lastUid = Math.max(state.lastUid, r.maxUid);
+      }
+
+      // 2) היסטוריה: חלון של שבוע אחורה, בתוך אותו תקציב של הודעות
+      const before = new Date(state.backfillBefore);
+      if (budget > 0 && before > targetDate) {
+        const since = new Date(Math.max(targetDate.getTime(), before.getTime() - BACKFILL_STEP_DAYS * 24 * 60 * 60 * 1000));
+        const resume = Number(state.backfillResumeUid) || 0;
+        const r = await fetchBatch({
+          client, supabase, path: mb.path, direction: mb.direction, byEmail, ownAddress: user,
+          searchQuery: { since, before, uid: `${resume + 1}:*` }, minUid: resume, limit: budget,
+        });
+        totalRows = totalRows.concat(r.rows);
+        budget -= r.rows.length;
+        if (r.remaining > 0) {
+          // החלון עדיין לא נגמר — ממשיכים ממנו בריצה הבאה
+          state.backfillResumeUid = r.maxUid;
         } else {
-          nextCursor[mb.key] = { lastUid: maxUidSeen, backfillBefore: backfillBefore.toISOString() };
+          state.backfillBefore = since.toISOString();
+          state.backfillResumeUid = 0;
         }
       }
 
-      totalRows = totalRows.concat(boxRows);
+      nextCursor[mb.key] = state;
     }
   } catch (err) {
     logError('gmail-sync', err);
