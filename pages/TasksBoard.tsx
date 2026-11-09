@@ -1,17 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, TaskCategory, TaskPriority, TaskFrequency, SubTask } from '../types';
-import { Check, Trash2, Plus, Edit, X, Upload, Search, ChevronDown, ListTree } from 'lucide-react';
+import { Check, Trash2, Plus, Edit, X, Upload, Search, ChevronDown, ListTree, Tags } from 'lucide-react';
 import { parseCSV } from '../services/utils';
+import { buildTasksSeed } from '../data/tasksSeed';
 import {
-  TASK_CATEGORIES,
-  TOP_CATEGORIES,
-  TOP_DEFAULT_CATEGORY,
+  FALLBACK_SUB,
   TopCategoryId,
   TopCategoryMeta,
-  buildTasksSeed,
+  getTaskCategories,
+  getTopCategories,
   getTopCategory,
-} from '../data/tasksSeed';
+  isHiddenTop,
+  loadCategoryConfigFromCloud,
+  topCategoryMeta,
+  useCategoryConfig,
+} from '../data/taskCategories';
+import CategoryManager from '../components/CategoryManager';
 import TaskCard from '../components/TaskCard';
 import MyDayDrawer from '../components/MyDayDrawer';
 import { MAX_FOCUS_PER_CATEGORY, canAddFocus, isFocusToday } from '../utils/focus';
@@ -94,9 +99,7 @@ const readOpenCols = (): Record<string, boolean> => {
 
 const isHiddenTask = (task: Task) => {
   if (task.isCompleted) return true;
-  if (task.category === 'ארכיון' || task.category === 'רעיונות') return true;
-  const top = getTopCategory(task.category);
-  return top === 'hidden' || top === 'רעיונות';
+  return isHiddenTop(getTopCategory(task.category));
 };
 
 type CleanupReason = 'באיחור מעל 14 יום' | 'בלי כותרת' | 'כפילות';
@@ -147,7 +150,7 @@ const CategoryColumn: React.FC<{
         onClick={onToggleColumn}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-white font-extrabold md:pointer-events-none ${meta.header}`}
       >
-        <span className="truncate">{meta.id}</span>
+        <span className="truncate">{meta.label}</span>
         <span className="flex items-center gap-1.5 shrink-0">
           <span className="bg-white/25 rounded-full px-2 py-0.5 text-xs font-bold">{openCount}</span>
           <ChevronDown size={16} className={`md:hidden transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -224,6 +227,10 @@ const TasksBoard: React.FC = () => {
   const [cleanupSelected, setCleanupSelected] = useState<string[]>([]);
   const [quickTitle, setQuickTitle] = useState('');
   const [quickCategory, setQuickCategory] = useState<TaskCategory>('כללי');
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const catConfig = useCategoryConfig();
+  const topCategories = useMemo(() => getTopCategories(), [catConfig]);
+  const taskCategories = useMemo(() => getTaskCategories(), [catConfig]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const quickInputRef = useRef<HTMLInputElement>(null);
 
@@ -237,12 +244,24 @@ const TasksBoard: React.FC = () => {
   }, [toast]);
 
   useEffect(() => {
-    if (!showHidden && topFilter === 'רעיונות') setTopFilter('all');
-  }, [showHidden, topFilter]);
+    void loadCategoryConfigFromCloud();
+  }, []);
+
+  useEffect(() => {
+    if (topFilter === 'all') return;
+    const meta = topCategories.find((c) => c.id === topFilter);
+    if (!meta || (!showHidden && meta.hidden)) setTopFilter('all');
+  }, [showHidden, topFilter, topCategories]);
+
+  useEffect(() => {
+    if (!taskCategories.includes(quickCategory)) setQuickCategory(taskCategories.includes('כללי') ? 'כללי' : FALLBACK_SUB);
+  }, [taskCategories, quickCategory]);
+
+  const visibleTops = useMemo(() => topCategories.filter((c) => showHidden || !c.hidden), [topCategories, showHidden]);
 
   const boardCategories = useMemo(
-    () => TOP_CATEGORIES.filter((c) => (showHidden || c.id !== 'רעיונות') && (topFilter === 'all' || c.id === topFilter)),
-    [showHidden, topFilter],
+    () => visibleTops.filter((c) => topFilter === 'all' || c.id === topFilter),
+    [visibleTops, topFilter],
   );
 
   const columns = useMemo(() => {
@@ -276,7 +295,7 @@ const TasksBoard: React.FC = () => {
 
   const focusStats = useMemo(() => {
     const all = tasks.filter((t) => isFocusToday(t, todayKey));
-    const pills = TOP_CATEGORIES.map((meta) => {
+    const pills = topCategories.map((meta) => {
       const list = all.filter((t) => getTopCategory(t.category) === meta.id);
       return { meta, done: list.filter((t) => t.isCompleted).length, total: list.length };
     }).filter((p) => p.total > 0);
@@ -285,22 +304,22 @@ const TasksBoard: React.FC = () => {
       total: all.length,
       pills,
     };
-  }, [tasks, todayKey]);
+  }, [tasks, todayKey, topCategories]);
 
   const chipCounts = useMemo(() => {
     const base = tasks.filter((t) => showHidden || !t.isCompleted);
-    const map = Object.fromEntries(TOP_CATEGORIES.map((c) => [c.id, 0])) as Record<TopCategoryId, number>;
+    const map: Record<TopCategoryId, number> = Object.fromEntries(topCategories.map((c) => [c.id, 0]));
     for (const t of base) {
       const top = getTopCategory(t.category);
-      if (top !== 'hidden') map[top] += 1;
+      if (top !== 'hidden' && top in map) map[top] += 1;
     }
     return map;
-  }, [tasks, showHidden]);
+  }, [tasks, showHidden, topCategories]);
 
   const junk = useMemo(() => cleanupRows(tasks), [tasks]);
 
   const categoryOptions = (current: TaskCategory): TaskCategory[] =>
-    TASK_CATEGORIES.includes(current) ? TASK_CATEGORIES : [current, ...TASK_CATEGORIES];
+    taskCategories.includes(current) ? taskCategories : [current, ...taskCategories];
 
   const handleLoadSeed = () => {
     const existing = new Set<string>(tasks.map((t) => t.title.trim()));
@@ -317,7 +336,7 @@ const TasksBoard: React.FC = () => {
   const handleQuickAdd = () => {
     const title = quickTitle.trim();
     if (!title) return;
-    const category = topFilter === 'all' ? quickCategory : TOP_DEFAULT_CATEGORY[topFilter];
+    const category = topFilter === 'all' ? quickCategory : topCategoryMeta(topFilter).defaultSub;
     addTask({
       id: Date.now().toString(),
       title,
@@ -440,6 +459,9 @@ const TasksBoard: React.FC = () => {
           >
             לניקוי{junk.length ? ` ${junk.length}` : ''}
           </button>
+          <button type="button" onClick={() => setCategoriesOpen(true)} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg" title="ניהול קטגוריות">
+            <Tags size={16} />
+          </button>
           <button type="button" onClick={handleLoadSeed} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg" title="טען רשימה">
             <ListTree size={16} />
           </button>
@@ -467,7 +489,7 @@ const TasksBoard: React.FC = () => {
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto flex-nowrap pb-1">
-        {TOP_CATEGORIES.filter((c) => showHidden || c.id !== 'רעיונות').map((cat) => {
+        {visibleTops.map((cat) => {
           const on = topFilter === cat.id;
           return (
             <button
@@ -476,8 +498,8 @@ const TasksBoard: React.FC = () => {
               onClick={() => setTopFilter(on ? 'all' : cat.id)}
               className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${on ? cat.chipOn : cat.chip}`}
             >
-              {cat.id}
-              <span className="opacity-70"> {chipCounts[cat.id]}</span>
+              {cat.label}
+              <span className="opacity-70"> {chipCounts[cat.id] ?? 0}</span>
             </button>
           );
         })}
@@ -497,7 +519,7 @@ const TasksBoard: React.FC = () => {
                 key={p.meta.id}
                 className={`text-[11px] font-bold rounded-full px-2 py-0.5 ${p.total > 0 && p.done === p.total ? p.meta.pillDone : p.meta.pill}`}
               >
-                {p.meta.id} {p.done}/{p.total}
+                {p.meta.label} {p.done}/{p.total}
               </span>
             ))}
           </div>
@@ -545,7 +567,7 @@ const TasksBoard: React.FC = () => {
             value={quickCategory}
             onChange={(e) => setQuickCategory(e.target.value as TaskCategory)}
           >
-            {TASK_CATEGORIES.filter((c) => c !== 'ארכיון').map((c) => (
+            {taskCategories.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
@@ -567,6 +589,10 @@ const TasksBoard: React.FC = () => {
       >
         <Plus size={22} />
       </button>
+
+      {categoriesOpen && (
+        <CategoryManager tasks={tasks} updateTask={updateTask} onClose={() => setCategoriesOpen(false)} />
+      )}
 
       <MyDayDrawer tasks={tasks} todayKey={todayKey} onToggle={toggleTask} onOpen={openTask} onPinToday={pinToday} />
 

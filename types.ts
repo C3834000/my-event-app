@@ -84,7 +84,9 @@ export type TaskCategory =
   | 'דחוף'
   | 'דחוף / לסיווג'
   | 'לסיווג'
-  | 'ארכיון';
+  | 'ארכיון'
+  /** קטגוריות שהמשתמש הוסיף בניהול הקטגוריות */
+  | (string & {});
 
 export interface Customer {
   id: string;

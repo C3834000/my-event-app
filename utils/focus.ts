@@ -1,5 +1,5 @@
 import { Task } from '../types';
-import { getTopCategory, TopCategoryId } from '../data/tasksSeed';
+import { getTopCategory, TopCategoryId } from '../data/taskCategories';
 
 export const MAX_FOCUS_PER_CATEGORY = 3;
 
