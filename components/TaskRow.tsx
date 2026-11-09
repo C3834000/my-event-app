@@ -27,10 +27,12 @@ type Props = {
   onToggle: () => void;
   /** בלי onPin (למשל בארכיון) — לא מוצג כוכב */
   onPin?: () => void;
+  /** שם האירוע אם המשימה קשורה לאירוע */
+  eventTitle?: string;
 };
 
 /** שורה אחת במשימות: סימון, כותרת, תת-קטגוריה, תאריך, תתי-משימות וכוכב פוקוס. */
-const TaskRow: React.FC<Props> = ({ task, meta, todayKey, selected, pinned, onSelect, onToggle, onPin }) => {
+const TaskRow: React.FC<Props> = ({ task, meta, todayKey, selected, pinned, onSelect, onToggle, onPin, eventTitle }) => {
   const due = shortDue(task);
   const overdue = !!(task.dueDate && task.dueDate < todayKey && !task.isCompleted);
   const subs = task.subTasks || [];
@@ -73,6 +75,11 @@ const TaskRow: React.FC<Props> = ({ task, meta, todayKey, selected, pinned, onSe
         {task.title}
       </span>
 
+      {eventTitle && (
+        <span className="text-[11px] shrink-0" title={`אירוע: ${eventTitle}`} aria-label={`אירוע: ${eventTitle}`}>
+          📅
+        </span>
+      )}
       {subLabel && <span className="hidden lg:inline text-[11px] font-medium text-slate-400 truncate max-w-[7rem] shrink-0">{subLabel}</span>}
       {subs.length > 0 && (
         <span className="text-[11px] font-bold text-sky-700 shrink-0">

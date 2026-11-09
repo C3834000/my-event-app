@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskCategory, TaskPriority, TaskFrequency } from '../types';
+import { useSearchParams } from 'react-router-dom';
+import { eventForTask } from '../utils/eventTasks';
+import { AppEvent, Task, TaskCategory, TaskPriority, TaskFrequency } from '../types';
 import { Plus, X, Upload, Search, ChevronDown, ListTree, Tags, MousePointerClick, Lock, LockOpen } from 'lucide-react';
 import { parseCSV } from '../services/utils';
 import { buildTasksSeed } from '../data/tasksSeed';
@@ -152,6 +154,7 @@ const CategoryGroup: React.FC<{
   showAllRest: boolean;
   todayKey: string;
   selectedId: string | null;
+  eventTitleByTask?: Map<string, string>;
   onToggleGroup: () => void;
   onShowMore: () => void;
   onToggleTask: (id: string) => void;
@@ -159,7 +162,7 @@ const CategoryGroup: React.FC<{
   onPin: (task: Task) => void;
   onAdd?: (title: string) => void;
   archive?: boolean;
-}> = ({ meta, focus, rest, openCount, expanded, showAllRest, todayKey, selectedId, onToggleGroup, onShowMore, onToggleTask, onSelectTask, onPin, onAdd, archive }) => {
+}> = ({ meta, focus, rest, openCount, expanded, showAllRest, todayKey, selectedId, eventTitleByTask, onToggleGroup, onShowMore, onToggleTask, onSelectTask, onPin, onAdd, archive }) => {
   const [newTitle, setNewTitle] = useState('');
   const submitNew = () => {
     const title = newTitle.trim();
@@ -181,6 +184,7 @@ const CategoryGroup: React.FC<{
       onSelect={() => onSelectTask(task)}
       onToggle={() => onToggleTask(task.id)}
       onPin={archive ? undefined : () => onPin(task)}
+      eventTitle={eventTitleByTask?.get(task.id)}
     />
   );
   return (
@@ -264,7 +268,8 @@ const useIsDesktop = () => {
 };
 
 const TasksBoard: React.FC = () => {
-  const { tasks, addTask, updateTask, toggleTask, deleteTask, importTasks, importTaskObjects } = useApp();
+  const { tasks, events, updateEvent, addTask, updateTask, toggleTask, deleteTask, importTasks, importTaskObjects } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** משימות שנוספו עכשיו נשארות גלויות גם כשהתצוגה («היום»/«השבוע») הייתה מסננת אותן */
   const [justAdded, setJustAdded] = useState<Set<string>>(() => new Set());
@@ -274,6 +279,27 @@ const TasksBoard: React.FC = () => {
   const [passwordValue, setPasswordValue] = useState('');
   const [passwordError, setPasswordError] = useState(false);
   const isDesktop = useIsDesktop();
+
+  // כניסה מאירוע: /tasks?taskId=... פותח את המשימה
+  const deepLinkTaskId = searchParams.get('taskId');
+  useEffect(() => {
+    if (!deepLinkTaskId || !tasks.some((t) => t.id === deepLinkTaskId)) return;
+    setSelectedId(deepLinkTaskId);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('taskId');
+      return next;
+    }, { replace: true });
+  }, [deepLinkTaskId, tasks, setSearchParams]);
+
+  /** אירוע לכל משימה מקושרת (כולל קישור ישן דרך event.taskId) */
+  const eventTitleByTask = useMemo(() => {
+    const m = new Map<string, string>();
+    const byId = new Map<string, AppEvent>(events.map((e) => [e.id, e]));
+    for (const e of events) if (e.taskId) m.set(e.taskId, e.title);
+    for (const t of tasks) if (t.eventId && byId.has(t.eventId)) m.set(t.id, byId.get(t.eventId)!.title);
+    return m;
+  }, [events, tasks]);
   const [searchTerm, setSearchTerm] = useState('');
   const [topFilter, setTopFilter] = useState<TopCategoryId | 'all'>('all');
   const [view, setView] = useState<BoardView>('today');
@@ -488,6 +514,7 @@ const TasksBoard: React.FC = () => {
   const selectedTask = selectedId ? tasks.find((t) => t.id === selectedId) ?? null : null;
   const selectedTop = selectedTask ? getTopCategory(selectedTask.category) : 'hidden';
   const selectedMeta = selectedTop === 'hidden' ? null : topCategoryMeta(selectedTop);
+  const selectedEvent = selectedTask ? eventForTask(events, selectedTask) : undefined;
 
   const deleteSelected = () => {
     if (!selectedTask || !confirm('למחוק את המשימה?')) return;
@@ -507,6 +534,12 @@ const TasksBoard: React.FC = () => {
         onPin={() => pinToday(selectedTask)}
         onDelete={deleteSelected}
         onBack={onBack}
+        event={selectedEvent}
+        onUnlinkEvent={() => {
+          if (!selectedEvent) return;
+          updateTask(selectedTask.id, { eventId: null });
+          if (selectedEvent.taskId === selectedTask.id) updateEvent(selectedEvent.id, { taskId: undefined });
+        }}
       />
     );
 
@@ -720,6 +753,7 @@ const TasksBoard: React.FC = () => {
                 showAllRest={!!restExpanded[ARCHIVE_META.id]}
                 todayKey={todayKey}
                 selectedId={selectedId}
+                eventTitleByTask={eventTitleByTask}
                 onToggleGroup={() => toggleColumn(ARCHIVE_META.id)}
                 onShowMore={() => setRestExpanded((prev) => ({ ...prev, [ARCHIVE_META.id]: true }))}
                 onToggleTask={(id) => toggleTask(id)}
@@ -739,6 +773,7 @@ const TasksBoard: React.FC = () => {
               showAllRest={single || !!restExpanded[col.meta.id]}
               todayKey={todayKey}
               selectedId={selectedId}
+              eventTitleByTask={eventTitleByTask}
               onToggleGroup={() => toggleColumn(col.meta.id)}
               onShowMore={() => setRestExpanded((prev) => ({ ...prev, [col.meta.id]: true }))}
               onToggleTask={(id) => toggleTask(id)}

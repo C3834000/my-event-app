@@ -236,6 +236,8 @@ export interface Task {
   requiredResources?: string;
   /** מי יעזור במשימה */
   helper?: string;
+  /** אירוע שהמשימה נוצרה ממנו / קשורה אליו */
+  eventId?: string | null;
   /** הערות חופשיות (גם מייבוא עמודת «הערות») */
   notes?: string;
   frequency?: TaskFrequency;

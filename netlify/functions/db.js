@@ -17,6 +17,29 @@ const EVENTS_PAYLOAD_KEYS = new Set([
   'pickupStationId', 'reminderSentAt', 'pickupConfirmedAt',
 ]);
 
+/**
+ * עמודות של טבלת tasks (camelCase לפני toSnake). שדה שלא קיים בטבלה גרם ל-400
+ * ולכן לכל השמירה להיכשל — כך משימות נשארו רק בדפדפן אחד.
+ */
+const TASKS_PAYLOAD_KEYS = new Set([
+  'id', 'title', 'category', 'priority', 'isCompleted', 'progress', 'estimatedTimeMin',
+  'waitingDays', 'potentialRevenue', 'easeOfExecution', 'requiredResources', 'frequency',
+  'dueDate', 'dueTime', 'focusDate', 'reminderDate', 'completedDate', 'mondayId',
+  'notes', 'helper', 'subTasks', 'eventId',
+]);
+
+function filterTasksPayload(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  return Object.fromEntries(Object.entries(data).filter(([k]) => TASKS_PAYLOAD_KEYS.has(k)));
+}
+
+/** מסנן שדות לפי הטבלה (events / tasks); טבלאות אחרות עוברות כמו שהן */
+function filterPayload(table, data) {
+  if (table === 'events') return filterEventsPayload(data);
+  if (table === 'tasks') return filterTasksPayload(data);
+  return data;
+}
+
 function filterEventsPayload(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
   return Object.fromEntries(Object.entries(data).filter(([k]) => EVENTS_PAYLOAD_KEYS.has(k)));
@@ -94,14 +117,14 @@ export const handler = async (event) => {
         break;
       }
       case 'create': {
-        const payload = table === 'events' ? filterEventsPayload(data) : data;
+        const payload = filterPayload(table, data);
         const { data: row, error } = await supabase.from(table).insert([toSnake(payload)]).select().single();
         if (error) throw error;
         result = toCamel(row);
         break;
       }
       case 'update': {
-        const payload = table === 'events' ? filterEventsPayload(data) : data;
+        const payload = filterPayload(table, data);
         const { data: row, error } = await supabase.from(table).update(toSnake(payload)).eq('id', id).select().single();
         if (error) {
           // Row might not exist yet - try upsert instead
@@ -122,14 +145,14 @@ export const handler = async (event) => {
       }
       case 'bulkInsert': {
         if (!Array.isArray(data) || data.length === 0) { result = { success: true }; break; }
-        const rows = table === 'events' ? data.map(filterEventsPayload) : data;
+        const rows = data.map((row) => filterPayload(table, row));
         const { error } = await supabase.from(table).upsert(rows.map(toSnake), { onConflict: 'id' });
         if (error) throw error;
         result = { success: true };
         break;
       }
       case 'upsert': {
-        const payload = table === 'events' ? filterEventsPayload(data) : data;
+        const payload = filterPayload(table, data);
         const { data: row, error } = await supabase.from(table).upsert([toSnake(payload)]).select().single();
         if (error) throw error;
         result = toCamel(row);

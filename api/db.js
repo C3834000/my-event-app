@@ -16,6 +16,19 @@ function toCamel(obj) {
   );
 }
 
+/** עמודות טבלת tasks — שדה לא מוכר גרם ל-400 ולכשל של כל השמירה (זהה ל-netlify/functions/db.js) */
+const TASKS_PAYLOAD_KEYS = new Set([
+  'id', 'title', 'category', 'priority', 'isCompleted', 'progress', 'estimatedTimeMin',
+  'waitingDays', 'potentialRevenue', 'easeOfExecution', 'requiredResources', 'frequency',
+  'dueDate', 'dueTime', 'focusDate', 'reminderDate', 'completedDate', 'mondayId',
+  'notes', 'helper', 'subTasks', 'eventId',
+]);
+
+function pick(table, data) {
+  if (table !== 'tasks' || !data || typeof data !== 'object' || Array.isArray(data)) return data;
+  return Object.fromEntries(Object.entries(data).filter(([k]) => TASKS_PAYLOAD_KEYS.has(k)));
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -52,13 +65,13 @@ export default async function handler(req, res) {
         break;
       }
       case 'create': {
-        const { data: row, error } = await supabase.from(table).insert([toSnake(data)]).select().single();
+        const { data: row, error } = await supabase.from(table).insert([toSnake(pick(table, data))]).select().single();
         if (error) throw error;
         result = toCamel(row);
         break;
       }
       case 'update': {
-        const { data: row, error } = await supabase.from(table).update(toSnake(data)).eq('id', id).select().single();
+        const { data: row, error } = await supabase.from(table).update(toSnake(pick(table, data))).eq('id', id).select().single();
         if (error) throw error;
         result = toCamel(row);
         break;
@@ -71,13 +84,13 @@ export default async function handler(req, res) {
       }
       case 'bulkInsert': {
         if (!Array.isArray(data) || data.length === 0) { result = { success: true }; break; }
-        const { error } = await supabase.from(table).insert(data.map(toSnake));
+        const { error } = await supabase.from(table).insert(data.map((row) => toSnake(pick(table, row))));
         if (error) throw error;
         result = { success: true };
         break;
       }
       case 'upsert': {
-        const { data: row, error } = await supabase.from(table).upsert([toSnake(data)]).select().single();
+        const { data: row, error } = await supabase.from(table).upsert([toSnake(pick(table, data))]).select().single();
         if (error) throw error;
         result = toCamel(row);
         break;
