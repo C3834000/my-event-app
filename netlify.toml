@@ -107,7 +107,7 @@
 
 [[redirects]]
   from   = "/api/gmail-sync-now"
-  to     = "/.netlify/functions/gmail-sync-now"
+  to     = "/.netlify/functions/gmail-sync-now-background"
   status = 200
   force  = true
 
