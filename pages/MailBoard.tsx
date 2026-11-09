@@ -309,50 +309,7 @@ const MailBoard: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/40">
-                {selectedThread.messages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${
-                      m.direction === 'outbound'
-                        ? 'bg-sky-600 text-white mr-auto rounded-bl-sm'
-                        : 'bg-white text-slate-800 ml-auto rounded-br-sm border border-slate-100'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3 mb-1">
-                      <span className={`text-[11px] font-black ${m.direction === 'outbound' ? 'text-sky-100' : 'text-slate-500'}`}>
-                        {m.direction === 'outbound' ? 'נשלח' : m.fromName || m.fromEmail}
-                      </span>
-                      <span className={`text-[10px] shrink-0 ${m.direction === 'outbound' ? 'text-sky-200' : 'text-slate-400'}`}>
-                        {formatDateTime(m.sentAt)}
-                      </span>
-                    </div>
-                    {/* מציגים טקסט בלבד (לא HTML גולמי מהמייל) כדי למנוע הרצת קוד זדוני שהגיע מהשולח */}
-                    <p className="text-sm whitespace-pre-wrap break-words">{m.bodyText || m.snippet}</p>
-                    {!!m.attachments?.length && (
-                      <div className={`mt-2 pt-2 border-t space-y-1 ${m.direction === 'outbound' ? 'border-sky-400/40' : 'border-slate-100'}`}>
-                        {m.attachments.map((att, i) => (
-                          <a
-                            key={i}
-                            href={att.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`flex items-center gap-1.5 text-xs font-bold hover:underline ${
-                              m.direction === 'outbound' ? 'text-sky-100' : 'text-sky-700'
-                            }`}
-                          >
-                            <Paperclip size={12} className="shrink-0" />
-                            <span className="truncate">{att.filename}</span>
-                            {!!att.size && <span className="opacity-70 shrink-0">({formatBytes(att.size)})</span>}
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <div className="p-3 border-t border-slate-100 space-y-2">
+              <div className="p-3 border-b border-slate-100 space-y-2">
                 {composeFiles.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {composeFiles.map((f, i) => (
@@ -409,6 +366,49 @@ const MailBoard: React.FC = () => {
                   </button>
                 </div>
               </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/40">
+                {selectedThread.messages.map((m) => (
+                  <div
+                    key={m.id}
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${
+                      m.direction === 'outbound'
+                        ? 'bg-sky-600 text-white mr-auto rounded-bl-sm'
+                        : 'bg-white text-slate-800 ml-auto rounded-br-sm border border-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-1">
+                      <span className={`text-[11px] font-black ${m.direction === 'outbound' ? 'text-sky-100' : 'text-slate-500'}`}>
+                        {m.direction === 'outbound' ? 'נשלח' : m.fromName || m.fromEmail}
+                      </span>
+                      <span className={`text-[10px] shrink-0 ${m.direction === 'outbound' ? 'text-sky-200' : 'text-slate-400'}`}>
+                        {formatDateTime(m.sentAt)}
+                      </span>
+                    </div>
+                    {/* מציגים טקסט בלבד (לא HTML גולמי מהמייל) כדי למנוע הרצת קוד זדוני שהגיע מהשולח */}
+                    <p className="text-sm whitespace-pre-wrap break-words">{m.bodyText || m.snippet}</p>
+                    {!!m.attachments?.length && (
+                      <div className={`mt-2 pt-2 border-t space-y-1 ${m.direction === 'outbound' ? 'border-sky-400/40' : 'border-slate-100'}`}>
+                        {m.attachments.map((att, i) => (
+                          <a
+                            key={i}
+                            href={att.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`flex items-center gap-1.5 text-xs font-bold hover:underline ${
+                              m.direction === 'outbound' ? 'text-sky-100' : 'text-sky-700'
+                            }`}
+                          >
+                            <Paperclip size={12} className="shrink-0" />
+                            <span className="truncate">{att.filename}</span>
+                            {!!att.size && <span className="opacity-70 shrink-0">({formatBytes(att.size)})</span>}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
             </>
           )}
         </div>
