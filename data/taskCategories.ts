@@ -530,9 +530,11 @@ export function getTopCategories(): TopCategoryMeta[] {
 }
 
 /** כל התת-קטגוריות לבחירה במשימה (בלי «ארכיון»), לפי סדר התחומים. */
-export function getTaskCategories(): string[] {
+export function getTaskCategories(opts: { includeHidden?: boolean } = {}): string[] {
   const order = new Map(config.tops.map((t, i) => [t.id, i]));
-  return [...config.subs]
+  const hiddenTops = new Set(config.tops.filter((t) => t.hidden).map((t) => t.id));
+  return config.subs
+    .filter((s) => opts.includeHidden !== false || !hiddenTops.has(s.top))
     .sort((a, b) => (order.get(a.top) ?? 0) - (order.get(b.top) ?? 0))
     .map((s) => s.name);
 }

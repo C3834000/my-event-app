@@ -157,8 +157,16 @@ const CategoryGroup: React.FC<{
   onToggleTask: (id: string) => void;
   onSelectTask: (task: Task) => void;
   onPin: (task: Task) => void;
+  onAdd?: (title: string) => void;
   archive?: boolean;
-}> = ({ meta, focus, rest, openCount, expanded, showAllRest, todayKey, selectedId, onToggleGroup, onShowMore, onToggleTask, onSelectTask, onPin, archive }) => {
+}> = ({ meta, focus, rest, openCount, expanded, showAllRest, todayKey, selectedId, onToggleGroup, onShowMore, onToggleTask, onSelectTask, onPin, onAdd, archive }) => {
+  const [newTitle, setNewTitle] = useState('');
+  const submitNew = () => {
+    const title = newTitle.trim();
+    if (!title || !onAdd) return;
+    onAdd(title);
+    setNewTitle('');
+  };
   const shownRest = showAllRest ? rest : rest.slice(0, REST_PAGE);
   const more = rest.length - shownRest.length;
   const slots = Math.max(0, MAX_FOCUS_PER_CATEGORY - focus.length);
@@ -190,6 +198,26 @@ const CategoryGroup: React.FC<{
           <ChevronDown size={16} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
         </span>
       </button>
+      {onAdd && (
+        <div className="flex items-center gap-1 px-2 py-1.5 bg-white/70 border-b border-dashed border-slate-200">
+          <input
+            className="flex-1 min-w-0 bg-transparent outline-none text-sm font-bold px-1.5 py-1 placeholder:text-slate-400"
+            placeholder={`+ משימה חדשה ב${meta.label} — Enter`}
+            aria-label={`משימה חדשה ב${meta.label}`}
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submitNew();
+              }
+            }}
+          />
+          <button type="button" onClick={submitNew} disabled={!newTitle.trim()} className="p-1 text-sky-600 disabled:opacity-30" aria-label="הוסף">
+            <Plus size={16} />
+          </button>
+        </div>
+      )}
       {archive ? (
         <p className={`px-3 py-1.5 text-[11px] font-bold text-slate-600 border-b border-dashed ${meta.focusSection}`}>
           כדי להחזיר משימה ללוח, פתח אותה ושנה את התחום.
@@ -238,6 +266,8 @@ const useIsDesktop = () => {
 const TasksBoard: React.FC = () => {
   const { tasks, addTask, updateTask, toggleTask, deleteTask, importTasks, importTaskObjects } = useApp();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** משימות שנוספו עכשיו נשארות גלויות גם כשהתצוגה («היום»/«השבוע») הייתה מסננת אותן */
+  const [justAdded, setJustAdded] = useState<Set<string>>(() => new Set());
   const [archiveUnlocked, setArchiveUnlocked] = useState(readArchiveUnlocked);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -246,7 +276,6 @@ const TasksBoard: React.FC = () => {
   const isDesktop = useIsDesktop();
   const [searchTerm, setSearchTerm] = useState('');
   const [topFilter, setTopFilter] = useState<TopCategoryId | 'all'>('all');
-  const [showHidden, setShowHidden] = useState(false);
   const [view, setView] = useState<BoardView>('today');
   const [openCols, setOpenCols] = useState<Record<string, boolean>>(readOpenCols);
   const [restExpanded, setRestExpanded] = useState<Record<string, boolean>>({});
@@ -258,7 +287,9 @@ const TasksBoard: React.FC = () => {
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const catConfig = useCategoryConfig();
   const topCategories = useMemo(() => getTopCategories(), [catConfig]);
-  const taskCategories = useMemo(() => getTaskCategories(), [catConfig]);
+  const [showHidden, setShowHidden] = useState(false);
+  /** בבחירת קטגוריה מוצגות רק קטגוריות פעילות; מוסתרות — רק כש«הצג מוסתרים» מסומן */
+  const taskCategories = useMemo(() => getTaskCategories({ includeHidden: showHidden }), [catConfig, showHidden]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const quickInputRef = useRef<HTMLInputElement>(null);
 
@@ -303,6 +334,7 @@ const TasksBoard: React.FC = () => {
           if (focusIds.has(t.id)) return false;
           if (!showHidden && isHiddenTask(t)) return false;
           if (q && !taskBlob(t).includes(q)) return false;
+          if (justAdded.has(t.id)) return true;
           if (view === 'today') return (t.priority || 0) >= TaskPriority.High;
           if (view === 'week') {
             const dueThisWeek = !!(t.dueDate && t.dueDate >= todayKey && t.dueDate <= weekEndKey);
@@ -319,7 +351,7 @@ const TasksBoard: React.FC = () => {
       }).length;
       return { meta, focus, rest, openCount };
     });
-  }, [tasks, boardCategories, searchTerm, showHidden, view, todayKey, weekEndKey]);
+  }, [tasks, boardCategories, searchTerm, showHidden, view, todayKey, weekEndKey, justAdded]);
 
   const focusStats = useMemo(() => {
     const all = tasks.filter((t) => isFocusToday(t, todayKey));
@@ -407,12 +439,11 @@ const TasksBoard: React.FC = () => {
     alert(`נוספו ${n} משימות.`);
   };
 
-  const handleQuickAdd = () => {
-    const title = quickTitle.trim();
-    if (!title) return;
-    const category = topFilter === 'all' ? quickCategory : topCategoryMeta(topFilter).defaultSub;
+  const createTask = (title: string, category: TaskCategory) => {
+    const id = Date.now().toString();
+    setJustAdded((prev) => new Set(prev).add(id));
     addTask({
-      id: Date.now().toString(),
+      id,
       title,
       isCompleted: false,
       priority: category === 'דחוף' || category === 'דחוף / לסיווג' ? TaskPriority.High : TaskPriority.Medium,
@@ -422,6 +453,12 @@ const TasksBoard: React.FC = () => {
       frequency: TaskFrequency.OneTime,
       subTasks: [],
     });
+  };
+
+  const handleQuickAdd = () => {
+    const title = quickTitle.trim();
+    if (!title) return;
+    createTask(title, topFilter === 'all' ? quickCategory : topCategoryMeta(topFilter).defaultSub);
     setQuickTitle('');
     quickInputRef.current?.focus();
   };
@@ -632,6 +669,38 @@ const TasksBoard: React.FC = () => {
         )}
       </div>
 
+      <div className="bg-white rounded-xl border border-dashed border-sky-200 p-2 flex items-center gap-2">
+        <input
+          ref={quickInputRef}
+          className="flex-1 bg-transparent outline-none text-sm font-bold px-2 py-1.5 placeholder:text-sky-400/80"
+          placeholder="+ משימה חדשה — Enter"
+          value={quickTitle}
+          onChange={(e) => setQuickTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleQuickAdd();
+            }
+          }}
+        />
+        {topFilter === 'all' && (
+          <select
+            className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none max-w-[9rem]"
+            value={quickCategory}
+            onChange={(e) => setQuickCategory(e.target.value as TaskCategory)}
+          >
+            {taskCategories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        )}
+        <button type="button" onClick={handleQuickAdd} disabled={!quickTitle.trim()} className="p-1.5 text-sky-600 disabled:opacity-30" title="הוסף">
+          <Plus size={18} />
+        </button>
+      </div>
+
       <div className="md:grid md:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)] md:gap-3 md:items-start md:pl-9 min-w-0">
         <div className="flex flex-col gap-3 min-w-0 md:max-h-[calc(100vh-200px)] md:min-h-[540px] md:overflow-y-auto md:pl-1">
           {archiveUnlocked && archiveOpen && (
@@ -675,6 +744,7 @@ const TasksBoard: React.FC = () => {
               onToggleTask={(id) => toggleTask(id)}
               onSelectTask={openTask}
               onPin={pinToday}
+              onAdd={(title) => createTask(title, col.meta.defaultSub)}
             />
           ))}
         </div>
@@ -691,38 +761,6 @@ const TasksBoard: React.FC = () => {
       </div>
 
       {selectedTask && !isDesktop && <div className="md:hidden fixed inset-0 z-[95] bg-slate-100 p-2">{detailsPanel(() => setSelectedId(null))}</div>}
-
-      <div className="bg-white rounded-xl border border-dashed border-sky-200 p-2 flex items-center gap-2">
-        <input
-          ref={quickInputRef}
-          className="flex-1 bg-transparent outline-none text-sm font-bold px-2 py-1.5 placeholder:text-sky-400/80"
-          placeholder="+ משימה חדשה — Enter"
-          value={quickTitle}
-          onChange={(e) => setQuickTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              handleQuickAdd();
-            }
-          }}
-        />
-        {topFilter === 'all' && (
-          <select
-            className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none max-w-[9rem]"
-            value={quickCategory}
-            onChange={(e) => setQuickCategory(e.target.value as TaskCategory)}
-          >
-            {taskCategories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        )}
-        <button type="button" onClick={handleQuickAdd} disabled={!quickTitle.trim()} className="p-1.5 text-sky-600 disabled:opacity-30" title="הוסף">
-          <Plus size={18} />
-        </button>
-      </div>
 
       {tabBar(true)}
 
