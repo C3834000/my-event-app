@@ -78,16 +78,25 @@ export interface GmailSyncResult {
   ok: boolean;
   synced?: number;
   matched?: number;
+  /** false = עדיין ממשיך למשוך היסטוריה ישנה יותר, שבוע בכל ריצה */
+  backfillComplete?: boolean;
   error?: string;
   hint?: string;
 }
 
-/** מריץ סנכרון מיידי של תיבת ה-Gmail (אותו דבר שה-cron מריץ כל 15 דקות). */
+/** מריץ סנכרון מיידי של תיבת ה-Gmail (אותו דבר שה-cron מריץ כל 5 דקות). */
 export async function syncGmailNow(): Promise<GmailSyncResult> {
   try {
     const res = await fetch(apiUrl('gmail-sync-now'), { method: 'POST' });
     const data = await res.json().catch(() => ({}));
-    return { ok: !!data.ok, synced: data.synced, matched: data.matched, error: data.error, hint: data.hint };
+    return {
+      ok: !!data.ok,
+      synced: data.synced,
+      matched: data.matched,
+      backfillComplete: data.backfillComplete,
+      error: data.error,
+      hint: data.hint,
+    };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

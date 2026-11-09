@@ -3,8 +3,10 @@ import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
 import { getSupabase, logError } from './apiCommon.mjs';
 
-/** כמה ימים אחורה לייבא בסנכרון הראשון (כדי לא לייבא היסטוריה שלמה בפעם הראשונה) */
-const INITIAL_BACKFILL_DAYS = 90;
+/** עד כמה אחורה בסה"כ רוצים להגיע בסופו של דבר (היסטוריה) */
+const MAX_BACKFILL_DAYS = 90;
+/** כל ריצה חוזרת עוד שבוע אחורה — כדי לא למשוך הכל בבת אחת ולהסתכן בטיימאאוט של הפונקציה */
+const BACKFILL_STEP_DAYS = 7;
 const SETTINGS_KEY = 'gmail_sync';
 const ATTACHMENTS_BUCKET = 'email-attachments';
 /** לא מעלים צרופות גדולות מדי, כדי לא לנפח את האחסון בטעות (רוב ספקי המייל ממילא מגבילים ל-~25MB) */
@@ -83,16 +85,16 @@ async function uploadAttachments(supabase, messageKey, attachments) {
   return out;
 }
 
-async function syncMailbox({ client, supabase, path, direction, byEmail, ownAddress, sinceUid, sinceDate }) {
+/** מושך ומפרסר הודעות לפי שאילתת IMAP חופשית (טווח UID להודעות חדשות, או טווח תאריכים ל-backfill). */
+async function fetchMessages({ client, supabase, path, direction, byEmail, ownAddress, searchQuery }) {
   const lock = await client.getMailboxLock(path);
   try {
-    const searchQuery = sinceUid > 0 ? { uid: `${sinceUid + 1}:*` } : { since: sinceDate };
     const uids = await client.search(searchQuery, { uid: true });
 
-    if (!uids || !uids.length) return { maxUid: sinceUid, rows: [] };
+    if (!uids || !uids.length) return { maxUid: 0, rows: [] };
 
     const rows = [];
-    let maxUid = sinceUid;
+    let maxUid = 0;
 
     for await (const message of client.fetch(uids, { uid: true, source: true, internalDate: true }, { uid: true })) {
       maxUid = Math.max(maxUid, message.uid);
@@ -164,7 +166,7 @@ export async function runGmailSync(env) {
   }
 
   const cursor = settingsRow?.value || {};
-  const sinceDate = new Date(Date.now() - INITIAL_BACKFILL_DAYS * 24 * 60 * 60 * 1000);
+  const targetDate = new Date(Date.now() - MAX_BACKFILL_DAYS * 24 * 60 * 60 * 1000);
 
   const client = new ImapFlow({
     host: env.IMAP_HOST || 'imap.gmail.com',
@@ -187,19 +189,52 @@ export async function runGmailSync(env) {
     ];
 
     for (const mb of mailboxes) {
-      const sinceUid = Number(cursor[mb.key]?.lastUid) || 0;
-      const { maxUid, rows } = await syncMailbox({
-        client,
-        supabase,
-        path: mb.path,
-        direction: mb.direction,
-        byEmail,
-        ownAddress: user,
-        sinceUid,
-        sinceDate,
-      });
-      nextCursor[mb.key] = { lastUid: maxUid };
-      totalRows = totalRows.concat(rows);
+      const isFirstRun = !cursor[mb.key];
+      const prev = cursor[mb.key] || {};
+      const lastUid = Number(prev.lastUid) || 0;
+      let maxUidSeen = lastUid;
+      let boxRows = [];
+
+      if (!isFirstRun && lastUid > 0) {
+        // המשך רגיל: רק מה שהגיע מאז הפעם הקודמת
+        const { maxUid, rows } = await fetchMessages({
+          client, supabase, path: mb.path, direction: mb.direction, byEmail, ownAddress: user,
+          searchQuery: { uid: `${lastUid + 1}:*` },
+        });
+        maxUidSeen = Math.max(maxUidSeen, maxUid);
+        boxRows = boxRows.concat(rows);
+      }
+
+      if (isFirstRun) {
+        // פעם ראשונה למייל-בוקס הזה: שואבים רק את השבוע האחרון, וקובעים ממנו את נקודת ההמשך קדימה
+        // ואת נקודת ההתחלה של ה-backfill אחורה (שאר ה-90 יום נמשכים בהדרגה בריצות הבאות).
+        // (isFirstRun נקבע לפי קיום המפתח ב-cursor, לא לפי lastUid — אחרת מייל-בוקס בלי הודעות
+        // בשבוע האחרון היה נתקע לנצח על אותו שבוע ולא מתקדם אל ההיסטוריה הישנה יותר.)
+        const seedSince = new Date(Date.now() - BACKFILL_STEP_DAYS * 24 * 60 * 60 * 1000);
+        const { maxUid, rows } = await fetchMessages({
+          client, supabase, path: mb.path, direction: mb.direction, byEmail, ownAddress: user,
+          searchQuery: { since: seedSince },
+        });
+        maxUidSeen = Math.max(maxUidSeen, maxUid);
+        boxRows = boxRows.concat(rows);
+        nextCursor[mb.key] = { lastUid: maxUidSeen, backfillBefore: seedSince.toISOString() };
+      } else {
+        // backfillBefore חסר (מייל-בוקס שכבר סונכרן לפני שהוספנו backfill הדרגתי) = נחשב כאילו כבר הושלם.
+        const backfillBefore = prev.backfillBefore ? new Date(prev.backfillBefore) : targetDate;
+        if (backfillBefore > targetDate) {
+          const nextBefore = new Date(Math.max(targetDate.getTime(), backfillBefore.getTime() - BACKFILL_STEP_DAYS * 24 * 60 * 60 * 1000));
+          const { rows } = await fetchMessages({
+            client, supabase, path: mb.path, direction: mb.direction, byEmail, ownAddress: user,
+            searchQuery: { since: nextBefore, before: backfillBefore },
+          });
+          boxRows = boxRows.concat(rows);
+          nextCursor[mb.key] = { lastUid: maxUidSeen, backfillBefore: nextBefore.toISOString() };
+        } else {
+          nextCursor[mb.key] = { lastUid: maxUidSeen, backfillBefore: backfillBefore.toISOString() };
+        }
+      }
+
+      totalRows = totalRows.concat(boxRows);
     }
   } catch (err) {
     logError('gmail-sync', err);
@@ -223,7 +258,10 @@ export async function runGmailSync(env) {
   await supabase.from('settings').upsert({ id: 'gmail_sync', key: SETTINGS_KEY, value: nextCursor }, { onConflict: 'key' });
 
   const matched = totalRows.filter((r) => r.customer_id || r.lead_id).length;
-  return { ok: true, statusCode: 200, synced: totalRows.length, matched };
+  const backfillComplete = Object.values(nextCursor).every(
+    (v) => !v?.backfillBefore || new Date(v.backfillBefore) <= targetDate
+  );
+  return { ok: true, statusCode: 200, synced: totalRows.length, matched, backfillComplete };
 }
 
 /** שולח תגובה דרך Gmail SMTP (אותו חשבון ששולח כבר היום), עם כותרות threading, ושומר שורה בטבלת emails. */
