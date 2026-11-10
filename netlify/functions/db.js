@@ -115,6 +115,7 @@ export const handler = async (event) => {
           : '*';
         let q = supabase.from(table).select(columns);
         if (orderCol) q = q.order(orderCol, { ascending: orderAsc !== false });
+        if (table === 'emails') q = q.limit(200);
         const { data: rows, error } = await q;
         if (error) throw error;
         result = (rows || []).map(toCamel);

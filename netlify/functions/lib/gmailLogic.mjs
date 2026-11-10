@@ -142,7 +142,7 @@ async function fetchBatch({ client, supabase, path, direction, byEmail, ownAddre
         subject: parsed.subject || '(ללא נושא)',
         snippet: snippetOf(parsed.text, parsed.html),
         body_text: parsed.text || null,
-        body_html: typeof parsed.html === 'string' ? parsed.html : null,
+        body_html: null,
         message_id: parsed.messageId || null,
         thread_id: resolveThreadId(parsed),
         in_reply_to: parsed.inReplyTo || null,
