@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Email, EmailStatus } from '../types';
-import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users, Paperclip, X, Pin } from 'lucide-react';
+import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users, Paperclip, X, Pin, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import LinkedTaskModal from '../components/LinkedTaskModal';
 
@@ -29,7 +29,7 @@ type Thread = {
   status: EmailStatus;
 };
 
-type Filter = 'all' | 'unassigned' | EmailStatus;
+type Filter = 'all' | 'unassigned' | 'inbound' | 'outbound' | EmailStatus;
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'הכל' },
@@ -37,6 +37,8 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'open', label: 'פתוח' },
   { id: 'waiting', label: 'ממתין' },
   { id: 'done', label: 'טופל' },
+  { id: 'inbound', label: 'נכנס' },
+  { id: 'outbound', label: 'נשלח' },
 ];
 
 const STATUS_LABELS: Record<EmailStatus, string> = { open: 'פתוח', waiting: 'ממתין לתשובה', done: 'טופל' };
@@ -153,6 +155,7 @@ const MailBoard: React.FC = () => {
     const base = threads.filter((t) => {
       if (filter === 'all') return true;
       if (filter === 'unassigned') return !t.customerId && !t.leadId;
+      if (filter === 'inbound' || filter === 'outbound') return t.messages.some((m) => m.direction === filter);
       return t.status === filter;
     });
     if (!q) return base;
@@ -325,6 +328,12 @@ const MailBoard: React.FC = () => {
                   </div>
                   <p className="text-xs font-bold text-slate-600 truncate mt-0.5">{t.subject}</p>
                   <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                    {t.messages[t.messages.length - 1]?.direction === 'outbound' ? (
+                      <ArrowUpRight size={11} className="inline ml-1 text-sky-600" />
+                    ) : (
+                      <ArrowDownLeft size={11} className="inline ml-1 text-emerald-600" />
+                    )}
+                    {t.messages[t.messages.length - 1]?.direction === 'outbound' ? 'נשלח: ' : ''}
                     {t.messages[t.messages.length - 1]?.snippet}
                   </p>
                   {unmatched && (
