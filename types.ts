@@ -241,10 +241,21 @@ export interface Task {
   helper?: string;
   /** אירוע שהמשימה נוצרה ממנו / קשורה אליו */
   eventId?: string | null;
+  /** שרשור מייל שהמשימה ננעצה ממנו */
+  emailThreadId?: string | null;
+  /** יומן פעילות: רשומות עם חותמת זמן */
+  activityLog?: TaskActivity[];
   /** הערות חופשיות (גם מייבוא עמודת «הערות») */
   notes?: string;
   frequency?: TaskFrequency;
   subTasks?: SubTask[];
+}
+
+export interface TaskActivity {
+  id: string;
+  /** ISO */
+  at: string;
+  text: string;
 }
 
 export interface SubTask {

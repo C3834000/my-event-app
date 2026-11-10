@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Email, EmailStatus } from '../types';
-import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users, Paperclip, X } from 'lucide-react';
+import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users, Paperclip, X, Pin } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import LinkedTaskModal from '../components/LinkedTaskModal';
 
 const MAX_SEND_ATTACHMENT_BYTES = 3 * 1024 * 1024;
 const MAX_SEND_ATTACHMENTS_TOTAL_BYTES = 4 * 1024 * 1024;
@@ -56,7 +58,9 @@ const formatBytes = (bytes?: number) => {
 };
 
 const MailBoard: React.FC = () => {
-  const { emails, customers, leads, getCustomerById, emailsSyncing, syncGmail, replyToEmail, updateEmails } = useApp();
+  const { emails, customers, leads, getCustomerById, emailsSyncing, syncGmail, replyToEmail, updateEmails, tasks, addTask, updateTask } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [pinOpen, setPinOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -162,6 +166,29 @@ const MailBoard: React.FC = () => {
   }, [threads, searchTerm, filter]);
 
   const selectedThread = threads.find((t) => t.threadId === selectedThreadId) || null;
+
+  // כניסה ממשימה: /mail?threadId=... פותח את השיחה
+  const deepLinkThread = searchParams.get('threadId');
+  useEffect(() => {
+    if (!deepLinkThread || !threads.some((t) => t.threadId === deepLinkThread)) return;
+    setSelectedThreadId(deepLinkThread);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('threadId');
+      return next;
+    }, { replace: true });
+  }, [deepLinkThread, threads, setSearchParams]);
+
+  /** משימות שננעצו מכל שיחה */
+  const tasksByThread = useMemo(() => {
+    const m = new Map<string, typeof tasks>();
+    for (const t of tasks) {
+      if (!t.emailThreadId) continue;
+      m.set(t.emailThreadId, [...(m.get(t.emailThreadId) || []), t]);
+    }
+    return m;
+  }, [tasks]);
+  const pinnedTasks = selectedThread ? tasksByThread.get(selectedThread.threadId) || [] : [];
 
   const handleSync = async () => {
     const result = await syncGmail();
@@ -364,6 +391,14 @@ const MailBoard: React.FC = () => {
                       <option key={s} value={s}>{STATUS_LABELS[s]}</option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={() => setPinOpen(true)}
+                    className="text-xs font-bold text-purple-700 hover:bg-purple-50 border border-purple-300 px-2.5 py-1.5 rounded-lg flex items-center gap-1"
+                    title="צור משימה מהמייל הזה"
+                  >
+                    <Pin size={13} /> משימה
+                  </button>
                   {(selectedThread.customerId || selectedThread.leadId) && (
                   <span className="shrink-0 text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-100 px-2 py-1 rounded-full flex items-center gap-1">
                     {selectedThread.customerId ? <User size={12} /> : <Users size={12} />}
@@ -372,6 +407,28 @@ const MailBoard: React.FC = () => {
                   )}
                 </div>
               </div>
+
+              {pinnedTasks.length > 0 && (
+                <div className="px-3 py-2 border-b border-slate-100 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-black text-slate-500">משימות מהמייל:</span>
+                  {pinnedTasks.map((t) => (
+                    <span key={t.id} className="flex items-center gap-1 bg-purple-50 border border-purple-200 rounded-lg px-2 py-0.5 text-xs">
+                      <Link to={`/tasks?taskId=${encodeURIComponent(t.id)}`} className={`font-bold truncate max-w-[14rem] hover:underline ${t.isCompleted ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                        📋 {t.title}
+                      </Link>
+                      {t.isCompleted && <span className="font-bold text-emerald-600">✓</span>}
+                      <button
+                        type="button"
+                        onClick={() => updateTask(t.id, { emailThreadId: null })}
+                        className="text-slate-400 hover:text-rose-500 p-0.5"
+                        title="נתק מהמייל"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
 
               <div className="p-3 border-b border-slate-100 space-y-2">
                 {composeFiles.length > 0 && (
@@ -477,6 +534,27 @@ const MailBoard: React.FC = () => {
           )}
         </div>
       </div>
+      {pinOpen && selectedThread && (() => {
+        const lastInbound = [...selectedThread.messages].reverse().find((m) => m.direction === 'inbound') || selectedThread.messages[selectedThread.messages.length - 1];
+        const from = threadLabel(selectedThread).name;
+        return (
+          <LinkedTaskModal
+            heading="נעיצת מייל כמשימה"
+            context={`✉️ ${selectedThread.subject || '(ללא נושא)'} · ${from}`}
+            defaults={{
+              title: `${stripRe(selectedThread.subject || '') || 'מייל'} – ${from}`,
+              notes: [`מאת: ${lastInbound?.fromName || lastInbound?.fromEmail || from}`, lastInbound?.snippet || ''].filter(Boolean).join('\n'),
+            }}
+            link={{ emailThreadId: selectedThread.threadId }}
+            onClose={() => setPinOpen(false)}
+            onCreate={(task) => {
+              addTask(task);
+              setPinOpen(false);
+              showToast('המייל נעוץ כמשימה בלוח המשימות');
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };
