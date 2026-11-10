@@ -134,7 +134,11 @@ export const tasksService = {
 // ===== EMAILS =====
 export const emailsService = {
   async getAll(): Promise<Email[]> {
-    return dbRequest('getAll', 'emails', { orderBy: 'sentAt', orderAsc: false });
+    return dbRequest('getAll', 'emails', {
+      orderBy: 'sentAt',
+      orderAsc: false,
+      select: 'id,customer_id,lead_id,direction,from_email,from_name,to_email,subject,snippet,body_text,message_id,thread_id,in_reply_to,sent_at,created_at,attachments,status',
+    });
   },
   async update(id: string, updates: Partial<Email>): Promise<Email> {
     return dbRequest('update', 'emails', { id, data: updates });

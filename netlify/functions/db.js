@@ -97,7 +97,7 @@ export const handler = async (event) => {
   } catch {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
-  const { table, action, data, id, orderBy, orderAsc } = body;
+  const { table, action, data, id, orderBy, orderAsc, select } = body;
 
   if (!table || !action) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing table or action' }) };
@@ -109,7 +109,11 @@ export const handler = async (event) => {
     switch (action) {
       case 'getAll': {
         const orderCol = orderBy ? orderBy.replace(/[A-Z]/g, c => '_' + c.toLowerCase()) : null;
-        let q = supabase.from(table).select('*');
+        // לרשימת מיילים לא טוענים את גוף ה-HTML (עשרות MB) — המסך משתמש בטקסט בלבד
+        const columns = table === 'emails' && typeof select === 'string' && select
+          ? select
+          : '*';
+        let q = supabase.from(table).select(columns);
         if (orderCol) q = q.order(orderCol, { ascending: orderAsc !== false });
         const { data: rows, error } = await q;
         if (error) throw error;
