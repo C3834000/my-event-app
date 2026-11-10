@@ -21,7 +21,7 @@ const TASKS_PAYLOAD_KEYS = new Set([
   'id', 'title', 'category', 'priority', 'isCompleted', 'progress', 'estimatedTimeMin',
   'waitingDays', 'potentialRevenue', 'easeOfExecution', 'requiredResources', 'frequency',
   'dueDate', 'dueTime', 'focusDate', 'reminderDate', 'completedDate', 'mondayId',
-  'notes', 'helper', 'subTasks', 'eventId',
+  'notes', 'helper', 'subTasks', 'eventId', 'activityLog', 'emailThreadId',
 ]);
 
 function pick(table, data) {
