@@ -24,7 +24,7 @@ function mapDbNetworkError(err: unknown): Error {
 async function dbRequest(
   action: string,
   table: string,
-  options: { data?: any; id?: string; orderBy?: string; orderAsc?: boolean } = {}
+  options: { data?: any; id?: string; orderBy?: string; orderAsc?: boolean; select?: string } = {}
 ): Promise<any> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DB_FETCH_MS);

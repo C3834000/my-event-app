@@ -243,7 +243,7 @@ const MailBoard: React.FC = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4 dir-rtl pb-8">
+    <div className="max-w-6xl mx-auto dir-rtl flex flex-col gap-4 h-[calc(100dvh-2rem)] md:h-[calc(100dvh-4rem)]">
       <div className="rounded-2xl bg-gradient-to-l from-slate-800 to-sky-900 text-white px-5 py-5 shadow-md">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
           <div>
@@ -265,12 +265,12 @@ const MailBoard: React.FC = () => {
       </div>
 
       {toast && (
-        <div className="bg-slate-800 text-white text-sm font-bold rounded-xl px-4 py-3 shadow-lg">{toast}</div>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white text-sm font-bold rounded-xl px-4 py-3 shadow-lg">{toast}</div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr] min-h-[60vh]">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr] flex-1 min-h-0">
         {/* Thread list */}
-        <div className={`border-l border-slate-100 flex flex-col ${selectedThread ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`border-l border-slate-100 flex flex-col min-h-0 ${selectedThread ? 'hidden md:flex' : 'flex'}`}>
           <div className="p-3 border-b border-slate-100 space-y-2">
             <div className="flex flex-wrap gap-1.5">
               {FILTERS.map((f) => (
@@ -296,7 +296,7 @@ const MailBoard: React.FC = () => {
               />
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             {filteredThreads.length === 0 && (
               <div className="p-10 text-center text-slate-400">
                 <Mail className="mx-auto mb-2" size={32} />
@@ -339,7 +339,7 @@ const MailBoard: React.FC = () => {
         </div>
 
         {/* Thread detail */}
-        <div className={`flex-col ${selectedThread ? 'flex' : 'hidden md:flex'}`}>
+        <div className={`flex-col min-h-0 ${selectedThread ? 'flex' : 'hidden md:flex'}`}>
           {!selectedThread && (
             <div className="flex-1 flex items-center justify-center text-slate-300">
               <div className="text-center">
@@ -487,7 +487,7 @@ const MailBoard: React.FC = () => {
                   </button>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/40">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 bg-slate-50/40">
                 {selectedThread.messages.map((m) => (
                   <div
                     key={m.id}
