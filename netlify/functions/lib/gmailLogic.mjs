@@ -9,7 +9,9 @@ const MAX_BACKFILL_DAYS = 90;
 const BACKFILL_STEP_DAYS = 7;
 /** מקסימום הודעות לריצה אחת — כדי שהפונקציה תסיים בזמן וההתקדמות תישמר */
 const BATCH_LIMIT = 25;
-const SETTINGS_ROW_ID = 'main';
+const SYNC_STATE_ID = 'main';
+/** הגנה מריצות כפולות (cron + כפתור + לשוניות ישנות) */
+const MIN_RUN_INTERVAL_MS = 60 * 1000;
 const ATTACHMENTS_BUCKET = 'email-attachments';
 /** לא מעלים צרופות גדולות מדי, כדי לא לנפח את האחסון בטעות (רוב ספקי המייל ממילא מגבילים ל-~25MB) */
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
@@ -129,7 +131,13 @@ async function fetchBatch({ client, supabase, path, direction, byEmail, ownAddre
       if (isBulkOrAutomated(parsed, fromAddr)) continue;
 
       const messageKey = (parsed.messageId || `${path}-${message.uid}`).replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 120);
-      const attachments = await uploadAttachments(supabase, messageKey, parsed.attachments);
+      let attachments = [];
+      if (parsed.attachments?.length) {
+        const { data: existing } = parsed.messageId
+          ? await supabase.from('emails').select('attachments').eq('message_id', parsed.messageId).maybeSingle()
+          : { data: null };
+        attachments = existing ? existing.attachments || [] : await uploadAttachments(supabase, messageKey, parsed.attachments);
+      }
 
       rows.push({
         id: crypto.randomUUID(),
@@ -182,11 +190,25 @@ export async function runGmailSync(env) {
     return { ok: false, statusCode: 503, error: 'Database not configured' };
   }
 
-  const [{ data: customers }, { data: leads }, { data: settingsRow }] = await Promise.all([
+  const [custRes, leadRes, stateRes] = await Promise.all([
     supabase.from('customers').select('id, email'),
     supabase.from('leads').select('id, email'),
-    supabase.from('settings').select('data').eq('id', SETTINGS_ROW_ID).maybeSingle(),
+    supabase.from('gmail_sync_state').select('cursor, last_run_at').eq('id', SYNC_STATE_ID).maybeSingle(),
   ]);
+  // אם המסד לא זמין — לא נוגעים ב-Gmail בכלל. אחרת cursor ריק נראה כמו "ריצה ראשונה",
+  // ואותן הודעות והצרופות שלהן נמשכות ומועלות שוב ושוב.
+  const dbError = custRes.error || leadRes.error || stateRes.error;
+  if (dbError) {
+    logError('gmail-sync:db', dbError);
+    return { ok: false, statusCode: 503, error: 'מסד הנתונים לא זמין כרגע — הסנכרון ינסה שוב בריצה הבאה' };
+  }
+  const customers = custRes.data;
+  const leads = leadRes.data;
+  const lastRunAt = stateRes.data?.last_run_at ? new Date(stateRes.data.last_run_at).getTime() : 0;
+  if (Date.now() - lastRunAt < MIN_RUN_INTERVAL_MS) {
+    return { ok: true, statusCode: 200, synced: 0, matched: 0, skipped: true };
+  }
+  await supabase.from('gmail_sync_state').upsert({ id: SYNC_STATE_ID, last_run_at: new Date().toISOString() });
 
   const byEmail = new Map();
   for (const c of customers || []) {
@@ -197,8 +219,7 @@ export async function runGmailSync(env) {
     if (l.email && !byEmail.has(key)) byEmail.set(key, { customerId: null, leadId: l.id });
   }
 
-  const settingsData = settingsRow?.data || {};
-  const cursor = settingsData.gmailSync || {};
+  const cursor = stateRes.data?.cursor || {};
   const targetDate = new Date(Date.now() - MAX_BACKFILL_DAYS * 24 * 60 * 60 * 1000);
 
   const client = new ImapFlow({
@@ -286,10 +307,7 @@ export async function runGmailSync(env) {
     }
   }
 
-  await supabase
-    .from('settings')
-    .update({ data: { ...settingsData, gmailSync: nextCursor } })
-    .eq('id', SETTINGS_ROW_ID);
+  await supabase.from('gmail_sync_state').upsert({ id: SYNC_STATE_ID, cursor: nextCursor });
 
   const matched = totalRows.filter((r) => r.customer_id || r.lead_id).length;
   const backfillComplete = Object.values(nextCursor).every(
