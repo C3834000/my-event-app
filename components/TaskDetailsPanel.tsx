@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Check, Plus, Star, Trash2, X } from 'lucide-react';
-import { AppEvent, SubTask, Task, TaskCategory, TaskFrequency, TaskPriority } from '../types';
+import { AppEvent, SubTask, Task, TaskActivity, TaskCategory, TaskFrequency, TaskPriority } from '../types';
 import { TopCategoryMeta } from '../data/taskCategories';
 
 const TIME_PRESETS = [
@@ -58,13 +58,77 @@ type Props = {
   /** האירוע שהמשימה קשורה אליו */
   event?: AppEvent;
   onUnlinkEvent?: () => void;
+  /** שרשור המייל שהמשימה ננעצה ממנו */
+  email?: { threadId: string; subject: string; from?: string };
+  onUnlinkEmail?: () => void;
+};
+
+const stamp = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getDate()}.${d.getMonth() + 1}.${String(d.getFullYear()).slice(2)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+/** יומן פעילות: כותבים פסקה, Enter שומר אותה עם חותמת זמן (Shift+Enter = שורה חדשה). */
+const ActivityLog: React.FC<{ entries: TaskActivity[]; onChange: (next: TaskActivity[]) => void }> = ({ entries, onChange }) => {
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const text = draft.trim();
+    if (!text) return;
+    onChange([...entries, { id: `a_${Date.now()}`, at: new Date().toISOString(), text }]);
+    setDraft('');
+  };
+  const newestFirst = [...entries].sort((a, b) => (a.at < b.at ? 1 : -1));
+  return (
+    <div className="min-h-0 flex flex-col">
+      <span className="text-[11px] font-black text-slate-500">יומן פעילות {entries.length > 0 && `· ${entries.length}`}</span>
+      <textarea
+        className="mt-1 shrink-0 w-full px-2 py-1.5 bg-amber-50/60 border border-dashed border-amber-200 rounded-lg text-sm font-bold outline-none focus:border-amber-300 resize-none placeholder:text-amber-500/80"
+        rows={2}
+        placeholder="מה נעשה? Enter שומר עם תאריך ושעה · Shift+Enter שורה חדשה"
+        aria-label="רשומה חדשה ביומן"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            add();
+          }
+        }}
+      />
+      <div className="flex-1 min-h-0 overflow-y-auto mt-1 space-y-1">
+        {newestFirst.length === 0 && <p className="text-[11px] font-bold text-slate-400 px-1">עוד לא תועדה פעילות</p>}
+        {newestFirst.map((a) => (
+          <div key={a.id} className="group px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-black text-amber-700" dir="ltr">
+                {stamp(a.at)}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('למחוק את הרשומה מהיומן?')) onChange(entries.filter((x) => x.id !== a.id));
+                }}
+                className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-0.5 text-slate-400 hover:text-rose-500"
+                aria-label="מחק רשומה"
+              >
+                <X size={12} />
+              </button>
+            </div>
+            <p className="text-sm font-medium text-slate-700 whitespace-pre-wrap break-words">{a.text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
 const label = 'text-[11px] font-black text-slate-500';
 const field = 'w-full mt-0.5 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-sky-300 font-bold text-sm';
 
 /** כל פרטי המשימה במסך אחד, עם עריכה ושמירה אוטומטית. */
-const TaskDetailsPanel: React.FC<Props> = ({ task, meta, categoryOptions, pinned, onUpdate, onToggle, onPin, onDelete, onBack, event, onUnlinkEvent }) => {
+const TaskDetailsPanel: React.FC<Props> = ({ task, meta, categoryOptions, pinned, onUpdate, onToggle, onPin, onDelete, onBack, event, onUnlinkEvent, email, onUnlinkEmail }) => {
   const [draft, setDraft] = useState<TextDraft>(() => draftOf(task));
   const [newSub, setNewSub] = useState('');
   // מתעדכן אחרי כל רינדור, כך שבניקוי (מעבר משימה / סגירה) הוא עדיין מחזיק את המשימה הקודמת והטיוטה שלה
@@ -155,7 +219,7 @@ const TaskDetailsPanel: React.FC<Props> = ({ task, meta, categoryOptions, pinned
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col gap-2.5 p-3 overflow-y-auto md:overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col gap-2.5 p-3 overflow-y-auto">
         {event && (
           <div className="shrink-0 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-purple-50 border border-purple-200 text-sm">
             <span className="shrink-0">📅</span>
@@ -165,6 +229,20 @@ const TaskDetailsPanel: React.FC<Props> = ({ task, meta, categoryOptions, pinned
             </Link>
             {onUnlinkEvent && (
               <button type="button" onClick={onUnlinkEvent} className="text-[11px] font-bold text-slate-400 hover:text-rose-600 shrink-0">
+                נתק
+              </button>
+            )}
+          </div>
+        )}
+        {email && (
+          <div className="shrink-0 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sm">
+            <span className="shrink-0">✉️</span>
+            <Link to={`/mail?threadId=${encodeURIComponent(email.threadId)}`} className="flex-1 min-w-0 truncate font-bold text-sky-800 hover:underline" title="פתח את המייל">
+              {email.subject || '(ללא נושא)'}
+              {email.from ? ` · ${email.from}` : ''}
+            </Link>
+            {onUnlinkEmail && (
+              <button type="button" onClick={onUnlinkEmail} className="text-[11px] font-bold text-slate-400 hover:text-rose-600 shrink-0">
                 נתק
               </button>
             )}
@@ -290,10 +368,12 @@ const TaskDetailsPanel: React.FC<Props> = ({ task, meta, categoryOptions, pinned
 
         <div className="shrink-0">
           <label className={label}>הערות</label>
-          <textarea className={`${field} resize-none`} rows={3} {...text('notes')} />
+          <textarea className={`${field} resize-none`} rows={2} {...text('notes')} />
         </div>
 
-        <div className="flex-1 min-h-[7rem] flex flex-col">
+        <div className="flex-1 min-h-[14rem] md:min-h-[8rem] grid grid-rows-2 md:grid-rows-1 md:grid-cols-2 gap-3">
+        <ActivityLog entries={task.activityLog || []} onChange={(next) => onUpdate({ activityLog: next })} />
+        <div className="min-h-0 flex flex-col">
           <div className="flex items-center justify-between">
             <span className={label}>
               תתי משימות {subs.length > 0 && `· ${subs.filter((s) => s.isCompleted).length}/${subs.length}`}
@@ -365,6 +445,7 @@ const TaskDetailsPanel: React.FC<Props> = ({ task, meta, categoryOptions, pinned
               <Plus size={16} />
             </button>
           </div>
+        </div>
         </div>
       </div>
 

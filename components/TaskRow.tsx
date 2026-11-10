@@ -75,6 +75,11 @@ const TaskRow: React.FC<Props> = ({ task, meta, todayKey, selected, pinned, onSe
         {task.title}
       </span>
 
+      {task.emailThreadId && (
+        <span className="text-[11px] shrink-0" title="נוצרה ממייל" aria-label="נוצרה ממייל">
+          ✉️
+        </span>
+      )}
       {eventTitle && (
         <span className="text-[11px] shrink-0" title={`אירוע: ${eventTitle}`} aria-label={`אירוע: ${eventTitle}`}>
           📅

@@ -5,7 +5,7 @@ import { EventStatus, PaymentStatus, EventType, AppEvent, PaymentMethod } from '
 import { Plus, Search, Calendar as CalendarIcon, Download, X, MapPin, Users, Clock, ChevronDown, ChevronUp, MousePointer2, Info, Upload, Edit, UserPlus, FileCheck } from 'lucide-react';
 import { exportToCSV, parseCSV } from '../services/utils';
 import { Link, useSearchParams } from 'react-router-dom';
-import EventTaskModal from '../components/EventTaskModal';
+import LinkedTaskModal from '../components/LinkedTaskModal';
 import { tasksForEvent } from '../utils/eventTasks';
 import EditEventModal from '../components/EditEventModal';
 import { EVENT_TAGS } from '../constants/eventBoard';
@@ -824,8 +824,15 @@ const EventsBoard: React.FC = () => {
       )}
       
       {creatingTaskForEvent && (
-        <EventTaskModal
-          event={creatingTaskForEvent}
+        <LinkedTaskModal
+          heading="משימה חדשה לאירוע"
+          context={`📅 ${creatingTaskForEvent.title}${creatingTaskForEvent.date ? ` · ${creatingTaskForEvent.date.slice(0, 10).split('-').reverse().join('.')}` : ''}`}
+          defaults={{
+            title: `טיפול באירוע – ${creatingTaskForEvent.title}`,
+            dueDate: creatingTaskForEvent.date ? creatingTaskForEvent.date.slice(0, 10) : '',
+            category: 'אירועים',
+          }}
+          link={{ eventId: creatingTaskForEvent.id }}
           onClose={() => setCreatingTaskForEvent(null)}
           onCreate={task => {
             addTask(task);

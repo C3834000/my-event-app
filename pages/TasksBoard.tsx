@@ -267,7 +267,7 @@ const useIsDesktop = () => {
 };
 
 const TasksBoard: React.FC = () => {
-  const { tasks, events, updateEvent, addTask, updateTask, toggleTask, deleteTask, importTasks, importTaskObjects } = useApp();
+  const { tasks, events, emails, updateEvent, addTask, updateTask, toggleTask, deleteTask, importTasks, importTaskObjects } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** משימות שנוספו עכשיו נשארות גלויות גם כשהתצוגה («היום»/«השבוע») הייתה מסננת אותן */
@@ -291,6 +291,18 @@ const TasksBoard: React.FC = () => {
     }, { replace: true });
   }, [deepLinkTaskId, tasks, setSearchParams]);
 
+  /** נושא ושולח לכל שרשור מייל — לתצוגת המייל שממנו ננעצה משימה */
+  const emailThreads = useMemo(() => {
+    const m = new Map<string, { threadId: string; subject: string; from?: string }>();
+    for (const e of emails) {
+      const id = e.threadId || e.id;
+      const cur = m.get(id);
+      if (!cur) m.set(id, { threadId: id, subject: e.subject || '', from: e.direction === 'inbound' ? e.fromName || e.fromEmail : undefined });
+      else if (!cur.from && e.direction === 'inbound') cur.from = e.fromName || e.fromEmail;
+    }
+    return m;
+  }, [emails]);
+
   /** אירוע לכל משימה מקושרת (כולל קישור ישן דרך event.taskId) */
   const eventTitleByTask = useMemo(() => {
     const m = new Map<string, string>();
@@ -301,7 +313,7 @@ const TasksBoard: React.FC = () => {
   }, [events, tasks]);
   const [searchTerm, setSearchTerm] = useState('');
   const [topFilter, setTopFilter] = useState<TopCategoryId | 'all'>('all');
-  const [view, setView] = useState<BoardView>('today');
+  const [view, setView] = useState<BoardView>('all');
   const [openCols, setOpenCols] = useState<Record<string, boolean>>(readOpenCols);
   const [restExpanded, setRestExpanded] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<string | null>(null);
@@ -530,6 +542,12 @@ const TasksBoard: React.FC = () => {
         onDelete={deleteSelected}
         onBack={onBack}
         event={selectedEvent}
+        email={
+          selectedTask.emailThreadId
+            ? emailThreads.get(selectedTask.emailThreadId) ?? { threadId: selectedTask.emailThreadId, subject: 'מייל' }
+            : undefined
+        }
+        onUnlinkEmail={() => updateTask(selectedTask.id, { emailThreadId: null })}
         onUnlinkEvent={() => {
           if (!selectedEvent) return;
           updateTask(selectedTask.id, { eventId: null });
@@ -676,61 +694,50 @@ const TasksBoard: React.FC = () => {
         </button>
       </div>
 
-      {tabBar(false)}
-
-      <div className="bg-white rounded-2xl border border-slate-200 px-3 py-2 space-y-2">
-        <p className="text-sm font-black text-slate-800">⭐ הפוקוס של היום: {focusStats.done} מתוך {focusStats.total} בוצעו</p>
-        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-          <div className="h-full rounded-full bg-gradient-to-l from-amber-400 to-emerald-500" style={{ width: `${focusPct}%` }} />
-        </div>
-        {focusStats.pills.length > 0 && (
-          <div className="flex gap-1.5 flex-wrap">
-            {focusStats.pills.map((p) => (
-              <span
-                key={p.meta.id}
-                className={`text-[11px] font-bold rounded-full px-2 py-0.5 ${p.total > 0 && p.done === p.total ? p.meta.pillDone : p.meta.pill}`}
-              >
-                {p.meta.label} {p.done}/{p.total}
-              </span>
-            ))}
+      {/* שורה אחת: לשוניות · פוקוס היום · הוספת משימה — כדי שהרשימה והפאנל יתחילו גבוה */}
+      <div className="flex flex-wrap items-center gap-2">
+        {tabBar(false)}
+        <div className="flex items-center gap-2 bg-white rounded-xl border border-slate-200 px-2.5 py-1.5 min-w-0" title={focusStats.pills.map((p) => `${p.meta.label} ${p.done}/${p.total}`).join(' · ')}>
+          <span className="text-xs font-black text-slate-800 whitespace-nowrap">⭐ פוקוס {focusStats.done}/{focusStats.total}</span>
+          <div className="w-16 h-1.5 rounded-full bg-slate-100 overflow-hidden shrink-0">
+            <div className="h-full rounded-full bg-gradient-to-l from-amber-400 to-emerald-500" style={{ width: `${focusPct}%` }} />
           </div>
-        )}
-      </div>
-
-      <div className="bg-white rounded-xl border border-dashed border-sky-200 p-2 flex items-center gap-2">
-        <input
-          ref={quickInputRef}
-          className="flex-1 bg-transparent outline-none text-sm font-bold px-2 py-1.5 placeholder:text-sky-400/80"
-          placeholder="+ משימה חדשה — Enter"
-          value={quickTitle}
-          onChange={(e) => setQuickTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              handleQuickAdd();
-            }
-          }}
-        />
-        {topFilter === 'all' && (
-          <select
-            className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none max-w-[9rem]"
-            value={quickCategory}
-            onChange={(e) => setQuickCategory(e.target.value as TaskCategory)}
-          >
-            {taskCategories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        )}
-        <button type="button" onClick={handleQuickAdd} disabled={!quickTitle.trim()} className="p-1.5 text-sky-600 disabled:opacity-30" title="הוסף">
-          <Plus size={18} />
-        </button>
+        </div>
+        <div className="flex-1 min-w-[260px] bg-white rounded-xl border border-dashed border-sky-200 px-2 py-1 flex items-center gap-2">
+          <input
+            ref={quickInputRef}
+            className="flex-1 min-w-0 bg-transparent outline-none text-sm font-bold px-2 py-1 placeholder:text-sky-400/80"
+            placeholder="+ משימה חדשה — Enter"
+            value={quickTitle}
+            onChange={(e) => setQuickTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleQuickAdd();
+              }
+            }}
+          />
+          {topFilter === 'all' && (
+            <select
+              className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none max-w-[9rem]"
+              value={quickCategory}
+              onChange={(e) => setQuickCategory(e.target.value as TaskCategory)}
+            >
+              {taskCategories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
+          <button type="button" onClick={handleQuickAdd} disabled={!quickTitle.trim()} className="p-1.5 text-sky-600 disabled:opacity-30" title="הוסף">
+            <Plus size={18} />
+          </button>
+        </div>
       </div>
 
       <div className="md:grid md:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)] md:gap-3 md:items-start md:pl-9 min-w-0">
-        <div className="flex flex-col gap-3 min-w-0 md:max-h-[calc(100vh-200px)] md:min-h-[540px] md:overflow-y-auto md:pl-1">
+        <div className="flex flex-col gap-3 min-w-0 md:max-h-[calc(100vh-180px)] md:min-h-[560px] md:overflow-y-auto md:pl-1">
           {archiveUnlocked && archiveOpen && (
             <div className="shrink-0 space-y-1">
               <div className="flex justify-end">
@@ -778,7 +785,7 @@ const TasksBoard: React.FC = () => {
             />
           ))}
         </div>
-        <aside className="hidden md:block sticky top-2 h-[calc(100vh-200px)] min-h-[540px] min-w-0">
+        <aside className="hidden md:block sticky top-2 h-[calc(100vh-180px)] min-h-[600px] min-w-0">
           {!isDesktop ? null : selectedTask ? (
             detailsPanel()
           ) : (
