@@ -188,6 +188,8 @@ interface AppContextType {
   replyToEmail: (params: ReplyEmailParams) => Promise<{ ok: boolean; email?: Email; error?: string; hint?: string }>;
   /** מעדכן סטטוס / שיוך למספר הודעות (למשל כל שיחה) */
   updateEmails: (ids: string[], patch: Partial<Email>) => Promise<void>;
+  /** טוען מחדש את המיילים מהמסד בשקט (בלי סנכרון מול Gmail) */
+  refreshEmails: () => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -227,7 +229,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [emails, setEmails] = useState<Email[]>([]);
+  const [emails, setEmails] = useState<Email[]>(() => {
+    try {
+      const raw = localStorage.getItem('crm_emails_cache_v1');
+      return raw ? (JSON.parse(raw) as Email[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [emailsSyncing, setEmailsSyncing] = useState(false);
   const [customForms, setCustomForms] = useState<CustomForm[]>([DEFAULT_FORM]);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -1467,7 +1476,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loadEmails = async () => {
     try {
       const rows = await emailsService.getAll();
-      setEmails(rows || []);
+      if (!Array.isArray(rows)) return;
+      setEmails(rows);
+      try {
+        localStorage.setItem('crm_emails_cache_v1', JSON.stringify(rows));
+      } catch {
+        // מקום מלא — פשוט בלי מטמון
+      }
     } catch (err) {
       console.warn('טעינת מיילים נכשלה:', err);
     }
@@ -1527,7 +1542,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addCustomer, updateCustomer, getCustomerById, addLead, updateLeadStatus, updateLead, convertLeadToCustomer, cleanupConvertedLeads, handlePublicBookingSubmit,
       sendBookingEmail, sendPortalEmail, sendEventUpdateEmail, addTask, updateTask, toggleTask, updateTaskProgress, deleteTask, importEvents, applyPaymentDatesFromImport, importCustomers, importTasks, importTaskObjects, importLeads, kpis, integrations, toggleIntegration, syncRemoteBookings,
       addCustomForm, updateCustomForm, deleteCustomForm, getFormById, syncAllEventsWithCustomers, uploadAllToCloud, reloadFromCloud,
-      cloudSyncOk, lastCloudSyncAt, emails, emailsSyncing, syncGmail, replyToEmail, updateEmails
+      cloudSyncOk, lastCloudSyncAt, emails, emailsSyncing, syncGmail, replyToEmail, updateEmails, refreshEmails: loadEmails
     }}>
       {children}
     </AppContext.Provider>

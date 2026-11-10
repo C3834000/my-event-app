@@ -60,7 +60,7 @@ const formatBytes = (bytes?: number) => {
 };
 
 const MailBoard: React.FC = () => {
-  const { emails, customers, leads, getCustomerById, emailsSyncing, syncGmail, replyToEmail, updateEmails, tasks, addTask, updateTask } = useApp();
+  const { emails, customers, leads, getCustomerById, emailsSyncing, syncGmail, replyToEmail, updateEmails, refreshEmails, tasks, addTask, updateTask } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const [pinOpen, setPinOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
@@ -97,14 +97,12 @@ const MailBoard: React.FC = () => {
   const emailsSyncingRef = useRef(emailsSyncing);
   emailsSyncingRef.current = emailsSyncing;
 
-  // סנכרון "חי": מיד כשנכנסים לעמוד, ואז ברקע — כל 20 שניות כשיש שיחה פתוחה (מעקב אחרי תכתובת פעילה),
-  // וכל 60 שניות כשרק מסתכלים על הרשימה. בלי זה, מיילים חדשים היו מחכים עד לריצת ה-cron (כל 5 דקות).
+  // הסנכרון מול Gmail רץ ב-cron כל 5 דקות; כאן רק טוענים מחדש מהמסד בשקט —
+  // כל 20 שניות כשיש שיחה פתוחה, וכל 60 שניות ברשימה. הרשימה מוצגת מיד מהמטמון המקומי.
   useEffect(() => {
-    if (!emailsSyncingRef.current) void syncGmail();
+    void refreshEmails();
     const intervalMs = selectedThreadId ? 20000 : 60000;
-    const id = window.setInterval(() => {
-      if (!emailsSyncingRef.current) void syncGmail();
-    }, intervalMs);
+    const id = window.setInterval(() => void refreshEmails(), intervalMs);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedThreadId]);
