@@ -186,6 +186,8 @@ interface AppContextType {
   syncGmail: () => Promise<GmailSyncResult>;
   /** שולח תגובה אמיתית דרך Gmail ושומר אותה בלוח המיילים */
   replyToEmail: (params: ReplyEmailParams) => Promise<{ ok: boolean; email?: Email; error?: string; hint?: string }>;
+  /** מעדכן סטטוס / שיוך למספר הודעות (למשל כל שיחה) */
+  updateEmails: (ids: string[], patch: Partial<Email>) => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1500,6 +1502,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return result;
   };
 
+  const updateEmails = async (ids: string[], patch: Partial<Email>) => {
+    const idSet = new Set(ids);
+    setEmails((prev) => prev.map((e) => (idSet.has(e.id) ? { ...e, ...patch } : e)));
+    await Promise.all(ids.map((id) => emailsService.update(id, patch).catch((err) => console.warn('עדכון מייל נכשל:', id, err))));
+  };
+
   const uploadAllToCloud = async (): Promise<{ success: boolean; message: string }> => {
     try {
       const results = { customers: 0, events: 0, leads: 0, tasks: 0 };
@@ -1519,7 +1527,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addCustomer, updateCustomer, getCustomerById, addLead, updateLeadStatus, updateLead, convertLeadToCustomer, cleanupConvertedLeads, handlePublicBookingSubmit,
       sendBookingEmail, sendPortalEmail, sendEventUpdateEmail, addTask, updateTask, toggleTask, updateTaskProgress, deleteTask, importEvents, applyPaymentDatesFromImport, importCustomers, importTasks, importTaskObjects, importLeads, kpis, integrations, toggleIntegration, syncRemoteBookings,
       addCustomForm, updateCustomForm, deleteCustomForm, getFormById, syncAllEventsWithCustomers, uploadAllToCloud, reloadFromCloud,
-      cloudSyncOk, lastCloudSyncAt, emails, emailsSyncing, syncGmail, replyToEmail
+      cloudSyncOk, lastCloudSyncAt, emails, emailsSyncing, syncGmail, replyToEmail, updateEmails
     }}>
       {children}
     </AppContext.Provider>
