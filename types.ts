@@ -92,6 +92,8 @@ export type TaskCategory =
 
 export type EmailDirection = 'inbound' | 'outbound';
 
+export type EmailStatus = 'open' | 'waiting' | 'done';
+
 export interface EmailAttachment {
   filename: string;
   contentType?: string;
@@ -117,6 +119,7 @@ export interface Email {
   sentAt?: string;
   createdAt?: string;
   attachments?: EmailAttachment[];
+  status?: EmailStatus;
 }
 
 export interface Customer {

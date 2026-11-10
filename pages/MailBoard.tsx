@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Email } from '../types';
+import { Email, EmailStatus } from '../types';
 import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users, Paperclip, X } from 'lucide-react';
 
 const MAX_SEND_ATTACHMENT_BYTES = 3 * 1024 * 1024;
@@ -24,7 +24,20 @@ type Thread = {
   leadId: string | null;
   lastSentAt: string;
   subject: string;
+  status: EmailStatus;
 };
+
+type Filter = 'all' | 'unassigned' | EmailStatus;
+
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: 'all', label: 'הכל' },
+  { id: 'unassigned', label: 'לא משויך' },
+  { id: 'open', label: 'פתוח' },
+  { id: 'waiting', label: 'ממתין' },
+  { id: 'done', label: 'טופל' },
+];
+
+const STATUS_LABELS: Record<EmailStatus, string> = { open: 'פתוח', waiting: 'ממתין לתשובה', done: 'טופל' };
 
 const formatDateTime = (iso?: string) => {
   if (!iso) return '';
@@ -43,7 +56,8 @@ const formatBytes = (bytes?: number) => {
 };
 
 const MailBoard: React.FC = () => {
-  const { emails, customers, leads, getCustomerById, emailsSyncing, syncGmail, replyToEmail } = useApp();
+  const { emails, customers, leads, getCustomerById, emailsSyncing, syncGmail, replyToEmail, updateEmails } = useApp();
+  const [filter, setFilter] = useState<Filter>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -111,6 +125,7 @@ const MailBoard: React.FC = () => {
         leadId: withMatch.leadId || null,
         lastSentAt: last.sentAt || last.createdAt || '',
         subject: stripRe(last.subject || '(ללא נושא)'),
+        status: (last.status as EmailStatus) || 'open',
       });
     }
     return result.sort((a, b) => (b.lastSentAt || '').localeCompare(a.lastSentAt || ''));
@@ -131,15 +146,20 @@ const MailBoard: React.FC = () => {
 
   const filteredThreads = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
-    if (!q) return threads;
-    return threads.filter((t) => {
+    const base = threads.filter((t) => {
+      if (filter === 'all') return true;
+      if (filter === 'unassigned') return !t.customerId && !t.leadId;
+      return t.status === filter;
+    });
+    if (!q) return base;
+    return base.filter((t) => {
       const { name } = threadLabel(t);
       const blob = [t.subject, name, ...t.messages.map((m) => `${m.fromEmail} ${m.toEmail} ${m.snippet}`)]
         .join(' ')
         .toLowerCase();
       return blob.includes(q);
     });
-  }, [threads, searchTerm]);
+  }, [threads, searchTerm, filter]);
 
   const selectedThread = threads.find((t) => t.threadId === selectedThreadId) || null;
 
@@ -224,7 +244,20 @@ const MailBoard: React.FC = () => {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr] min-h-[60vh]">
         {/* Thread list */}
         <div className={`border-l border-slate-100 flex flex-col ${selectedThread ? 'hidden md:flex' : 'flex'}`}>
-          <div className="p-3 border-b border-slate-100">
+          <div className="p-3 border-b border-slate-100 space-y-2">
+            <div className="flex flex-wrap gap-1.5">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setFilter(f.id)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors ${
+                    filter === f.id ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
             <div className="relative">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
@@ -301,12 +334,43 @@ const MailBoard: React.FC = () => {
                   <p className="font-black text-slate-800 truncate">{threadLabel(selectedThread).name}</p>
                   <p className="text-xs text-slate-500 truncate">{selectedThread.subject}</p>
                 </div>
-                {(selectedThread.customerId || selectedThread.leadId) && (
-                  <span className="mr-auto shrink-0 text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-100 px-2 py-1 rounded-full flex items-center gap-1">
+                <div className="mr-auto shrink-0 flex items-center gap-1.5">
+                  {!selectedThread.customerId && !selectedThread.leadId && (
+                    <select
+                      defaultValue=""
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        if (!id) return;
+                        void updateEmails(selectedThread.messages.map((m) => m.id), { customerId: id, leadId: null });
+                        e.target.value = '';
+                        showToast('השיחה שויכה ללקוח');
+                      }}
+                      className="text-[11px] font-bold bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none max-w-[150px]"
+                    >
+                      <option value="">שייך ללקוח...</option>
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  <select
+                    value={selectedThread.status}
+                    onChange={(e) => {
+                      void updateEmails(selectedThread.messages.map((m) => m.id), { status: e.target.value as EmailStatus });
+                    }}
+                    className="text-[11px] font-bold bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none"
+                  >
+                    {(Object.keys(STATUS_LABELS) as EmailStatus[]).map((s) => (
+                      <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                    ))}
+                  </select>
+                  {(selectedThread.customerId || selectedThread.leadId) && (
+                  <span className="shrink-0 text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-100 px-2 py-1 rounded-full flex items-center gap-1">
                     {selectedThread.customerId ? <User size={12} /> : <Users size={12} />}
                     {selectedThread.customerId ? 'לקוח' : 'ליד'}
                   </span>
-                )}
+                  )}
+                </div>
               </div>
 
               <div className="p-3 border-b border-slate-100 space-y-2">

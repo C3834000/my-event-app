@@ -136,6 +136,9 @@ export const emailsService = {
   async getAll(): Promise<Email[]> {
     return dbRequest('getAll', 'emails', { orderBy: 'sentAt', orderAsc: false });
   },
+  async update(id: string, updates: Partial<Email>): Promise<Email> {
+    return dbRequest('update', 'emails', { id, data: updates });
+  },
   async delete(id: string): Promise<void> {
     return dbRequest('delete', 'emails', { id });
   },
