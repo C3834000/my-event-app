@@ -4,11 +4,12 @@ import { useApp } from '../context/AppContext';
 import { Phone, Mail, Search, ChevronDown, ChevronUp, MessageCircle, Send, Plus, Upload, X, Calendar, Loader2, Edit, ExternalLink, DollarSign, ListTodo } from 'lucide-react';
 import { Customer } from '../types';
 import { parseCSV } from '../services/utils';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import EditEventModal from '../components/EditEventModal';
 
 const CustomersBoard: React.FC = () => {
-  const { customers, events, tasks, addCustomer, importCustomers, sendPortalEmailForCustomer, updateCustomer, addTask } = useApp();
+  const { customers, events, tasks, emails, addCustomer, importCustomers, sendPortalEmailForCustomer, updateCustomer, addTask } = useApp();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [showDebtOnly, setShowDebtOnly] = useState(false);
   const [expandedLetters, setExpandedLetters] = useState<Record<string, boolean>>({});
@@ -242,6 +243,36 @@ const CustomersBoard: React.FC = () => {
                                                             </div>
                                                         )}
 
+                                                        {/* Emails */}
+                                                        {(() => {
+                                                            const cEmails = emails.filter(em => em.customerId === c.id);
+                                                            const byThread = new Map<string, typeof cEmails[number]>();
+                                                            for (const em of cEmails) {
+                                                                const k = em.threadId || em.id;
+                                                                const prev = byThread.get(k);
+                                                                if (!prev || (em.sentAt || '') > (prev.sentAt || '')) byThread.set(k, em);
+                                                            }
+                                                            const list = [...byThread.entries()].sort((a, b) => (b[1].sentAt || '').localeCompare(a[1].sentAt || '')).slice(0, 10);
+                                                            return (
+                                                                <div className="space-y-2">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <h5 className="text-xs font-bold text-slate-600 uppercase">✉️ מיילים ({byThread.size})</h5>
+                                                                        <button onClick={() => navigate(`/mail?compose=${encodeURIComponent(c.email || '')}`)} className="text-xs font-bold text-sky-700 hover:bg-sky-50 px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus size={14} /> מייל חדש</button>
+                                                                    </div>
+                                                                    {list.length === 0 && <p className="text-xs text-slate-400">אין מיילים שמורים ללקוח הזה (מוצגים 200 המיילים האחרונים).</p>}
+                                                                    {list.map(([tid, em]) => (
+                                                                        <Link key={tid} to={`/mail?threadId=${encodeURIComponent(tid)}`} className="flex items-center justify-between p-3 bg-sky-50/60 rounded-xl hover:bg-sky-100 border border-sky-100">
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <div className="font-bold text-sm text-slate-800 truncate">{em.direction === 'outbound' ? '↗ ' : '↙ '}{em.subject || '(ללא נושא)'}</div>
+                                                                                <div className="text-xs text-slate-500 truncate">{em.sentAt ? new Date(em.sentAt).toLocaleDateString('he-IL') : ''} · {em.snippet}</div>
+                                                                            </div>
+                                                                            <ExternalLink size={16} className="text-sky-500 shrink-0" />
+                                                                        </Link>
+                                                                    ))}
+                                                                </div>
+                                                            );
+                                                        })()}
+
                                                         {/* Tasks */}
                                                         {(() => {
                                                             const customerTasks = (c.taskIds || []).map(tid => tasks.find(t => t.id === tid)).filter(Boolean) as any[];
@@ -292,7 +323,7 @@ const CustomersBoard: React.FC = () => {
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <button onClick={() => setEditingCustomer(c)} className="p-2.5 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors" title="ערוך לקוח"><Edit size={18}/></button>
-                                                <button onClick={() => window.open(`mailto:${c.email}`, '_blank')} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors" title="שלח מייל"><Mail size={18}/></button>
+                                                <button onClick={() => navigate(`/mail?compose=${encodeURIComponent(c.email || '')}`)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors" title="שלח מייל"><Mail size={18}/></button>
                                                 <button onClick={() => handleSendPortal(c)} disabled={sendingPortalId === c.id} className="p-2.5 text-purple-600 hover:bg-purple-50 rounded-xl transition-colors" title="שלח פורטל במייל">{sendingPortalId === c.id ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>}</button>
                                                 <button onClick={() => handleWhatsApp(c.phone)} className="p-2.5 text-green-600 hover:bg-green-50 rounded-xl transition-colors" title="וואטסאפ"><MessageCircle size={18}/></button>
                                                 <button

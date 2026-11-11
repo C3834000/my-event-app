@@ -118,6 +118,7 @@ export interface OutgoingAttachment {
 
 export interface ReplyEmailParams {
   to: string;
+  cc?: string;
   subject: string;
   text?: string;
   html?: string;

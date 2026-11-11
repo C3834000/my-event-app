@@ -5,7 +5,8 @@ import { LayoutDashboard, Calendar, Users, Briefcase, CheckSquare, Settings, Fil
 import { useApp } from '../context/AppContext';
 
 const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
-  const { userEmail, cloudSyncOk, lastCloudSyncAt, reloadFromCloud } = useApp();
+  const { userEmail, cloudSyncOk, lastCloudSyncAt, reloadFromCloud, emails } = useApp();
+  const unreadMail = new Set(emails.filter(e => e.direction === 'inbound' && e.isRead === false).map(e => e.threadId || e.id)).size;
 
   const navItems = [
     { to: '/', label: 'דאשבורד', icon: LayoutDashboard },
@@ -58,6 +59,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
           >
             <item.icon size={20} />
             <span className="font-medium">{item.label}</span>
+            {item.to === '/mail' && unreadMail > 0 && <span className="mr-auto bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">{unreadMail}</span>}
           </NavLink>
         ))}
       </nav>

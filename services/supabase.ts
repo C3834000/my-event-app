@@ -1,4 +1,4 @@
-import type { Customer, AppEvent, Lead, Task, CustomForm, Email } from '../types';
+import type { Customer, AppEvent, Lead, Task, CustomForm, Email, EmailPrefs } from '../types';
 
 // In development, call the local Express server on port 4000.
 // In production (Netlify), call the function directly (avoids _redirects / SPA ordering issues).
@@ -137,7 +137,7 @@ export const emailsService = {
     return dbRequest('getAll', 'emails', {
       orderBy: 'sentAt',
       orderAsc: false,
-      select: 'id,customer_id,lead_id,direction,from_email,from_name,to_email,subject,snippet,body_text,message_id,thread_id,in_reply_to,sent_at,created_at,attachments,status',
+      select: 'id,customer_id,lead_id,direction,from_email,from_name,to_email,subject,snippet,body_text,message_id,thread_id,in_reply_to,sent_at,created_at,attachments,status,is_read,cc_email',
     });
   },
   async update(id: string, updates: Partial<Email>): Promise<Email> {
@@ -145,6 +145,20 @@ export const emailsService = {
   },
   async delete(id: string): Promise<void> {
     return dbRequest('delete', 'emails', { id });
+  },
+};
+
+// ===== EMAIL PREFS (חתימה ותבניות, משותף לכל המשתמשים) =====
+export const emailPrefsService = {
+  async get(): Promise<EmailPrefs> {
+    const rows = await dbRequest('getAll', 'email_prefs');
+    const row = (rows || []).find((r: any) => r.id === 'main') || {};
+    return { signature: row.signature || '', templates: Array.isArray(row.templates) ? row.templates : [] };
+  },
+  async save(prefs: EmailPrefs): Promise<void> {
+    await dbRequest('upsert', 'email_prefs', {
+      data: { id: 'main', signature: prefs.signature, templates: prefs.templates, updatedAt: new Date().toISOString() },
+    });
   },
 };
 

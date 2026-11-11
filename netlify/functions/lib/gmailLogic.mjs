@@ -147,6 +147,9 @@ async function fetchBatch({ client, supabase, path, direction, byEmail, ownAddre
         from_email: fromAddr || ownAddress,
         from_name: parsed.from?.value?.[0]?.name || null,
         to_email: toAddrs.join(', ') || null,
+        cc_email: (parsed.cc?.value || (Array.isArray(parsed.cc) ? parsed.cc.flatMap((c) => c.value || []) : []))
+          .map((v) => v.address).filter(Boolean).join(', ') || null,
+        is_read: direction !== 'inbound',
         subject: parsed.subject || '(ללא נושא)',
         snippet: snippetOf(parsed.text, parsed.html),
         body_text: parsed.text || null,
@@ -300,7 +303,7 @@ export async function runGmailSync(env) {
   }
 
   if (totalRows.length) {
-    const { error } = await supabase.from('emails').upsert(totalRows, { onConflict: 'message_id' });
+    const { error } = await supabase.from('emails').upsert(totalRows, { onConflict: 'message_id', ignoreDuplicates: true });
     if (error) {
       logError('gmail-sync:upsert', error);
       return { ok: false, statusCode: 500, error: error.message };
@@ -323,7 +326,7 @@ export async function sendGmailReply(body, env) {
     return { ok: false, statusCode: 503, error: 'Email not configured on server' };
   }
 
-  const { to, subject, text, html, inReplyToMessageId, threadId, customerId, leadId, attachments: rawAttachments } = body || {};
+  const { to, cc, subject, text, html, inReplyToMessageId, threadId, customerId, leadId, attachments: rawAttachments } = body || {};
   if (!to || !subject) {
     return { ok: false, statusCode: 400, error: 'Missing to or subject' };
   }
@@ -370,6 +373,7 @@ export async function sendGmailReply(body, env) {
     info = await transporter.sendMail({
       from,
       to,
+      ...(cc ? { cc } : {}),
       subject,
       text: text || (html ? String(html).replace(/<[^>]+>/g, '') : ''),
       html: html || undefined,
@@ -405,6 +409,8 @@ export async function sendGmailReply(body, env) {
     from_email: FROM_EMAIL || SMTP_USER,
     from_name: FROM_NAME || 'קליכיף',
     to_email: Array.isArray(to) ? to.join(', ') : to,
+    cc_email: cc ? (Array.isArray(cc) ? cc.join(', ') : cc) : null,
+    is_read: true,
     subject,
     snippet: snippetOf(text, html),
     body_text: text || null,

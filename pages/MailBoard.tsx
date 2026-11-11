@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Email, EmailStatus } from '../types';
-import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users, Paperclip, X, Pin, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { Email, EmailStatus, EmailPrefs, LeadStatus } from '../types';
+import { Mail, RefreshCw, Search, Send, ArrowRight, User, Users, Paperclip, X, Pin, ArrowDownLeft, ArrowUpRight, PenSquare, Settings2, UserPlus, Trash2, Plus } from 'lucide-react';
+import { emailPrefsService } from '../services/supabase';
 import { Link, useSearchParams } from 'react-router-dom';
 import LinkedTaskModal from '../components/LinkedTaskModal';
 
@@ -27,12 +28,14 @@ type Thread = {
   lastSentAt: string;
   subject: string;
   status: EmailStatus;
+  unread: boolean;
 };
 
-type Filter = 'all' | 'unassigned' | 'inbound' | 'outbound' | EmailStatus;
+type Filter = 'all' | 'unread' | 'unassigned' | 'inbound' | 'outbound' | EmailStatus;
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'הכל' },
+  { id: 'unread', label: 'לא נקרא' },
   { id: 'unassigned', label: 'לא משויך' },
   { id: 'open', label: 'פתוח' },
   { id: 'waiting', label: 'ממתין' },
@@ -59,8 +62,21 @@ const formatBytes = (bytes?: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+/** פיצול רשימת כתובות ("a@x.com, b@y.com") לכתובות נקיות */
+const splitAddresses = (v?: string | null): string[] =>
+  (v || '')
+    .split(/[,;]/)
+    .map((x) => (x.match(/<([^>]+)>/)?.[1] || x).trim().toLowerCase())
+    .filter((x) => x.includes('@'));
+
+const withSignature = (text: string, signature: string) =>
+  signature.trim() ? `${text.trimEnd()}\n\n--\n${signature.trim()}` : text;
+
+type ComposeDraft = { to: string; cc: string; subject: string; body: string };
+const EMPTY_DRAFT: ComposeDraft = { to: '', cc: '', subject: '', body: '' };
+
 const MailBoard: React.FC = () => {
-  const { emails, customers, leads, getCustomerById, emailsSyncing, syncGmail, replyToEmail, updateEmails, refreshEmails, tasks, addTask, updateTask } = useApp();
+  const { emails, customers, leads, getCustomerById, emailsSyncing, syncGmail, replyToEmail, updateEmails, refreshEmails, tasks, addTask, updateTask, addLead } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const [pinOpen, setPinOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
@@ -71,13 +87,34 @@ const MailBoard: React.FC = () => {
   const [toast, setToast] = useState<string | null>(null);
   const [composeFiles, setComposeFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [replyCc, setReplyCc] = useState('');
+  const [showCc, setShowCc] = useState(false);
+  const [prefs, setPrefs] = useState<EmailPrefs>({ signature: '', templates: [] });
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [draft, setDraft] = useState<ComposeDraft | null>(null);
+  const [draftFiles, setDraftFiles] = useState<File[]>([]);
+  const draftFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    emailPrefsService.get().then(setPrefs).catch(() => {});
+  }, []);
+
+  /** הכתובת שלנו (מהמיילים שנשלחו) — כדי לא לשלוח לעצמנו ב"השב לכולם" */
+  const ownAddress = useMemo(
+    () => (emails.find((e) => e.direction === 'outbound')?.fromEmail || '').toLowerCase(),
+    [emails]
+  );
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 4000);
   };
 
-  const handlePickFiles = (fileList: FileList | null) => {
+  const handlePickFiles = (
+    fileList: FileList | null,
+    current: File[] = composeFiles,
+    setter: React.Dispatch<React.SetStateAction<File[]>> = setComposeFiles
+  ) => {
     if (!fileList?.length) return;
     const picked = Array.from(fileList);
     for (const f of picked) {
@@ -86,12 +123,12 @@ const MailBoard: React.FC = () => {
         return;
       }
     }
-    const nextTotal = [...composeFiles, ...picked].reduce((s, f) => s + f.size, 0);
+    const nextTotal = [...current, ...picked].reduce((s, f) => s + f.size, 0);
     if (nextTotal > MAX_SEND_ATTACHMENTS_TOTAL_BYTES) {
       showToast('סך הקבצים המצורפים גדול מדי (מקסימום 4MB בסך הכל)');
       return;
     }
-    setComposeFiles((prev) => [...prev, ...picked]);
+    setter((prev) => [...prev, ...picked]);
   };
 
   const emailsSyncingRef = useRef(emailsSyncing);
@@ -130,6 +167,7 @@ const MailBoard: React.FC = () => {
         lastSentAt: last.sentAt || last.createdAt || '',
         subject: stripRe(last.subject || '(ללא נושא)'),
         status: (last.status as EmailStatus) || 'open',
+        unread: sorted.some((m) => m.direction === 'inbound' && m.isRead === false),
       });
     }
     return result.sort((a, b) => (b.lastSentAt || '').localeCompare(a.lastSentAt || ''));
@@ -152,6 +190,7 @@ const MailBoard: React.FC = () => {
     const q = searchTerm.trim().toLowerCase();
     const base = threads.filter((t) => {
       if (filter === 'all') return true;
+      if (filter === 'unread') return t.unread;
       if (filter === 'unassigned') return !t.customerId && !t.leadId;
       if (filter === 'inbound' || filter === 'outbound') return t.messages.some((m) => m.direction === filter);
       return t.status === filter;
@@ -167,6 +206,115 @@ const MailBoard: React.FC = () => {
   }, [threads, searchTerm, filter]);
 
   const selectedThread = threads.find((t) => t.threadId === selectedThreadId) || null;
+  const unreadCount = useMemo(() => threads.filter((t) => t.unread).length, [threads]);
+
+  // פתיחת שיחה מסמנת אותה כנקראה
+  useEffect(() => {
+    if (!selectedThread?.unread) return;
+    const ids = selectedThread.messages.filter((m) => m.direction === 'inbound' && m.isRead === false).map((m) => m.id);
+    if (ids.length) void updateEmails(ids, { isRead: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedThread?.threadId, selectedThread?.unread]);
+
+  // איפוס CC כשעוברים שיחה
+  useEffect(() => {
+    setReplyCc('');
+    setShowCc(false);
+  }, [selectedThreadId]);
+
+  // כניסה מכרטיס לקוח: /mail?compose=כתובת
+  const composeParam = searchParams.get('compose');
+  useEffect(() => {
+    if (composeParam === null) return;
+    setDraft({ ...EMPTY_DRAFT, to: composeParam });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('compose');
+      return next;
+    }, { replace: true });
+  }, [composeParam, setSearchParams]);
+
+  const replyToAddress = (t: Thread) => {
+    const last = t.messages[t.messages.length - 1];
+    return [...t.messages].reverse().find((m) => m.direction === 'inbound')?.fromEmail || last.toEmail || '';
+  };
+
+  /** "השב לכולם": כל מי שהיה במייל האחרון (נמען + העתק), חוץ מאיתנו ומהנמען הראשי */
+  const fillReplyAll = () => {
+    if (!selectedThread) return;
+    const last = selectedThread.messages[selectedThread.messages.length - 1];
+    const main = replyToAddress(selectedThread).toLowerCase();
+    const all = new Set([...splitAddresses(last.toEmail), ...splitAddresses(last.ccEmail), ...splitAddresses(last.fromEmail)]);
+    all.delete(main);
+    if (ownAddress) all.delete(ownAddress);
+    setReplyCc([...all].join(', '));
+    setShowCc(true);
+    if (!all.size) showToast('אין נמענים נוספים במייל הזה');
+  };
+
+  const customerIdByEmail = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of customers) for (const a of splitAddresses(c.email)) m.set(a, c.id);
+    return m;
+  }, [customers]);
+  const leadIdByEmail = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of leads) for (const a of splitAddresses(l.email)) m.set(a, l.id);
+    return m;
+  }, [leads]);
+
+  const handleSendNew = async () => {
+    if (!draft) return;
+    const to = draft.to.trim();
+    if (!splitAddresses(to).length) return showToast('צריך כתובת מייל תקינה בשדה "אל"');
+    if (!draft.subject.trim()) return showToast('צריך נושא למייל');
+    setSending(true);
+    try {
+      const attachments = await Promise.all(
+        draftFiles.map(async (f) => ({ filename: f.name, contentType: f.type || undefined, contentBase64: await fileToBase64(f) }))
+      );
+      const firstTo = splitAddresses(to)[0];
+      const result = await replyToEmail({
+        to,
+        cc: draft.cc.trim() || undefined,
+        subject: draft.subject.trim(),
+        text: withSignature(draft.body, prefs.signature),
+        customerId: customerIdByEmail.get(firstTo) || null,
+        leadId: customerIdByEmail.get(firstTo) ? null : leadIdByEmail.get(firstTo) || null,
+        attachments: attachments.length ? attachments : undefined,
+      });
+      if (result.ok) {
+        setDraft(null);
+        setDraftFiles([]);
+        showToast('המייל נשלח');
+        if (result.email?.thread_id || result.email?.threadId) setSelectedThreadId(result.email.thread_id || result.email.threadId);
+      } else {
+        showToast(result.hint || result.error || 'השליחה נכשלה');
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleCreateLead = () => {
+    if (!selectedThread) return;
+    const inbound = selectedThread.messages.find((m) => m.direction === 'inbound');
+    const email = inbound?.fromEmail || selectedThread.messages[0]?.toEmail || '';
+    const leadId = crypto.randomUUID();
+    addLead({
+      id: leadId,
+      name: inbound?.fromName || email || 'ליד ממייל',
+      source: 'מייל',
+      status: LeadStatus.New,
+      phone: '',
+      email,
+      notes: `נוצר ממייל: ${selectedThread.subject}`,
+    });
+    const ids = selectedThread.messages.map((m) => m.id);
+    // הליד נשמר בענן ברקע — משייכים את המיילים אחרי שהוא קיים
+    window.setTimeout(() => void updateEmails(ids, { leadId, customerId: null }), 3000);
+    showToast('נוצר ליד חדש והשיחה שויכה אליו');
+  };
 
   // כניסה ממשימה: /mail?threadId=... פותח את השיחה
   const deepLinkThread = searchParams.get('threadId');
@@ -206,8 +354,7 @@ const MailBoard: React.FC = () => {
   const handleReply = async () => {
     if (!selectedThread || (!replyText.trim() && !composeFiles.length)) return;
     const last = selectedThread.messages[selectedThread.messages.length - 1];
-    const toAddress =
-      [...selectedThread.messages].reverse().find((m) => m.direction === 'inbound')?.fromEmail || last.toEmail || '';
+    const toAddress = replyToAddress(selectedThread);
     if (!toAddress) {
       showToast('לא נמצאה כתובת מייל לשליחה');
       return;
@@ -223,8 +370,9 @@ const MailBoard: React.FC = () => {
       );
       const result = await replyToEmail({
         to: toAddress,
+        cc: replyCc.trim() || undefined,
         subject: `Re: ${selectedThread.subject}`,
-        text: replyText.trim(),
+        text: withSignature(replyText.trim(), prefs.signature),
         inReplyToMessageId: last.messageId,
         threadId: selectedThread.threadId,
         customerId: selectedThread.customerId,
@@ -234,6 +382,8 @@ const MailBoard: React.FC = () => {
       if (result.ok) {
         setReplyText('');
         setComposeFiles([]);
+        setReplyCc('');
+        setShowCc(false);
         showToast('המייל נשלח');
       } else {
         showToast(result.hint || result.error || 'השליחה נכשלה');
@@ -252,8 +402,23 @@ const MailBoard: React.FC = () => {
             <h2 className="text-2xl sm:text-3xl font-black tracking-tight">מיילים לפי לקוח</h2>
             <p className="text-sky-100/90 text-sm mt-1 font-medium">
               {threads.length} שיחות · {emails.length} מיילים
+              {unreadCount > 0 && <span className="mr-2 bg-rose-500 text-white text-xs font-black px-2 py-0.5 rounded-full">{unreadCount} לא נקראו</span>}
             </p>
           </div>
+          <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setPrefsOpen(true)}
+            className="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 text-sm"
+            title="תבניות וחתימה"
+          >
+            <Settings2 size={16} /> תבניות וחתימה
+          </button>
+          <button
+            onClick={() => { setDraft({ ...EMPTY_DRAFT }); setDraftFiles([]); }}
+            className="bg-white text-slate-900 hover:bg-sky-50 px-4 py-2 rounded-xl font-black flex items-center gap-2 text-sm shadow"
+          >
+            <PenSquare size={16} /> מייל חדש
+          </button>
           <button
             onClick={handleSync}
             disabled={emailsSyncing}
@@ -262,6 +427,7 @@ const MailBoard: React.FC = () => {
             <RefreshCw size={16} className={emailsSyncing ? 'animate-spin' : ''} />
             {emailsSyncing ? 'מסנכרן...' : 'סנכרן מיילים'}
           </button>
+          </div>
         </div>
       </div>
 
@@ -283,6 +449,7 @@ const MailBoard: React.FC = () => {
                   }`}
                 >
                   {f.label}
+                  {f.id === 'unread' && unreadCount > 0 ? ` (${unreadCount})` : ''}
                 </button>
               ))}
             </div>
@@ -316,7 +483,8 @@ const MailBoard: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-black text-sm text-slate-800 truncate flex items-center gap-1">
+                    <span className={`text-sm truncate flex items-center gap-1 ${t.unread ? 'font-black text-slate-900' : 'font-bold text-slate-700'}`}>
+                      {t.unread && <span className="w-2 h-2 rounded-full bg-sky-500 shrink-0" title="לא נקרא" />}
                       {name}
                       {t.messages.some((m) => m.attachments?.length) && (
                         <Paperclip size={11} className="text-slate-400 shrink-0" />
@@ -387,6 +555,16 @@ const MailBoard: React.FC = () => {
                       ))}
                     </select>
                   )}
+                  {!selectedThread.customerId && !selectedThread.leadId && (
+                    <button
+                      type="button"
+                      onClick={handleCreateLead}
+                      className="text-xs font-bold text-emerald-700 hover:bg-emerald-50 border border-emerald-300 px-2.5 py-1.5 rounded-lg flex items-center gap-1"
+                      title="צור ליד חדש מהשולח"
+                    >
+                      <UserPlus size={13} /> ליד
+                    </button>
+                  )}
                   <select
                     value={selectedThread.status}
                     onChange={(e) => {
@@ -438,6 +616,34 @@ const MailBoard: React.FC = () => {
               )}
 
               <div className="p-3 border-b border-slate-100 space-y-2">
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="font-bold text-slate-500 truncate max-w-[220px]">אל: {replyToAddress(selectedThread)}</span>
+                  <button type="button" onClick={fillReplyAll} className="font-bold text-sky-700 hover:bg-sky-50 border border-sky-200 rounded-lg px-2 py-0.5">השב לכולם</button>
+                  <button type="button" onClick={() => setShowCc((v) => !v)} className="font-bold text-slate-600 hover:bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">העתק (CC)</button>
+                  {prefs.templates.length > 0 && (
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const tpl = prefs.templates.find((x) => x.id === e.target.value);
+                        if (tpl) setReplyText((prev) => (prev.trim() ? `${prev.trimEnd()}\n\n${tpl.body}` : tpl.body));
+                      }}
+                      className="font-bold bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-slate-600 outline-none"
+                    >
+                      <option value="">הכנס תבנית...</option>
+                      {prefs.templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
+                    </select>
+                  )}
+                  {prefs.signature.trim() && <span className="text-slate-400 mr-auto">החתימה תתווסף אוטומטית</span>}
+                </div>
+                {showCc && (
+                  <input
+                    value={replyCc}
+                    onChange={(e) => setReplyCc(e.target.value)}
+                    placeholder="העתק לכתובות (מופרדות בפסיק)"
+                    dir="ltr"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-sky-300 focus:bg-white"
+                  />
+                )}
                 {composeFiles.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {composeFiles.map((f, i) => (
@@ -541,6 +747,74 @@ const MailBoard: React.FC = () => {
           )}
         </div>
       </div>
+      <datalist id="mail-contacts">
+        {customers.filter((c) => c.email).map((c) => <option key={c.id} value={c.email}>{c.name}</option>)}
+        {leads.filter((l) => l.email).map((l) => <option key={l.id} value={l.email}>{l.name}</option>)}
+      </datalist>
+
+      {draft && (
+        <div className="fixed inset-0 z-40 bg-slate-900/40 flex items-center justify-center p-4" onClick={() => !sending && setDraft(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-5 space-y-3 dir-rtl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-slate-800">מייל חדש</h3>
+              <button onClick={() => setDraft(null)} className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg"><X size={18} /></button>
+            </div>
+            <input list="mail-contacts" dir="ltr" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} placeholder="אל (אפשר לבחור לקוח)" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-sky-300" />
+            <input dir="ltr" value={draft.cc} onChange={(e) => setDraft({ ...draft, cc: e.target.value })} placeholder="העתק (CC) — לא חובה" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-sky-300" />
+            <input value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} placeholder="נושא" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:border-sky-300" />
+            {prefs.templates.length > 0 && (
+              <select
+                value=""
+                onChange={(e) => {
+                  const tpl = prefs.templates.find((x) => x.id === e.target.value);
+                  if (tpl) setDraft({ ...draft, subject: draft.subject || tpl.name, body: draft.body.trim() ? `${draft.body.trimEnd()}\n\n${tpl.body}` : tpl.body });
+                }}
+                className="text-xs font-bold bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none"
+              >
+                <option value="">הכנס תבנית...</option>
+                {prefs.templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
+              </select>
+            )}
+            <textarea value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} rows={8} placeholder="תוכן המייל" className="w-full resize-none bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-sky-300" />
+            {prefs.signature.trim() && <p className="text-[11px] text-slate-400">החתימה תתווסף אוטומטית בסוף המייל</p>}
+            {draftFiles.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {draftFiles.map((f, i) => (
+                  <span key={i} className="flex items-center gap-1.5 text-xs font-bold bg-sky-50 text-sky-700 border border-sky-100 rounded-full pl-1 pr-2.5 py-1">
+                    <Paperclip size={11} /><span className="truncate max-w-[160px]">{f.name}</span>
+                    <button type="button" onClick={() => setDraftFiles((prev) => prev.filter((_, idx) => idx !== i))} className="hover:bg-sky-100 rounded-full p-0.5"><X size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <input type="file" multiple ref={draftFileRef} className="hidden" onChange={(e) => { handlePickFiles(e.target.files, draftFiles, setDraftFiles); e.target.value = ''; }} />
+              <button type="button" onClick={() => draftFileRef.current?.click()} className="text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl px-3 py-2 flex items-center gap-1.5"><Paperclip size={16} /> צרף קובץ</button>
+              <button onClick={handleSendNew} disabled={sending} className="bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white px-5 py-2 rounded-xl font-black flex items-center gap-2 text-sm">
+                <Send size={16} /> {sending ? 'שולח...' : 'שלח'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {prefsOpen && (
+        <PrefsModal
+          prefs={prefs}
+          onClose={() => setPrefsOpen(false)}
+          onSave={async (next) => {
+            setPrefs(next);
+            setPrefsOpen(false);
+            try {
+              await emailPrefsService.save(next);
+              showToast('התבניות והחתימה נשמרו');
+            } catch {
+              showToast('השמירה נכשלה — נסה שוב');
+            }
+          }}
+        />
+      )}
+
       {pinOpen && selectedThread && (() => {
         const lastInbound = [...selectedThread.messages].reverse().find((m) => m.direction === 'inbound') || selectedThread.messages[selectedThread.messages.length - 1];
         const from = threadLabel(selectedThread).name;
@@ -562,6 +836,57 @@ const MailBoard: React.FC = () => {
           />
         );
       })()}
+    </div>
+  );
+};
+
+const PrefsModal: React.FC<{ prefs: EmailPrefs; onClose: () => void; onSave: (p: EmailPrefs) => void }> = ({ prefs, onClose, onSave }) => {
+  const [signature, setSignature] = useState(prefs.signature);
+  const [templates, setTemplates] = useState(prefs.templates);
+  const updateTpl = (id: string, patch: Partial<{ name: string; body: string }>) =>
+    setTemplates((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  return (
+    <div className="fixed inset-0 z-40 bg-slate-900/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-5 space-y-4 dir-rtl max-h-[90dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-black text-slate-800">תבניות וחתימה</h3>
+          <button onClick={onClose} className="p-1 text-slate-500 hover:bg-slate-100 rounded-lg"><X size={18} /></button>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-black text-slate-600">חתימה (מתווספת לכל מייל יוצא)</label>
+          <textarea value={signature} onChange={(e) => setSignature(e.target.value)} rows={3} placeholder={'בברכה,\nשם · טלפון'} className="w-full resize-none bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:border-sky-300" />
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-black text-slate-600">תבניות תשובה</label>
+            <button
+              type="button"
+              onClick={() => setTemplates((prev) => [...prev, { id: crypto.randomUUID(), name: '', body: '' }])}
+              className="text-xs font-bold text-sky-700 hover:bg-sky-50 border border-sky-200 rounded-lg px-2 py-1 flex items-center gap-1"
+            >
+              <Plus size={12} /> תבנית חדשה
+            </button>
+          </div>
+          {templates.length === 0 && <p className="text-xs text-slate-400">אין עדיין תבניות. למשל: "הצעת מחיר", "אישור הזמנה", "פרטי תשלום".</p>}
+          {templates.map((t) => (
+            <div key={t.id} className="border border-slate-200 rounded-xl p-2.5 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <input value={t.name} onChange={(e) => updateTpl(t.id, { name: e.target.value })} placeholder="שם התבנית" className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm font-bold outline-none focus:border-sky-300" />
+                <button type="button" onClick={() => setTemplates((prev) => prev.filter((x) => x.id !== t.id))} className="p-1.5 text-slate-400 hover:text-rose-500" title="מחק תבנית"><Trash2 size={15} /></button>
+              </div>
+              <textarea value={t.body} onChange={(e) => updateTpl(t.id, { body: e.target.value })} rows={3} placeholder="תוכן התבנית" className="w-full resize-none bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:border-sky-300" />
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end">
+          <button
+            onClick={() => onSave({ signature, templates: templates.filter((t) => t.name.trim() || t.body.trim()).map((t) => ({ ...t, name: t.name.trim() || 'תבנית' })) })}
+            className="bg-sky-600 hover:bg-sky-700 text-white px-5 py-2 rounded-xl font-black text-sm"
+          >
+            שמור
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

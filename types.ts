@@ -120,6 +120,19 @@ export interface Email {
   createdAt?: string;
   attachments?: EmailAttachment[];
   status?: EmailStatus;
+  isRead?: boolean;
+  ccEmail?: string | null;
+}
+
+export interface EmailTemplate {
+  id: string;
+  name: string;
+  body: string;
+}
+
+export interface EmailPrefs {
+  signature: string;
+  templates: EmailTemplate[];
 }
 
 export interface Customer {
