@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Calendar, Users, Briefcase, CheckSquare, Settings, FileText, X, ShieldCheck, TrendingUp, FolderOpen, Calculator, Mail } from 'lucide-react';
+import { LayoutDashboard, Calendar, CalendarDays, Users, Briefcase, CheckSquare, Settings, FileText, X, ShieldCheck, TrendingUp, FolderOpen, Calculator, Mail } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
@@ -11,6 +11,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   const navItems = [
     { to: '/', label: 'דאשבורד', icon: LayoutDashboard },
     { to: '/events', label: 'אירועים (A)', icon: Calendar },
+    { to: '/calendar', label: 'לוח שנה', icon: CalendarDays },
     { to: '/customers', label: 'לקוחות (B)', icon: Users },
     { to: '/leads', label: 'לידים (C)', icon: Briefcase },
     { to: '/tasks', label: 'משימות (D)', icon: CheckSquare },

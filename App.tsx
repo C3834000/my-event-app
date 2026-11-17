@@ -8,6 +8,7 @@ import EventsBoard from './pages/EventsBoard';
 import CustomersBoard from './pages/CustomersBoard';
 import LeadsBoard from './pages/LeadsBoard';
 import TasksBoard from './pages/TasksBoard';
+import CalendarBoard from './pages/CalendarBoard';
 import MailBoard from './pages/MailBoard';
 import ChartsBoard from './pages/ChartsBoard';
 import TaxBoard from './pages/TaxBoard';
@@ -28,6 +29,7 @@ const App: React.FC = () => {
           <Route path="/" element={<Layout />}>
             <Route index element={<Dashboard />} />
             <Route path="events" element={<EventsBoard />} />
+            <Route path="calendar" element={<CalendarBoard />} />
             <Route path="customers" element={<CustomersBoard />} />
             <Route path="leads" element={<LeadsBoard />} />
             <Route path="tasks" element={<TasksBoard />} />

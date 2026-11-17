@@ -487,24 +487,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (now.getHours() === 23 && now.getMinutes() === 59) {
         console.log('🌙 איפוס יומי של פעילויות ב-23:59');
         setActivities([]);
-        
-        const today = new Date().toISOString().split('T')[0];
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
-        
-        setTasks(prev => prev.map(t => {
-          if (t.dueDate === today && !t.isCompleted) {
-            console.log(`📅 משימה "${t.title}" לא הושלמה, נדחית למחר`);
-            return { ...t, dueDate: tomorrowStr };
-          }
-          return t;
-        }));
       }
     };
     const interval = setInterval(checkMidnight, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  /**
+   * משימות שלא בוצעו עוברות ליום הבא: כל משימה פתוחה שתאריך היעד שלה (או יום הפוקוס שלה) עבר
+   * מקבלת את היום. רץ בטעינה ובכל דקה (כך גם מעבר חצות נתפס), ונשמר בענן — ולכן זהה בכל דפדפן.
+   * לפי תאריך מקומי, לא UTC. «ארכיון» לא זז.
+   */
+  useEffect(() => {
+    if (!isLoaded) return;
+    const h = window.location.hash;
+    if (h.startsWith('#/book') || h.startsWith('#/portal') || h.startsWith('#/add-event') || h.startsWith('#/check-availability')) return;
+    const isDay = (v?: string | null): v is string => !!v && /^\d{4}-\d{2}-\d{2}/.test(v);
+    const roll = () => {
+      const d = new Date();
+      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const patches = new Map<string, Partial<Task>>();
+      for (const t of dataRef.current.tasks) {
+        if (t.isCompleted || t.category === 'ארכיון') continue;
+        const patch: Partial<Task> = {};
+        if (isDay(t.dueDate) && t.dueDate.slice(0, 10) < today) patch.dueDate = today;
+        if (isDay(t.focusDate) && t.focusDate.slice(0, 10) < today) patch.focusDate = today;
+        if (patch.dueDate || patch.focusDate) patches.set(t.id, patch);
+      }
+      if (!patches.size) return;
+      console.log(`📅 ${patches.size} משימות שלא בוצעו הועברו להיום`);
+      setTasks((prev) => prev.map((t) => (patches.has(t.id) ? { ...t, ...patches.get(t.id) } : t)));
+      patches.forEach((patch, id) => cloudSync(() => tasksService.update(id, patch)));
+    };
+    // אחרי שהסנכרון הראשון מהענן הספיק לרוץ
+    const first = window.setTimeout(roll, 8000);
+    const interval = window.setInterval(roll, 60000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(interval);
+    };
+  }, [isLoaded]);
 
   const addActivity = (type: Activity['type'], message: string) => {
     setActivities(prev => [{ id: Date.now().toString(), type, message, timestamp: new Date() }, ...prev].slice(0, 15));
