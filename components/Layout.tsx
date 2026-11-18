@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useCategoryCloudSync } from '../data/taskCategories';
-import { Menu, Lock } from 'lucide-react';
+import { Menu, Lock, X } from 'lucide-react';
 
 const AUTH_KEY = 'crm_admin_auth';
 
@@ -86,7 +86,7 @@ const Layout: React.FC = () => {
       {/* Mobile Menu Button */}
       <button 
         onClick={() => setIsSidebarOpen(true)}
-        className={`lg:hidden fixed ${fixedDesk ? 'top-2 right-2' : 'top-4 right-4'} z-40 bg-slate-900 text-white p-2 rounded-xl shadow-lg`}
+        className={`${fixedDesk ? 'xl:hidden top-2 right-2' : 'lg:hidden top-4 right-4'} fixed z-40 bg-slate-900 text-white p-2 rounded-xl shadow-lg`}
       >
         <Menu size={24} />
       </button>
@@ -94,13 +94,14 @@ const Layout: React.FC = () => {
       {/* Sidebar Overlay for Mobile */}
       {isSidebarOpen && (
         <div 
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[55] lg:hidden"
+            className={`fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[55] ${fixedDesk ? 'xl:hidden' : 'lg:hidden'}`}
             onClick={() => setIsSidebarOpen(false)}
         ></div>
       )}
 
       {/* Sidebar - Fixed Height */}
-      <div className={`fixed inset-y-0 right-0 z-[60] transform transition-transform duration-300 lg:translate-x-0 lg:static lg:block ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`fixed inset-y-0 right-0 z-[60] transform transition-transform duration-300 ${fixedDesk ? 'xl:translate-x-0 xl:static xl:block' : 'lg:translate-x-0 lg:static lg:block'} ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        {fixedDesk && isSidebarOpen && <button type="button" onClick={() => setIsSidebarOpen(false)} aria-label="סגירת תפריט" className="hidden lg:block xl:hidden absolute top-4 left-4 z-[70] text-slate-400 hover:text-white"><X size={24} /></button>}
         <Sidebar onClose={() => setIsSidebarOpen(false)} />
       </div>
 
