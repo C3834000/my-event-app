@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildSecretaryDeskData, taskBucket } from '../services/secretaryDesk';
-import { AppEvent, Customer, EventStatus, Lead, LeadStatus, Task, TaskPriority } from '../types';
+import { summarizeCalendarDays } from '../services/secretaryCalendar';
+import { AppEvent, Customer, EventStatus, EventType, Lead, LeadStatus, Task, TaskPriority } from '../types';
 
 const task = (overrides: Partial<Task>): Task => ({ id: '1', title: 'משימה', isCompleted: false, priority: TaskPriority.Medium, category: 'קליכיף', estimatedTimeMin: 0, progress: 0, assignee: 'מזכירה', ...overrides });
 const lead = (overrides: Partial<Lead>): Lead => ({ id: '1', name: 'ליד', phone: '', source: '', status: LeadStatus.Contacted, ...overrides });
@@ -25,6 +26,27 @@ test('מיון משימות מבחין באיחור, פוקוס, המתנה וה
   assert.deepEqual(data.grouped.done.map(item => item.id), ['completed']);
   assert.equal(data.mine.length, 5);
   assert.equal(taskBucket(task({ isCompleted: true, completedDate: '2026-11-16T23:30:00.000Z' }), today, '2026-11-25'), null);
+  assert.equal(taskBucket(task({ id: 'backlog' }), today, '2026-11-25'), 'backlog');
+  assert.equal(taskBucket(task({ id: 'later', dueDate: '2026-12-01' }), today, '2026-11-25'), 'later');
+});
+
+test('הלוח סופר הזמנות מאושרות וציוד לפי סוג, ומשאיר הצעות בנפרד', () => {
+  const date = '2026-11-19';
+  const events = [
+    event({ id: 'one', date, eventType: EventType.ClickersProgram, clickersNeeded: 100 }),
+    event({ id: 'two', date, eventType: EventType.ClickForYouClickers, clickersNeeded: 50 }),
+    event({ id: 'lights', date, eventType: EventType.ClickAurimProgram, clickersNeeded: 80 }),
+    event({ id: 'phone', date, eventType: EventType.PhoneClick, clickersNeeded: 200 }),
+    event({ id: 'pending', date, status: EventStatus.PreliminaryApproval, eventType: EventType.ClickersProgram, clickersNeeded: 500 }),
+    event({ id: 'cancelled', date, status: EventStatus.Cancelled, eventType: EventType.ClickersProgram, clickersNeeded: 1000 }),
+    event({ id: 'next-day', date: '2026-11-20', eventType: EventType.ClickersProgram, clickersNeeded: 30 }),
+  ];
+  const days = summarizeCalendarDays(events);
+  assert.equal(days.get(date)?.booked.length, 4);
+  assert.equal(days.get(date)?.clickers, 150);
+  assert.equal(days.get(date)?.clickaorim, 80);
+  assert.equal(days.get(date)?.pending.length, 1);
+  assert.equal(days.get('2026-11-20')?.clickers, 30);
 });
 
 test('לידים כוללים חדשים ומעקבים שהגיעו, בלי לידים סגורים', () => {

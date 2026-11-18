@@ -64,6 +64,13 @@ export default async function handler(req, res) {
         result = (rows || []).map(toCamel);
         break;
       }
+      case 'getById': {
+        if (table !== 'tasks' || !id) throw new Error('A task ID is required');
+        const { data: row, error } = await supabase.from('tasks').select('*').eq('id', id).maybeSingle();
+        if (error) throw error;
+        result = row ? toCamel(row) : null;
+        break;
+      }
       case 'create': {
         const { data: row, error } = await supabase.from(table).insert([toSnake(pick(table, data))]).select().single();
         if (error) throw error;

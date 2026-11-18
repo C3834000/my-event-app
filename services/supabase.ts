@@ -116,6 +116,9 @@ export const tasksService = {
   async getAll(): Promise<Task[]> {
     return dbRequest('getAll', 'tasks');
   },
+  async getById(id: string): Promise<Task | null> {
+    return dbRequest('getById', 'tasks', { id });
+  },
   async create(task: Task): Promise<Task> {
     return dbRequest('create', 'tasks', { data: task });
   },
