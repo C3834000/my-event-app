@@ -55,6 +55,9 @@ export enum TaskPriority {
   High = 5
 }
 
+export type TaskAssignee = 'משה' | 'מזכירה';
+export type TaskDeskStatus = 'partial' | 'stuck';
+
 export type TaskCategory =
   | 'קליכיף'
   | 'קליכיף שוטף'
@@ -252,6 +255,10 @@ export interface Task {
   requiredResources?: string;
   /** מי יעזור במשימה */
   helper?: string;
+  /** אחראי על המשימה והדיווח משולחן המזכירה */
+  assignee?: TaskAssignee;
+  doneNote?: string;
+  deskStatus?: TaskDeskStatus | null;
   /** אירוע שהמשימה נוצרה ממנו / קשורה אליו */
   eventId?: string | null;
   /** שרשור מייל שהמשימה ננעצה ממנו */

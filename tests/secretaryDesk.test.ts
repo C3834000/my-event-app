@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { buildSecretaryDeskData, taskBucket } from '../services/secretaryDesk';
+import { AppEvent, Customer, EventStatus, Lead, LeadStatus, Task, TaskPriority } from '../types';
+
+const task = (overrides: Partial<Task>): Task => ({ id: '1', title: 'משימה', isCompleted: false, priority: TaskPriority.Medium, category: 'קליכיף', estimatedTimeMin: 0, progress: 0, assignee: 'מזכירה', ...overrides });
+const lead = (overrides: Partial<Lead>): Lead => ({ id: '1', name: 'ליד', phone: '', source: '', status: LeadStatus.Contacted, ...overrides });
+const event = (overrides: Partial<AppEvent>): AppEvent => ({ id: '1', customerId: 'customer', title: 'אירוע', date: '2026-11-18', amount: 0, paidAmount: 0, status: EventStatus.Booked, ...overrides } as AppEvent);
+
+test('מיון משימות מבחין באיחור, פוקוס, המתנה והשלמה באזור הזמן המקומי', () => {
+  process.env.TZ = 'Asia/Jerusalem';
+  const today = '2026-11-18';
+  const tasks = [
+    task({ id: 'overdue', dueDate: '2026-11-17' }),
+    task({ id: 'high', dueDate: today, priority: TaskPriority.High }),
+    task({ id: 'focus', focusDate: today }),
+    task({ id: 'waiting', dueDate: '2026-11-17', deskStatus: 'stuck' }),
+    task({ id: 'completed', isCompleted: true, completedDate: '2026-11-17T23:30:00.000Z' }),
+    task({ id: 'other', assignee: 'משה' }),
+  ];
+  const data = buildSecretaryDeskData(tasks, [], [], [], today);
+  assert.deepEqual(data.grouped.urgent.map(item => item.id), ['overdue', 'high']);
+  assert.deepEqual(data.grouped.today.map(item => item.id), ['focus']);
+  assert.deepEqual(data.grouped.stuck.map(item => item.id), ['waiting']);
+  assert.deepEqual(data.grouped.done.map(item => item.id), ['completed']);
+  assert.equal(data.mine.length, 5);
+  assert.equal(taskBucket(task({ isCompleted: true, completedDate: '2026-11-16T23:30:00.000Z' }), today, '2026-11-25'), null);
+});
+
+test('לידים כוללים חדשים ומעקבים שהגיעו, בלי לידים סגורים', () => {
+  const leads = [lead({ id: 'new', status: LeadStatus.New }), lead({ id: 'due', followUpDate: '2026-11-18' }), lead({ id: 'future', followUpDate: '2026-11-19' }), lead({ id: 'lost', status: LeadStatus.Lost, followUpDate: '2026-11-01' })];
+  const data = buildSecretaryDeskData([], leads, [], [], '2026-11-18');
+  assert.deepEqual(new Set(data.dueLeads.map(item => item.id)), new Set(['new', 'due']));
+  assert.equal(data.openLeads.length, 3);
+});
+
+test('גבייה כוללת יתרות באירועי עבר בלבד; אירועים מבוטלים ועתידיים מוחרגים', () => {
+  const customers: Customer[] = [{ id: 'customer', name: 'לקוח', phone: '', email: '' }];
+  const events = [event({ id: 'past', date: '2026-11-17', amount: 1000, paidAmount: 400 }), event({ id: 'today', amount: 200 }), event({ id: 'future', date: '2026-11-25', amount: 100 }), event({ id: 'outside', date: '2026-11-26' }), event({ id: 'cancelled', date: '2026-11-16', amount: 500, status: EventStatus.Cancelled }), event({ id: 'paid', date: '2026-11-15', amount: 100, paidAmount: 100 })];
+  const data = buildSecretaryDeskData([], [], events, customers, '2026-11-18');
+  assert.deepEqual(data.debt.map(row => [row.event.id, row.amount, row.customer?.name]), [['past', 600, 'לקוח']]);
+  assert.deepEqual(data.upcoming.map(item => item.id), ['today', 'future']);
+});

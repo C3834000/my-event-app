@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Check, Plus, Star, Trash2, X } from 'lucide-react';
-import { AppEvent, SubTask, Task, TaskActivity, TaskCategory, TaskFrequency, TaskPriority } from '../types';
+import { AppEvent, SubTask, Task, TaskActivity, TaskAssignee, TaskCategory, TaskFrequency, TaskPriority } from '../types';
 import { TopCategoryMeta } from '../data/taskCategories';
+import { useApp } from '../context/AppContext';
+import { saveSecretaryTask } from '../services/secretaryTaskUpdate';
 
 const TIME_PRESETS = [
   { label: '10 דק׳', min: 10 },
@@ -129,8 +131,11 @@ const field = 'w-full mt-0.5 px-2 py-1.5 bg-slate-50 border border-slate-200 rou
 
 /** כל פרטי המשימה במסך אחד, עם עריכה ושמירה אוטומטית. */
 const TaskDetailsPanel: React.FC<Props> = ({ task, meta, categoryOptions, pinned, onUpdate, onToggle, onPin, onDelete, onBack, event, onUnlinkEvent, email, onUnlinkEmail }) => {
+  const { reloadFromCloud } = useApp();
   const [draft, setDraft] = useState<TextDraft>(() => draftOf(task));
   const [newSub, setNewSub] = useState('');
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignError, setAssignError] = useState('');
   // מתעדכן אחרי כל רינדור, כך שבניקוי (מעבר משימה / סגירה) הוא עדיין מחזיק את המשימה הקודמת והטיוטה שלה
   const latest = useRef({ task, draft, onUpdate });
   useEffect(() => {
@@ -307,6 +312,19 @@ const TaskDetailsPanel: React.FC<Props> = ({ task, meta, categoryOptions, pinned
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className={label} htmlFor="task-assignee">אחראי</label>
+            <select id="task-assignee" className={field} value={task.assignee || 'משה'} disabled={assignBusy} onChange={(event) => {
+              const value = event.target.value as TaskAssignee;
+              setAssignBusy(true);
+              setAssignError('');
+              void saveSecretaryTask(task.id, { assignee: value }, reloadFromCloud).catch((error) => setAssignError(error instanceof Error ? error.message : 'השינוי לא אושר בענן.')).finally(() => setAssignBusy(false));
+            }}>
+              <option value="משה">משה</option>
+              <option value="מזכירה">מזכירה</option>
+            </select>
+            {assignError && <p className="text-xs text-red-700" role="alert">{assignError}</p>}
           </div>
           <div>
             <label className={label}>מי יעזור</label>
