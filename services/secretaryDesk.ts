@@ -1,7 +1,7 @@
 import { AppEvent, Customer, Lead, LeadStatus, Task, TaskPriority } from '../types';
 import { eventContributesToOpenDebt, eventOpenAmount, excludeEventFromKpis, parseEventDateKey } from './eventKpi';
 
-export type SecretaryBucket = 'urgent' | 'today' | 'week' | 'later' | 'stuck' | 'done';
+export type SecretaryBucket = 'urgent' | 'today' | 'week' | 'backlog' | 'later' | 'stuck' | 'done';
 
 export function localDateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -26,13 +26,14 @@ export function taskBucket(task: Task, today: string, weekEnd: string): Secretar
   if (due && (due < today || (due === today && Number(task.priority) >= TaskPriority.High))) return 'urgent';
   if (due === today || task.focusDate === today) return 'today';
   if (due && due <= weekEnd) return 'week';
+  if (!due) return 'backlog';
   return 'later';
 }
 
 export function buildSecretaryDeskData(tasks: Task[], leads: Lead[], events: AppEvent[], customers: Customer[], today: string) {
   const weekEnd = addCalendarDays(today, 7);
   const mine = tasks.filter(task => task.assignee === 'מזכירה');
-  const grouped: Record<SecretaryBucket, Task[]> = { urgent: [], today: [], week: [], later: [], stuck: [], done: [] };
+  const grouped: Record<SecretaryBucket, Task[]> = { urgent: [], today: [], week: [], backlog: [], later: [], stuck: [], done: [] };
   for (const task of mine) {
     const bucket = taskBucket(task, today, weekEnd);
     if (bucket) grouped[bucket].push(task);

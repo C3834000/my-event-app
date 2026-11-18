@@ -69,6 +69,7 @@ const LoginScreen: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 const Layout: React.FC = () => {
   const { pathname } = useLocation();
   const fullBleed = pathname === '/tasks';
+  const fixedDesk = pathname === '/desk';
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(
     sessionStorage.getItem(AUTH_KEY) === 'true'
@@ -85,7 +86,7 @@ const Layout: React.FC = () => {
       {/* Mobile Menu Button */}
       <button 
         onClick={() => setIsSidebarOpen(true)}
-        className="lg:hidden fixed top-4 right-4 z-40 bg-slate-900 text-white p-2 rounded-xl shadow-lg"
+        className={`lg:hidden fixed ${fixedDesk ? 'top-2 right-2' : 'top-4 right-4'} z-40 bg-slate-900 text-white p-2 rounded-xl shadow-lg`}
       >
         <Menu size={24} />
       </button>
@@ -104,9 +105,9 @@ const Layout: React.FC = () => {
       </div>
 
       {/* Main Content - Scrollable */}
-      <main className="flex-1 overflow-y-auto">
-        <div className={fullBleed ? 'p-3 md:p-4' : 'p-4 md:p-8'}>
-          <div className={fullBleed ? undefined : 'max-w-7xl mx-auto'}>
+      <main className={`flex-1 min-w-0 ${fixedDesk ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+        <div className={fixedDesk ? 'h-full min-h-0 p-2 md:p-3' : fullBleed ? 'p-3 md:p-4' : 'p-4 md:p-8'}>
+          <div className={fixedDesk ? 'h-full min-h-0' : fullBleed ? undefined : 'max-w-7xl mx-auto'}>
             <Outlet />
           </div>
         </div>
