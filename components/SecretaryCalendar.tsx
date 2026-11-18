@@ -23,6 +23,14 @@ const SecretaryCalendar: React.FC<{ events: AppEvent[]; today: string }> = ({ ev
   const goToday = () => { setMonth(monthOf(today)); setSelected(today); };
 
   return <section className="h-full min-h-0 flex flex-col rounded-2xl border border-sky-200 bg-sky-50/60 p-3 shadow-sm" aria-labelledby="secretary-calendar-heading">
+    <style>{`@media (max-height: 580px) {
+      .secretary-calendar-cell { padding: 1px 2px; }
+      .secretary-calendar-date { display: flex; align-items: center; justify-content: space-between; font-size: 9px; line-height: 9px; }
+      .secretary-calendar-inline-bookings { display: inline; font-size: 8px; line-height: 8px; }
+      .secretary-calendar-bookings { display: none; }
+      .secretary-calendar-clickers { font-size: 8px; line-height: 8px; }
+      .secretary-calendar-pending { position: absolute; top: 2px; left: 2px; width: 5px; height: 5px; overflow: hidden; font-size: 0; background: #d97706; border-radius: 9999px; }
+    }`}</style>
     <div className="flex items-center justify-between gap-1 shrink-0">
       <h2 id="secretary-calendar-heading" className="font-black text-sky-950 flex items-center gap-1"><CalendarDays size={18} className="text-sky-700" /> לוח שנה</h2>
       <div className="flex items-center gap-1">
@@ -41,15 +49,15 @@ const SecretaryCalendar: React.FC<{ events: AppEvent[]; today: string }> = ({ ev
       {cells.map((key, index) => {
         if (!key) return <div key={`blank-${index}`} aria-hidden="true" />;
         const day = days.get(key); const bookings = day?.booked.length || 0; const clickers = day?.clickers || 0;
-        return <button key={key} type="button" onClick={() => setSelected(key)} aria-pressed={selected === key} aria-label={`${fullDate(key)}: ${bookings} אירועים שוריינו, ${clickers} קליקרים מוזמנים${day?.pending.length ? `, ${day.pending.length} ממתינים לאישור` : ''}`} className={`min-w-0 min-h-0 overflow-hidden rounded-lg border px-1 py-0.5 text-right leading-tight ${selected === key ? 'border-violet-500 bg-violet-50 ring-1 ring-violet-300' : 'border-slate-100 bg-slate-50/70 hover:border-violet-300'}`}>
-          <span className={`block text-xs font-black ${key === today ? 'text-violet-700' : 'text-slate-700'}`}>{Number(key.slice(-2))}</span>
-          <span className="block text-[9px] font-bold text-slate-700 whitespace-nowrap">{bookings} אירועים</span>
-          <span className="block text-[9px] text-slate-500 whitespace-nowrap">{clickers.toLocaleString('he-IL')} קליקרים</span>
-          {!!day?.pending.length && <span className="block text-[9px] text-amber-700 whitespace-nowrap">{day.pending.length} לאישור</span>}
+        return <button key={key} type="button" onClick={() => setSelected(key)} aria-pressed={selected === key} aria-label={`${fullDate(key)}: ${bookings} אירועים שוריינו, ${clickers} קליקרים מוזמנים${day?.pending.length ? `, ${day.pending.length} ממתינים לאישור` : ''}`} className={`secretary-calendar-cell relative min-w-0 min-h-0 overflow-hidden rounded-lg border px-1 py-0.5 text-right leading-tight ${selected === key ? 'border-violet-500 bg-violet-50 ring-1 ring-violet-300' : 'border-slate-100 bg-slate-50/70 hover:border-violet-300'}`}>
+          <span className={`secretary-calendar-date block text-xs font-black ${key === today ? 'text-violet-700' : 'text-slate-700'}`}>{Number(key.slice(-2))}<span className="secretary-calendar-inline-bookings hidden font-bold text-slate-700">{bookings} איר׳</span></span>
+          <span className="secretary-calendar-bookings block text-[9px] font-bold text-slate-700 whitespace-nowrap">{bookings} <span className="xl:hidden">איר׳</span><span className="hidden xl:inline">אירועים</span></span>
+          <span className="secretary-calendar-clickers block text-[9px] text-slate-500 whitespace-nowrap">{clickers.toLocaleString('he-IL')} <span className="xl:hidden">קל׳</span><span className="hidden xl:inline">קליקרים</span></span>
+          {!!day?.pending.length && <span className="secretary-calendar-pending block text-[9px] text-amber-700 whitespace-nowrap">{day.pending.length} לאישור</span>}
         </button>;
       })}
     </div>
-    <p className="pt-1 text-[10px] leading-tight text-slate-500 shrink-0">סך הקליקרים שהוזמנו ליום; זמינות תלויה גם בשעות האירועים.</p>
+    <p className="pt-1 text-[10px] leading-tight text-slate-500 shrink-0"><span className="xl:hidden">איר׳: אירועים · קל׳: קליקרים מוזמנים ליום</span><span className="hidden xl:inline">סך הקליקרים שהוזמנו ליום; זמינות תלויה גם בשעות האירועים.</span></p>
   </section>;
 };
 export default SecretaryCalendar;
