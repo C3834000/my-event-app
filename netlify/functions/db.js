@@ -26,9 +26,10 @@ const TASKS_PAYLOAD_KEYS = new Set([
   'waitingDays', 'potentialRevenue', 'easeOfExecution', 'requiredResources', 'frequency',
   'dueDate', 'dueTime', 'focusDate', 'reminderDate', 'completedDate', 'mondayId',
   'notes', 'helper', 'subTasks', 'eventId', 'activityLog', 'emailThreadId',
+  'assignee', 'doneNote', 'deskStatus',
 ]);
 
-function filterTasksPayload(data) {
+export function filterTasksPayload(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
   return Object.fromEntries(Object.entries(data).filter(([k]) => TASKS_PAYLOAD_KEYS.has(k)));
 }
