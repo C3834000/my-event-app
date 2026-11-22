@@ -22,6 +22,7 @@ const TASKS_PAYLOAD_KEYS = new Set([
   'waitingDays', 'potentialRevenue', 'easeOfExecution', 'requiredResources', 'frequency',
   'dueDate', 'dueTime', 'focusDate', 'reminderDate', 'completedDate', 'mondayId',
   'notes', 'helper', 'subTasks', 'eventId', 'activityLog', 'emailThreadId',
+  'assignee', 'doneNote', 'deskStatus',
 ]);
 
 function pick(table, data) {

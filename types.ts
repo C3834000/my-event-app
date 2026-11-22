@@ -152,6 +152,8 @@ export interface Customer {
 
 export interface AppEvent {
   id: string;
+  /** תאריך יצירת הרשומה במערכת; אינו בהכרח תאריך סגירת ההזמנה. */
+  createdAt?: string | null;
   customerId: string;
   title: string; 
   date: string; 

@@ -6,6 +6,8 @@ import { buildSecretaryDeskData, localDateKey } from '../services/secretaryDesk'
 import SecretaryCalendar from '../components/SecretaryCalendar';
 import SecretaryCollections from '../components/SecretaryCollections';
 import SecretaryMail from '../components/SecretaryMail';
+import SecretaryMonthlyFinance from '../components/SecretaryMonthlyFinance';
+import SecretaryPhones from '../components/SecretaryPhones';
 import SecretaryTasks from '../components/SecretaryTasks';
 import SecretaryBookings from '../components/SecretaryBookings';
 
@@ -33,13 +35,25 @@ const SecretaryDesk: React.FC = () => {
       <div className="min-w-0"><h1 className="font-black text-base sm:text-lg leading-tight truncate">שולחן המזכירה</h1><p className="text-[10px] sm:text-xs text-slate-300 truncate">{now.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })} · {status}</p></div>
       <div className="flex shrink-0 items-center gap-1"><SecretaryBookings events={events} customers={customers} ready={ready} /><button type="button" onClick={() => { setSyncError(''); void reloadFromCloud().catch(() => setSyncError('הרענון נכשל')); }} className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-slate-200 rounded-lg bg-slate-800 px-2 py-1.5"><RefreshCw size={13} /> רענון</button></div>
     </header>
+    <SecretaryMonthlyFinance events={events} today={today} ready={ready} />
     <nav aria-label="אזורי שולחן המזכירה" className="grid grid-cols-5 gap-1 min-[850px]:hidden shrink-0">{tabs.map(tab => <button key={tab.id} type="button" onClick={() => setActive(tab.id)} aria-pressed={active === tab.id} className={`rounded-lg px-1 py-1.5 text-[11px] font-bold ${active === tab.id ? `${tab.active} text-white` : 'bg-white text-slate-600 border border-slate-200'}`}>{tab.label}</button>)}</nav>
-    <div className="flex-1 min-h-0 grid grid-cols-1 grid-rows-1 min-[850px]:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)] min-[850px]:grid-rows-[minmax(0,1fr)_clamp(90px,14vh,120px)] gap-2">
+    <div className="flex-1 min-h-0 grid grid-cols-1 grid-rows-1 min-[850px]:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)] min-[850px]:grid-rows-[minmax(0,2fr)_minmax(160px,1fr)] gap-2">
       <div className={visible('tasks')}><SecretaryTasks data={data} today={today} ready={ready} refresh={reloadFromCloud} /></div>
-      <div className={visible('calendar')}>{ready ? <SecretaryCalendar events={events} today={today} /> : <section className="h-full rounded-2xl border border-sky-200 bg-sky-50 p-4"><h2 className="font-black text-sky-950">לוח שנה</h2><p className="mt-3 text-sm text-sky-800">ממתינים לסנכרון נתוני ה־CRM…</p></section>}</div>
+      <div className={visible('calendar')}>{ready ? <SecretaryCalendar events={events} customers={customers} today={today} /> : <section className="h-full rounded-2xl border border-sky-200 bg-sky-50 p-4"><h2 className="font-black text-sky-950">לוח שנה</h2><p className="mt-3 text-sm text-sky-800">ממתינים לסנכרון נתוני ה־CRM…</p></section>}</div>
       <div className={visible('collections')}><SecretaryCollections debt={ready ? data.debt : []} tasks={data.mine} ready={ready} refresh={reloadFromCloud} /></div>
       <div className={visible('mail')}><SecretaryMail /></div>
-      <div className={`${visible('info')} min-[850px]:col-span-2`}><section className="secretary-info-section h-full min-h-0 flex flex-col rounded-2xl border border-rose-200 bg-rose-50 p-3 shadow-sm" aria-labelledby="desk-info-heading"><h2 id="desk-info-heading" className="font-black text-rose-950 flex items-center gap-1 shrink-0"><Users size={17} className="text-rose-700" /> לקוחות, שיווק וציוד</h2><div className="secretary-info-items grid grid-cols-3 gap-2 mt-2 min-h-0"><Link to="/leads" className="rounded-lg bg-white/80 p-2 text-xs text-rose-900"><Users size={14} className="inline ml-1" /><strong>{ready ? data.dueLeads.length : '—'}</strong> לידים לטיפול{ready && data.dueLeads[0] && <span className="block truncate text-[10px] text-rose-700 mt-1">{data.dueLeads[0].name}</span>}</Link><Link to="/tasks" className="rounded-lg bg-white/80 p-2 text-xs text-rose-900"><Megaphone size={14} className="inline ml-1" /><strong>{ready ? data.marketing.length : '—'}</strong> משימות שיווק</Link><Link to="/events" className="rounded-lg bg-white/80 p-2 text-xs text-rose-900"><CalendarDays size={14} className="inline ml-1" /><strong>{ready ? data.upcoming.length : '—'}</strong> אירועים קרובים</Link></div><p className="secretary-info-caption mt-1 text-[10px] text-rose-700 truncate">האירועים הקרובים כוללים גם אירועים הממתינים לאישור. מצב הקליקרים מופיע ביומן.</p></section></div>
+      <div className={`${visible('info')} min-[850px]:col-span-2`}>
+        <section className="secretary-info-section h-full min-h-0 flex flex-col rounded-2xl border border-rose-200 bg-rose-50 p-3 shadow-sm" aria-labelledby="desk-info-heading">
+          <h2 id="desk-info-heading" className="font-black text-rose-950 flex items-center gap-1 shrink-0"><Users size={17} className="text-rose-700" /> לקוחות, שיווק וציוד</h2>
+          <div className="secretary-info-items grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2 flex-1 min-h-0">
+            <Link to="/leads" className="min-w-0 min-h-0 overflow-y-auto rounded-lg bg-white/80 p-2 text-xs text-rose-900"><Users size={14} className="inline ml-1" /><strong>{ready ? data.dueLeads.length : '—'}</strong> לידים לטיפול{ready && data.dueLeads.slice(0, 4).map(lead => <span key={lead.id} className="block truncate text-[11px] text-rose-700 mt-1">{lead.name || 'ללא שם'}</span>)}</Link>
+            <Link to="/tasks" className="min-w-0 min-h-0 overflow-y-auto rounded-lg bg-white/80 p-2 text-xs text-rose-900"><Megaphone size={14} className="inline ml-1" /><strong>{ready ? data.marketing.length : '—'}</strong> משימות שיווק{ready && data.marketing.slice(0, 4).map(task => <span key={task.id} className="block truncate text-[11px] text-rose-700 mt-1">{task.title}</span>)}</Link>
+            <Link to="/events" className="min-w-0 min-h-0 overflow-y-auto rounded-lg bg-white/80 p-2 text-xs text-rose-900"><CalendarDays size={14} className="inline ml-1" /><strong>{ready ? data.upcoming.length : '—'}</strong> אירועים קרובים{ready && data.upcoming.slice(0, 4).map(event => <span key={event.id} className="block truncate text-[11px] text-rose-700 mt-1">{event.title || 'אירוע ללא שם'}</span>)}</Link>
+            <SecretaryPhones />
+          </div>
+          <p className="secretary-info-caption mt-1 text-[10px] text-rose-700 truncate">האירועים הקרובים כוללים גם אירועים הממתינים לאישור. מצב הקליקרים מופיע ביומן.</p>
+        </section>
+      </div>
     </div>
   </div>;
 };

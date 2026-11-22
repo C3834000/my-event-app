@@ -30,6 +30,14 @@ test('מיון משימות מבחין באיחור, פוקוס, המתנה וה
   assert.equal(taskBucket(task({ id: 'later', dueDate: '2026-12-01' }), today, '2026-11-25'), 'later');
 });
 
+test('משימה המקושרת למייל מוצגת בשולחן רק כאשר היא משויכת למזכירה', () => {
+  const fromMail = task({ id: 'mail-task', emailThreadId: 'thread-1', assignee: undefined });
+  assert.equal(buildSecretaryDeskData([fromMail], [], [], [], '2026-11-22').mine.length, 0);
+  const assigned = { ...fromMail, assignee: 'מזכירה' as const };
+  const data = buildSecretaryDeskData([assigned], [], [], [], '2026-11-22');
+  assert.deepEqual(data.grouped.backlog.map(item => item.id), ['mail-task']);
+});
+
 test('הלוח סופר הזמנות מאושרות וציוד לפי סוג, ומשאיר הצעות בנפרד', () => {
   const date = '2026-11-19';
   const events = [
@@ -47,6 +55,16 @@ test('הלוח סופר הזמנות מאושרות וציוד לפי סוג, ו
   assert.equal(days.get(date)?.clickaorim, 80);
   assert.equal(days.get(date)?.pending.length, 1);
   assert.equal(days.get('2026-11-20')?.clickers, 30);
+});
+
+test('יום עם הצעה בלבד מופיע בלוח ויום עם אירוע מבוטל בלבד אינו מופיע', () => {
+  const days = summarizeCalendarDays([
+    event({ id: 'quote', date: '2026-11-23', status: EventStatus.QuoteSent }),
+    event({ id: 'cancelled', date: '2026-11-24', status: EventStatus.Cancelled }),
+  ]);
+  assert.equal(days.get('2026-11-23')?.booked.length, 0);
+  assert.equal(days.get('2026-11-23')?.pending[0].id, 'quote');
+  assert.equal(days.has('2026-11-24'), false);
 });
 
 test('לידים כוללים חדשים ומעקבים שהגיעו, בלי לידים סגורים', () => {
