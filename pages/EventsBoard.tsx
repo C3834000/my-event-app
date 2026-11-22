@@ -590,7 +590,7 @@ const EventsBoard: React.FC = () => {
 
   const totalRevenueFiltered = useMemo(() => {
     const eventsToCount = Object.values(groupedEvents).flat();
-    return eventsToCount.reduce((sum, e: AppEvent) => sum + (e.paidAmount || 0), 0);
+    return eventsToCount.reduce<number>((sum, e: AppEvent) => sum + (e.paidAmount || 0), 0);
   }, [groupedEvents]);
 
   const matchedCustomersForSearch = useMemo(() => {

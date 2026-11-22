@@ -39,6 +39,8 @@ const BookingForm: React.FC = () => {
   const { handlePublicBookingSubmit, leads, customers, customForms } = useApp();
   const [searchParams] = useSearchParams();
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [receiptSent, setReceiptSent] = useState(false);
+  const [duplicateBooking, setDuplicateBooking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -56,23 +58,19 @@ const BookingForm: React.FC = () => {
   const formConfig = customForms[0];
   const bookingFields = useMemo(() => {
     if (!formConfig) return [];
-    const existingPaymentDate = formConfig.fields.some(f => f.mapping === 'paymentDate');
-    if (existingPaymentDate) {
-      return formConfig.fields.map(f => f.mapping === 'paymentDate' ? { ...f, required: true } : f);
+    const fields = formConfig.fields.map(f => f.mapping === 'email'
+      ? { ...f, type: 'email' as const, required: true }
+      : f.mapping === 'paymentDate' ? { ...f, required: true } : f);
+    if (!fields.some(f => f.mapping === 'email')) {
+      fields.unshift({ id: 'f_booking_email_required', type: 'email', label: 'כתובת דוא״ל לקבלת הודעות', required: true, mapping: 'email' });
     }
-    const paymentMethodIndex = formConfig.fields.findIndex(f => f.mapping === 'paymentMethod');
-    const insertAt = paymentMethodIndex >= 0 ? paymentMethodIndex : formConfig.fields.length;
-    return [
-      ...formConfig.fields.slice(0, insertAt),
-      {
-        id: 'f_payment_date_required',
-        type: 'date' as const,
-        label: 'תאריך תשלום מוסכם',
-        required: true,
-        mapping: 'paymentDate',
-      },
-      ...formConfig.fields.slice(insertAt),
-    ];
+    if (!fields.some(f => f.mapping === 'paymentDate')) {
+      const paymentMethodIndex = fields.findIndex(f => f.mapping === 'paymentMethod');
+      fields.splice(paymentMethodIndex >= 0 ? paymentMethodIndex : fields.length, 0, {
+        id: 'f_payment_date_required', type: 'date', label: 'תאריך תשלום מוסכם', required: true, mapping: 'paymentDate',
+      });
+    }
+    return fields;
   }, [formConfig]);
 
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -149,6 +147,7 @@ const BookingForm: React.FC = () => {
 
   const [submittedEventId, setSubmittedEventId] = React.useState<string>('');
   const [submittedCustomerId, setSubmittedCustomerId] = React.useState<string>('');
+  const [submittedData, setSubmittedData] = useState<Record<string, any>>({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,10 +162,15 @@ const BookingForm: React.FC = () => {
           if (f.mapping) payload[f.mapping] = formData[f.id];
       });
       const result = await handlePublicBookingSubmit(payload, leadId || undefined, customerId || undefined);
+      setSubmittedData(payload);
       setSubmittedEventId(result.eventId);
       setSubmittedCustomerId(result.customerId);
+      setReceiptSent(result.emailSent);
+      setDuplicateBooking(result.duplicate);
       setIsSubmitted(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      if (result.duplicate) return;
 
       // שחרור מגבלת 25 השאלות בעורך החידונים (Quikhiv) — לכל מי שמילא טופס.
       // ההתאמה: uid (כשהגיע מהעורך) → מייל → טלפון (תופס נרשמים במייל אחר).
@@ -188,22 +192,23 @@ const BookingForm: React.FC = () => {
   };
 
   if (isSubmitted) {
+    if (duplicateBooking) return <div className="min-h-screen bg-slate-50 p-6 flex justify-center" dir="rtl"><div className="max-w-lg mt-12 text-center"><h1 className="text-3xl font-black">כבר קיימת בקשה או הזמנה לאירוע הזה</h1><p className="mt-4 text-slate-700">לא נוצרה בקשה נוספת ולא נשלח מייל חדש. לבירור סטטוס ההזמנה, אפשר לפנות למשרד.</p><p className="mt-3 font-bold">מספר: {submittedEventId}</p></div></div>;
     const eventData = {
       id: submittedEventId,
-      name: formData[bookingFields.find(f=>f.mapping==='name')?.id || ''] || '',
-      invoiceName: formData[bookingFields.find(f=>f.mapping==='invoiceName')?.id || ''] || '',
-      email: formData[bookingFields.find(f=>f.mapping==='email')?.id || ''] || '',
-      phone: formData[bookingFields.find(f=>f.mapping==='phone')?.id || ''] || '',
-      date: formData[bookingFields.find(f=>f.mapping==='date')?.id || ''] || '',
-      hebrewDate: formData[bookingFields.find(f=>f.mapping==='hebrewDate')?.id || ''] || '',
-      startTime: formData[bookingFields.find(f=>f.mapping==='startTime')?.id || ''] || '',
-      endTime: formData[bookingFields.find(f=>f.mapping==='endTime')?.id || ''] || '',
-      location: formData[bookingFields.find(f=>f.mapping==='location')?.id || ''] || '',
-      eventType: formData[bookingFields.find(f=>f.mapping==='eventType')?.id || ''] || '',
-      clickersNeeded: formData[bookingFields.find(f=>f.mapping==='clickersNeeded')?.id || ''] || 0,
-      amount: formData[bookingFields.find(f=>f.mapping==='amount')?.id || ''] || 0,
-      paymentDate: formData[bookingFields.find(f=>f.mapping==='paymentDate')?.id || ''] || '',
-      notes: formData[bookingFields.find(f=>f.mapping==='notes')?.id || ''] || '',
+      name: submittedData.name || '',
+      invoiceName: submittedData.invoiceName || '',
+      email: submittedData.email || '',
+      phone: submittedData.phone || '',
+      date: submittedData.date || '',
+      hebrewDate: submittedData.hebrewDate || '',
+      startTime: submittedData.startTime || '',
+      endTime: submittedData.endTime || '',
+      location: submittedData.location || '',
+      eventType: submittedData.eventType || '',
+      clickersNeeded: submittedData.clickersNeeded || 0,
+      amount: submittedData.amount || 0,
+      paymentDate: submittedData.paymentDate || '',
+      notes: submittedData.notes || '',
     };
 
     return (
@@ -214,8 +219,9 @@ const BookingForm: React.FC = () => {
             <div className="w-32 h-32 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl">
               <CheckCircle2 size={72} className="text-white animate-in zoom-in duration-300" />
             </div>
-            <h1 className="text-5xl font-black text-slate-900 mb-4">🎉 ההזמנה נקלטה בהצלחה!</h1>
+            <h1 className="text-5xl font-black text-slate-900 mb-4">🎉 בקשת ההזמנה התקבלה!</h1>
             <p className="text-xl text-slate-600 font-bold">שלום {eventData.name}, תודה שבחרת בנו! 👋</p>
+            <p className="mt-3 font-bold text-amber-800">הבקשה ממתינה לבדיקת המזכירות. אם הכול תקין, נשלח אליך הודעה נוספת כשהאירוע יאושר.</p>
             <div className="bg-slate-100 border-2 border-slate-300 rounded-2xl px-6 py-3 inline-block mt-4">
               <span className="text-slate-500 text-sm font-bold">מספר הזמנה:</span>
               <span className="text-slate-900 text-lg font-black mr-2">#{submittedEventId.substring(2, 15)}</span>
@@ -227,9 +233,14 @@ const BookingForm: React.FC = () => {
             <div className="flex items-start gap-4">
               <Mail className="text-green-600 mt-1 shrink-0" size={32} />
               <div className="text-right">
-                <h3 className="text-lg font-black text-green-900 mb-2">✅ מייל אישור נשלח אליך!</h3>
-                <p className="text-sm font-bold text-green-700">העתק מלא של פרטי ההזמנה נשלח למייל: <span className="underline">{eventData.email}</span></p>
-                <p className="text-xs text-green-600 mt-2">בדוק את תיבת הדואר שלך (וגם בספאם למקרה)</p>
+                {receiptSent ? <>
+                  <h3 className="text-lg font-black text-green-900 mb-2">מייל על קבלת הבקשה נשלח אליך</h3>
+                  <p className="text-sm font-bold text-green-700">פרטי הבקשה נשלחו למייל: <span className="underline">{eventData.email}</span></p>
+                  <p className="text-xs text-green-600 mt-2">כדאי לבדוק גם בתיקיית הספאם.</p>
+                </> : <>
+                  <h3 className="text-lg font-black text-amber-900 mb-2">הבקשה נשמרה, אך לא הצלחנו לשלוח את המייל</h3>
+                  <p className="text-sm font-bold text-amber-800">נא לפנות למשרד כדי לוודא את כתובת הדוא״ל ולקבל עדכון על הבקשה.</p>
+                </>}
               </div>
             </div>
           </div>
@@ -341,8 +352,8 @@ const BookingForm: React.FC = () => {
 
           {skipPortal && (
             <div className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-3xl shadow-2xl p-8 text-center mb-6">
-              <h3 className="text-2xl font-black text-white mb-4">✅ האירוע נשמר בהצלחה!</h3>
-              <p className="text-white/90 font-bold text-lg mb-6">פרטי האירוע נשלחו למייל הלקוח</p>
+              <h3 className="text-2xl font-black text-white mb-4">הבקשה נשמרה וממתינה לאישור</h3>
+              <p className="text-white/90 font-bold text-lg mb-6">{receiptSent ? 'פרטי הבקשה נשלחו למייל הלקוח' : 'לא הצלחנו לשלוח מייל על קבלת הבקשה'}</p>
               <button
                 onClick={() => { window.location.href = '/#/customers'; }}
                 className="bg-white text-green-600 px-10 py-5 rounded-2xl font-black text-xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300"
@@ -358,7 +369,7 @@ const BookingForm: React.FC = () => {
               <div className="text-3xl">💡</div>
               <div className="text-right">
                 <h4 className="font-black text-amber-900 text-lg mb-2">שימו לב:</h4>
-                <p className="text-amber-800 font-bold">ההזמנה שלכם שמורה במערכת שלנו. נציג יצור איתכם קשר בהקדם לאישור סופי ותיאום פרטים נוספים.</p>
+                <p className="text-amber-800 font-bold">הבקשה שמורה במערכת וממתינה לבדיקת המזכירות. אם הכול תקין, תקבלו הודעה נוספת כשהאירוע יאושר.</p>
               </div>
             </div>
           </div>
@@ -373,7 +384,7 @@ const BookingForm: React.FC = () => {
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12 space-y-4">
             <h1 className="text-5xl font-black text-slate-900 tracking-tight">{formConfig?.title}</h1>
-            <p className="text-slate-500 text-lg max-w-lg mx-auto font-medium">השלב הראשון והכי חשוב כדי לשריין את האירוע המבוקש!</p>
+            <p className="text-slate-500 text-lg max-w-lg mx-auto font-medium">מלאו את פרטי האירוע. לאחר בדיקת המזכירות תקבלו הודעת אישור.</p>
         </div>
 
         <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-slate-100">
@@ -488,7 +499,7 @@ const BookingForm: React.FC = () => {
                 disabled={isLoading} 
                 className={`w-full py-6 rounded-[2.5rem] font-black text-2xl shadow-2xl transition-all flex items-center justify-center gap-3 ${termsAccepted ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-slate-200 text-slate-400'}`}
               >
-                {isLoading ? <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin"></div> : <> <Send size={28}/> שלח טופס הזמנה ושריין תאריך </>}
+                {isLoading ? <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin"></div> : <> <Send size={28}/> שליחת בקשת הזמנה </>}
               </button>
            </form>
         </div>

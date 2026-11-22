@@ -15,6 +15,7 @@ import {
 } from '../services/supabase';
 import { buildPaymentDateUpdates } from '../services/paymentDateImport';
 import { currentYearKey, eventYearKey, incomeDateKey, parseEventDateKey, todayDateKey, numMoney, isPaidForKpi, excludeEventFromKpis } from '../services/eventKpi';
+import { approveBooking, bookingEmail, saveBookingEdits, type ApprovalResult } from '../services/bookingApproval';
 
 /** נרמול ערכים מיובאים / ישנים כדי שיופיעו בלוח ובסינונים */
 function normalizeEventRecord<T extends { status?: string; paymentStatus?: string }>(ev: T): T {
@@ -137,7 +138,9 @@ interface AppContextType {
   updateLeadStatus: (id: string, status: LeadStatus) => void;
   updateLead: (id: string, updates: Partial<Lead>) => void;
   convertLeadToCustomer: (leadId: string) => void;
-  handlePublicBookingSubmit: (data: any, leadId?: string, customerId?: string) => Promise<{ eventId: string; customerId: string }>;
+  handlePublicBookingSubmit: (data: any, leadId?: string, customerId?: string) => Promise<{ eventId: string; customerId: string; emailSent: boolean; duplicate: boolean }>;
+  approveBookingRequest: (event: AppEvent) => Promise<ApprovalResult>;
+  saveBookingRequestEdits: (event: AppEvent, updates: Partial<AppEvent>) => Promise<void>;
   /** מוחק לידים שכבר לקוחות / מילאו הזמנה — לפי טלפון, מייל או שם */
   cleanupConvertedLeads: () => Promise<number>;
   sendBookingEmail: (leadId: string) => Promise<{ success: boolean; email: string; url: string }>;
@@ -519,7 +522,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const handlePublicBookingSubmit = async (data: any, leadId?: string, customerId?: string) => {
-    console.log('🎯 handlePublicBookingSubmit נקרא עם הנתונים:', data, 'leadId:', leadId, 'customerId:', customerId);
+    if (!String(data.email || '').trim()) throw new Error('יש להזין כתובת דוא״ל כדי לקבל את אישור הבקשה והאירוע.');
 
     // =========================================================================
     // הגנה מפני כפילויות (מונע מקרים כמו "גלים תיירות 3311 אירועים"):
@@ -540,7 +543,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (dup) {
         console.warn('🛑 כפילות זוהתה — מחזיר את האירוע הקיים במקום ליצור חדש:', dup.id);
         addActivity('system', `נחסמה כפילות הזמנה מהפורטל (טלפון ${normPhone} בתאריך ${dateKey}) — האירוע הקיים: ${dup.id}`);
-        return { eventId: dup.id, customerId: dup.customerId };
+        return { eventId: dup.id, customerId: dup.customerId, emailSent: false, duplicate: true };
       }
 
       // 2) הגנת קצב: אותו טלפון לא יכול לשלוח שוב תוך 60 שניות
@@ -602,7 +605,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       endTime: data.endTime || '11:30',
       amount: Number(data.amount || 0),
       paidAmount: 0,
-      status: EventStatus.Booked,
+      status: EventStatus.PendingApproval,
       paymentStatus: PaymentStatus.NotPaid,
       eventType: data.eventType || EventType.ClickersProgram,
       location: data.location || '',
@@ -614,6 +617,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       hebrewDate: data.hebrewDate || '',
       paymentDate: data.paymentDate || '',
       invoiceName: data.invoiceName || '',
+      paymentMethod: data.paymentMethod || undefined,
+      termsAccepted: true,
     };
 
     await eventsService.create(event);
@@ -621,155 +626,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEvents((prev) => [event, ...prev]);
     addActivity('system', `הזמנה חדשה התקבלה מהפורטל - ${data.name}`);
     
-    const toEmail = (data.email || '').trim();
-    if (toEmail) {
-      const d = event.date.replace(/-/g, '');
-      const start = `${d}T${(event.startTime || '10:00').replace(':', '')}00`;
-      const end = `${d}T${(event.endTime || '12:00').replace(':', '')}00`;
-      const calTitle = encodeURIComponent(`אירוע קליכיף – ${data.name || 'הזמנה'}`);
-      const hebrewDateInfo = event.hebrewDate ? `\nתאריך עברי: ${event.hebrewDate}` : '';
-      const calDetails = encodeURIComponent(`הזמנה דרך פורטל קליכיף${hebrewDateInfo}\nמיקום: ${event.location || '-'}\nטלפון: ${event.phone || '-'}\nאימייל: ${event.email || '-'}\nקליקרים: ${event.clickersNeeded || 0}\nלשאלות: ${settings.contactPhone}`);
-      const calLocation = encodeURIComponent(event.location || '');
-      const googleCalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTitle}&dates=${start}/${end}&details=${calDetails}&location=${calLocation}`;
-      
-      // יומן עברי - הבריכה (Hebcal)
-      const hebcalUrl = `https://www.hebcal.com/converter?gd=${event.date.split('-')[2]}&gm=${event.date.split('-')[1]}&gy=${event.date.split('-')[0]}&g2h=1`;
-      const { success, error, hint } = await sendEmail({
-        to: toEmail,
-        subject: `✅ אישור הזמנה #${event.id.substring(2, 15)} - ${data.name} - ${new Date(event.date).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}`,
-        html: `
-          <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; border-radius: 20px;">
-            <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
-              <div style="text-align: center; margin-bottom: 24px;">
-                <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; font-size: 40px;">✅</div>
-                <h1 style="color: #1a202c; font-size: 28px; margin: 0; font-weight: 800;">ההזמנה נקלטה בהצלחה!</h1>
-                <p style="color: #718096; font-size: 16px; margin: 8px 0 0;">שלום ${data.name || 'לקוח/ה'} 👋</p>
-                <div style="background: #f1f5f9; border-radius: 8px; padding: 8px 16px; margin: 12px auto 0; display: inline-block;">
-                  <span style="color: #64748b; font-size: 12px; font-weight: 600;">מספר הזמנה:</span>
-                  <span style="color: #334155; font-size: 14px; font-weight: 800; margin-right: 8px;">#${event.id.substring(2, 15)}</span>
-                </div>
-              </div>
-              
-              <div style="background: linear-gradient(to bottom, #f0f9ff, #e0f2fe); border: 2px solid #0284c7; border-radius: 16px; padding: 24px; margin: 24px 0; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);">
-                <h2 style="color: #0c4a6e; font-size: 20px; margin: 0 0 20px; font-weight: 800; text-align: center;">📋 פרטי האירוע שלך</h2>
-                <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                  <tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0; width: 40%;">👤 שם המזמין:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${data.name || 'לא צוין'}</td></tr>
-                  ${event.invoiceName ? `<tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">🧾 שם לחשבונית:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${event.invoiceName}</td></tr>` : ''}
-                  <tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">📞 טלפון:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${data.phone || 'לא צוין'}</td></tr>
-                  <tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">📧 אימייל:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${data.email || 'לא צוין'}</td></tr>
-                  <tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">📅 תאריך:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; font-size: 16px; border-bottom: 1px solid #e2e8f0;">${new Date(event.date).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
-                  ${event.hebrewDate ? `<tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">🗓️ תאריך עברי:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${event.hebrewDate}</td></tr>` : ''}
-                  <tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">⏰ שעת התחלה:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${event.startTime}</td></tr>
-                  <tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">⏰ שעת סיום:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${event.endTime}</td></tr>
-                  <tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">📍 מיקום האירוע:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${event.location || 'לא צוין'}</td></tr>
-                  <tr style="background: #f8fafc;"><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">🎯 סוג האירוע:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${event.eventType}</td></tr>
-                  ${event.clickersNeeded > 0 ? `<tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">🖱️ מספר קליקרים:</td><td style="padding: 12px 16px; color: #7c3aed; font-weight: 800; font-size: 18px; border-bottom: 1px solid #e2e8f0;">${event.clickersNeeded} קליקרים</td></tr>` : ''}
-                  <tr style="background: #dcfce7;"><td style="padding: 14px 16px; color: #166534; font-weight: 700;">💰 סכום לתשלום:</td><td style="padding: 14px 16px; color: #166534; font-weight: 900; font-size: 22px;">₪${event.amount.toLocaleString()}</td></tr>
-                  ${event.paymentDate ? `<tr><td style="padding: 12px 16px; color: #475569; font-weight: 700; border-bottom: 1px solid #e2e8f0;">💳 תאריך תשלום מוסכם:</td><td style="padding: 12px 16px; color: #1e293b; font-weight: 800; border-bottom: 1px solid #e2e8f0;">${new Date(event.paymentDate).toLocaleDateString('he-IL')}</td></tr>` : ''}
-                  ${event.notes ? `<tr style="background: #fef3c7;"><td colspan="2" style="padding: 14px 16px; color: #92400e; font-weight: 700; vertical-align: top;">📝 הערות: <br/><span style="font-weight: 600;">${event.notes}</span></td></tr>` : ''}
-                </table>
-              </div>
-
-              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 20px; margin: 24px 0; text-align: center;">
-                <p style="color: white; margin: 0 0 12px; font-size: 14px; font-weight: 600;">הוסף את האירוע ליומן שלך</p>
-                <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-                  <a href="${googleCalUrl}" style="display: inline-block; background: white; color: #667eea; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 800; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">📅 Google Calendar</a>
-                  <a href="${hebcalUrl}" target="_blank" style="display: inline-block; background: white; color: #764ba2; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 800; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">🗓️ יומן עברי</a>
-                </div>
-              </div>
-
-              <div style="border-top: 2px solid #e2e8f0; padding-top: 20px; margin-top: 24px;">
-                <h3 style="color: #2d3748; font-size: 16px; margin: 0 0 12px; font-weight: 700;">📞 פרטי התקשרות</h3>
-                <p style="color: #4a5568; margin: 4px 0;"><strong>שם:</strong> ${data.name || 'לא צוין'}</p>
-                <p style="color: #4a5568; margin: 4px 0;"><strong>טלפון:</strong> ${data.phone || 'לא צוין'}</p>
-                <p style="color: #4a5568; margin: 4px 0;"><strong>אימייל:</strong> ${data.email || 'לא צוין'}</p>
-              </div>
-
-              <div style="background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
-                <p style="color: white; margin: 0 0 16px; font-size: 18px; font-weight: 800; line-height: 1.6;">✨ זה הזמן להתקדם לשלב הכנת החידון שלכם!</p>
-                <p style="color: white; margin: 0 0 20px; font-size: 15px; font-weight: 600; opacity: 0.95;">לחצו על הכפתור להמשך מרגש 🎉</p>
-                <a href="https://myecrm2026.netlify.app/#/portal/${finalCustomerId || leadId || event.id}?step=1" style="display: inline-block; background: white; color: #8b5cf6; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 19px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: all 0.3s;">🎯 כניסה לפורטל האישי שלכם ←</a>
-              </div>
-
-              <div style="background: #fef3c7; border-right: 4px solid #f59e0b; border-radius: 8px; padding: 16px; margin: 24px 0;">
-                <p style="color: #92400e; margin: 0; font-size: 14px; font-weight: 600;">💡 <strong>שימו לב:</strong> ההזמנה שלכם שמורה במערכת שלנו. נציג יצור איתכם קשר בהקדם לאישור סופי ותיאום פרטים נוספים.</p>
-              </div>
-
-              <div style="text-align: center; margin-top: 32px; padding-top: 24px; border-top: 2px solid #e2e8f0;">
-                <p style="color: #718096; margin: 0 0 8px; font-size: 14px;">לשאלות ובירורים:</p>
-                <p style="color: #1a202c; font-weight: 800; font-size: 18px; margin: 0 0 4px;">📞 ${settings.contactPhone}</p>
-                <p style="color: #718096; margin: 16px 0 0; font-size: 14px;">בברכה,<br/><strong style="color: #667eea; font-size: 16px;">${settings.companyName}</strong></p>
-              </div>
-            </div>
-          </div>
-        `,
-      });
-      if (success) addActivity('email', `מייל אישור הזמנה נשלח ללקוח: ${toEmail}`);
-      else addActivity('email', `שליחת מייל נכשלה: ${formatSendEmailError(error, hint)}`);
-    }
+    const receipt = await sendEmail(bookingEmail(event, 'received', settings));
+    if (receipt.success) addActivity('email', `אישור קבלת בקשה נשלח ללקוח: ${event.email}`);
+    else addActivity('email', `שליחת אישור קבלת בקשה נכשלה: ${formatSendEmailError(receipt.error, receipt.hint)}`);
 
     const adminEmail = userEmail || 'c3834000@gmail.com';
-    const addEventUrl = `https://myecrm2026.netlify.app/#/add-event?data=${encodeURIComponent(JSON.stringify({
-      id: event.id,
-      title: event.title,
-      date: event.date,
-      startTime: event.startTime,
-      endTime: event.endTime,
-      phone: event.phone,
-      email: event.email,
-      location: event.location,
-      amount: event.amount,
-      clickersNeeded: event.clickersNeeded,
-      eventType: event.eventType,
-      hebrewDate: event.hebrewDate,
-      notes: event.notes,
-      invoiceName: event.invoiceName,
-      customerId: finalCustomerId
-    }))}`;
-
     await sendEmail({
       to: adminEmail,
-      subject: `🔔 הזמנה חדשה מהפורטל - ${data.name} - ${new Date(event.date).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' })}`,
-      html: `
-        <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 30px 20px; border-radius: 20px;">
-          <div style="background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
-            <div style="text-align: center; margin-bottom: 20px;">
-              <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 50%; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-size: 32px;">🔔</div>
-              <h1 style="color: #1a202c; font-size: 24px; margin: 0; font-weight: 800;">הזמנה חדשה מהפורטל!</h1>
-              <p style="color: #ef4444; font-size: 14px; margin: 8px 0 0; font-weight: 700;">מס' הזמנה: #${event.id.substring(2, 15)}</p>
-            </div>
-            
-            <div style="background: #fee2e2; border: 2px solid #ef4444; border-radius: 12px; padding: 20px; margin: 20px 0;">
-              <h2 style="color: #991b1b; font-size: 18px; margin: 0 0 16px; font-weight: 800; text-align: center;">📋 פרטי האירוע</h2>
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700; width: 35%;">👤 שם:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${data.name || '-'}</td></tr>
-                ${event.invoiceName ? `<tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">🧾 שם לחשבונית:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${event.invoiceName}</td></tr>` : ''}
-                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">📞 טלפון:</td><td style="padding: 8px; color: #1e293b; font-weight: 700;">${data.phone || '-'}</td></tr>
-                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">📧 אימייל:</td><td style="padding: 8px; color: #1e293b; font-weight: 700;">${data.email || '-'}</td></tr>
-                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">📅 תאריך:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${new Date(event.date).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
-                ${event.hebrewDate ? `<tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">🗓️ תאריך עברי:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${event.hebrewDate}</td></tr>` : ''}
-                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">⏰ שעות:</td><td style="padding: 8px; color: #1e293b; font-weight: 800;">${event.startTime} - ${event.endTime}</td></tr>
-                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">📍 מיקום:</td><td style="padding: 8px; color: #1e293b; font-weight: 700;">${event.location || '-'}</td></tr>
-                <tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">🎯 סוג אירוע:</td><td style="padding: 8px; color: #1e293b; font-weight: 700;">${event.eventType}</td></tr>
-                ${event.clickersNeeded > 0 ? `<tr><td style="padding: 8px; color: #7f1d1d; font-weight: 700;">🖱️ קליקרים:</td><td style="padding: 8px; color: #7c3aed; font-weight: 800; font-size: 16px;">${event.clickersNeeded}</td></tr>` : ''}
-                <tr style="background: #dcfce7;"><td style="padding: 12px; color: #166534; font-weight: 700;">💰 סכום:</td><td style="padding: 12px; color: #166534; font-weight: 900; font-size: 20px;">₪${event.amount.toLocaleString()}</td></tr>
-                ${event.notes ? `<tr><td colspan="2" style="padding: 12px; color: #92400e; background: #fef3c7; font-weight: 700;">📝 הערות: ${event.notes}</td></tr>` : ''}
-              </table>
-            </div>
-
-            <div style="text-align: center; margin: 24px 0;">
-              <a href="${addEventUrl}" style="display: inline-block; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 16px 40px; border-radius: 12px; text-decoration: none; font-weight: 900; font-size: 18px; box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);">
-                ➕ הוסף ללוח אירועים
-              </a>
-              <p style="color: #64748b; font-size: 12px; margin: 12px 0 0;">לחיצה על הכפתור תוסיף את האירוע אוטומטית למערכת</p>
-            </div>
-            
-            <div style="background: #f1f5f9; border-radius: 8px; padding: 12px; text-align: center; margin-top: 20px;">
-              <p style="color: #475569; margin: 0; font-size: 12px;">הלקוח קיבל אישור למייל שלו</p>
-            </div>
-          </div>
-        </div>
-      `,
+      subject: `בקשת הזמנת אירוע ממתינה לאישור - ${data.name || 'לקוח'}`,
+      text: `התקבלה בקשה חדשה להזמנת אירוע.\n\nשם: ${data.name || '-'}\nטלפון: ${event.phone || '-'}\nמייל: ${event.email || '-'}\nתאריך: ${event.date}\nשעות: ${event.startTime} - ${event.endTime}\nמיקום: ${event.location || '-'}\nסוג: ${event.eventType}\nמשתתפים: ${event.clickersNeeded}\nסכום: ${event.amount} ₪\nהערות: ${event.notes || '-'}\n\n${receipt.success ? 'אישור קבלת הבקשה נשלח למבקש.' : 'שליחת אישור קבלת הבקשה נכשלה.'}\nלבדיקה ואישור בשולחן המזכירה: https://myecrm2026.netlify.app/#/desk`,
     });
 
     // אחרי הזמנה — מוחקים לידים תואמים (לפי leadId / טלפון / מייל / שם)
@@ -784,7 +649,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('ניקוי לידים אחרי הזמנה נכשל:', e);
     }
 
-    return { eventId: event.id, customerId: finalCustomerId || '' };
+    return { eventId: event.id, customerId: finalCustomerId || '', emailSent: receipt.success, duplicate: false };
+  };
+
+  const approveBookingRequest = async (event: AppEvent): Promise<ApprovalResult> => {
+    const transition = async (id: string, expected: string, next: string) => {
+      const saved = await eventsService.transitionStatus(id, expected, next);
+      if (saved) setEvents(previous => previous.map(item => item.id === id ? normalizeEventRecord(saved) : item));
+      return saved;
+    };
+    const result = await approveBooking(event, settings, transition, sendEmail);
+    if (result.kind === 'sent') addActivity('email', `אישור האירוע נשלח ללקוח: ${event.email}`);
+    if (result.kind === 'send_failed') addActivity('email', `האירוע אושר אך שליחת האישור נכשלה: ${event.title}`);
+    if (result.kind === 'conflict') void reloadFromCloud().catch(() => {});
+    return result;
+  };
+
+  const saveBookingRequestEdits = async (event: AppEvent, updates: Partial<AppEvent>) => {
+    let saved: AppEvent;
+    try {
+      saved = await saveBookingEdits(event, updates, eventsService.transitionStatus);
+    } catch (error) {
+      void reloadFromCloud().catch(() => {});
+      throw error;
+    }
+    setEvents(previous => previous.map(item => item.id === event.id ? normalizeEventRecord(saved) : item));
   };
 
   const buildPortalEmailHtml = (name: string, portalUrl: string, companyName: string, portalQuery: string) => {
@@ -1445,7 +1334,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const paidAmt = numMoney(ev.paidAmount);
       if (incomeYear === dashboardYear) total += paidAmt;
 
-      if (excludeEventFromKpis(ev)) return;
+      if (excludeEventFromKpis(ev) || ev.status === EventStatus.PendingApproval) return;
       if (evYear !== dashboardYear) return;
 
       const evKey = parseEventDateKey(ev.date);
@@ -1540,7 +1429,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{ 
       userEmail, events, customers, leads, tasks, customForms, activities, settings, updateSettings, sendPortalEmailForCustomer, addEvent, updateEventStatus, updateEvent, deleteEvent,
       addCustomer, updateCustomer, getCustomerById, addLead, updateLeadStatus, updateLead, convertLeadToCustomer, cleanupConvertedLeads, handlePublicBookingSubmit,
-      sendBookingEmail, sendPortalEmail, sendEventUpdateEmail, addTask, updateTask, toggleTask, updateTaskProgress, deleteTask, importEvents, applyPaymentDatesFromImport, importCustomers, importTasks, importTaskObjects, importLeads, kpis, integrations, toggleIntegration, syncRemoteBookings,
+      sendBookingEmail, sendPortalEmail, sendEventUpdateEmail, approveBookingRequest, saveBookingRequestEdits, addTask, updateTask, toggleTask, updateTaskProgress, deleteTask, importEvents, applyPaymentDatesFromImport, importCustomers, importTasks, importTaskObjects, importLeads, kpis, integrations, toggleIntegration, syncRemoteBookings,
       addCustomForm, updateCustomForm, deleteCustomForm, getFormById, syncAllEventsWithCustomers, uploadAllToCloud, reloadFromCloud,
       cloudSyncOk, lastCloudSyncAt, emails, emailsSyncing, syncGmail, replyToEmail, updateEmails, refreshEmails: loadEmails
     }}>

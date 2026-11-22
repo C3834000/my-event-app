@@ -7,6 +7,7 @@ import SecretaryCalendar from '../components/SecretaryCalendar';
 import SecretaryCollections from '../components/SecretaryCollections';
 import SecretaryMail from '../components/SecretaryMail';
 import SecretaryTasks from '../components/SecretaryTasks';
+import SecretaryBookings from '../components/SecretaryBookings';
 
 type Tab = 'tasks' | 'calendar' | 'collections' | 'mail' | 'info';
 const tabs: { id: Tab; label: string; active: string }[] = [
@@ -30,7 +31,7 @@ const SecretaryDesk: React.FC = () => {
     <style>{`@media (max-height: 650px) { .secretary-info-section { padding: 8px; } .secretary-info-items { margin-top: 3px; gap: 4px; } .secretary-info-items a { padding: 4px; } .secretary-info-caption { display: none; } }`}</style>
     <header className="shrink-0 rounded-xl bg-slate-900 text-white px-3 py-2 flex items-center justify-between gap-2 mr-11 xl:mr-0">
       <div className="min-w-0"><h1 className="font-black text-base sm:text-lg leading-tight truncate">שולחן המזכירה</h1><p className="text-[10px] sm:text-xs text-slate-300 truncate">{now.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })} · {status}</p></div>
-      <button type="button" onClick={() => { setSyncError(''); void reloadFromCloud().catch(() => setSyncError('הרענון נכשל')); }} className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-slate-200 rounded-lg bg-slate-800 px-2 py-1.5"><RefreshCw size={13} /> רענון</button>
+      <div className="flex shrink-0 items-center gap-1"><SecretaryBookings events={events} customers={customers} ready={ready} /><button type="button" onClick={() => { setSyncError(''); void reloadFromCloud().catch(() => setSyncError('הרענון נכשל')); }} className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-slate-200 rounded-lg bg-slate-800 px-2 py-1.5"><RefreshCw size={13} /> רענון</button></div>
     </header>
     <nav aria-label="אזורי שולחן המזכירה" className="grid grid-cols-5 gap-1 min-[850px]:hidden shrink-0">{tabs.map(tab => <button key={tab.id} type="button" onClick={() => setActive(tab.id)} aria-pressed={active === tab.id} className={`rounded-lg px-1 py-1.5 text-[11px] font-bold ${active === tab.id ? `${tab.active} text-white` : 'bg-white text-slate-600 border border-slate-200'}`}>{tab.label}</button>)}</nav>
     <div className="flex-1 min-h-0 grid grid-cols-1 grid-rows-1 min-[850px]:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)] min-[850px]:grid-rows-[minmax(0,1fr)_clamp(90px,14vh,120px)] gap-2">

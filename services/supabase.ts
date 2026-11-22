@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import type { Customer, AppEvent, Lead, Task, CustomForm, Email, EmailPrefs } from '../types';
 
 // In development, call the local Express server on port 4000.
@@ -24,7 +25,7 @@ function mapDbNetworkError(err: unknown): Error {
 async function dbRequest(
   action: string,
   table: string,
-  options: { data?: any; id?: string; orderBy?: string; orderAsc?: boolean; select?: string } = {}
+  options: { data?: any; id?: string; orderBy?: string; orderAsc?: boolean; select?: string; expectedStatus?: string; nextStatus?: string } = {}
 ): Promise<any> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DB_FETCH_MS);
@@ -81,6 +82,9 @@ export const eventsService = {
   },
   async update(id: string, updates: Partial<AppEvent>): Promise<AppEvent> {
     return dbRequest('update', 'events', { id, data: updates });
+  },
+  async transitionStatus(id: string, expectedStatus: string, nextStatus: string, data?: Partial<AppEvent>): Promise<AppEvent | null> {
+    return dbRequest('transitionEventStatus', 'events', { id, expectedStatus, nextStatus, data });
   },
   async delete(id: string): Promise<void> {
     return dbRequest('delete', 'events', { id });

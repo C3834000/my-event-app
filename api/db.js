@@ -45,7 +45,7 @@ export default async function handler(req, res) {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
-  const { table, action, data, id, orderBy, orderAsc } = req.body || {};
+  const { table, action, data, id, orderBy, orderAsc, expectedStatus, nextStatus } = req.body || {};
 
   if (!table || !action) {
     return res.status(400).json({ error: 'Missing required fields: table, action' });
@@ -67,6 +67,16 @@ export default async function handler(req, res) {
       case 'getById': {
         if (table !== 'tasks' || !id) throw new Error('A task ID is required');
         const { data: row, error } = await supabase.from('tasks').select('*').eq('id', id).maybeSingle();
+        if (error) throw error;
+        result = row ? toCamel(row) : null;
+        break;
+      }
+      case 'transitionEventStatus': {
+        if (table !== 'events' || !id || typeof expectedStatus !== 'string' || !expectedStatus || typeof nextStatus !== 'string' || !nextStatus) throw new Error('Event ID and statuses are required');
+        const payload = { ...(data || {}) };
+        delete payload.id;
+        delete payload.status;
+        const { data: row, error } = await supabase.from('events').update({ ...toSnake(payload), status: nextStatus }).eq('id', id).eq('status', expectedStatus).select().maybeSingle();
         if (error) throw error;
         result = row ? toCamel(row) : null;
         break;

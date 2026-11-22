@@ -1,5 +1,7 @@
 
 export enum EventStatus {
+  PendingApproval = 'בקשת הזמנה ממתינה לאישור',
+  ApprovalEmailPending = 'אושר - ממתין לשליחת הודעה',
   QuoteSent = 'הצעת מחיר נשלחה',
   PreliminaryApproval = 'אישור ראשוני',
   Booked = 'שוריין',

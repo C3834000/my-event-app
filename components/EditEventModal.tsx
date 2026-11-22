@@ -14,6 +14,7 @@ import {
   GREEN_INVOICE_ROUTE_TAG,
 } from '../services/greenInvoice';
 import { EVENT_TAGS } from '../constants/eventBoard';
+import { bookingStatusLabel, isApprovalSending, isBookingApprovalWork } from '../services/bookingApproval';
 
 export interface EditEventModalProps {
   event?: Partial<AppEvent>;
@@ -23,7 +24,7 @@ export interface EditEventModalProps {
 }
 
 const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, preselectedCustomerId }) => {
-  const { updateEvent, deleteEvent, addEvent, addCustomer, customers, getCustomerById, sendEventUpdateEmail } = useApp();
+  const { updateEvent, saveBookingRequestEdits, deleteEvent, addEvent, addCustomer, customers, getCustomerById, sendEventUpdateEmail } = useApp();
   const initialCustomerId = preselectedCustomerId || event?.customerId || '';
   const initialCust = initialCustomerId ? getCustomerById(initialCustomerId) : null;
   const [formData, setFormData] = useState<any>({
@@ -57,6 +58,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
   const [greenInvoiceDocType, setGreenInvoiceDocType] = useState(320);
   const [greenInvoiceDocDate, setGreenInvoiceDocDate] = useState(new Date().toISOString().slice(0, 10));
   const [convertLoading, setConvertLoading] = useState(false);
+  const [bookingSaveBusy, setBookingSaveBusy] = useState(false);
   const [convertTargetType, setConvertTargetType] = useState<number | null>(null);
   // GI document state (persisted per event)
   const [giDoc, setGiDoc] = useState({
@@ -86,10 +88,22 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
     };
     if (isNew) {
       addEvent(payload);
+    } else if (event?.id && isBookingApprovalWork(event.status)) {
+      setBookingSaveBusy(true);
+      try {
+        await saveBookingRequestEdits(event as AppEvent, payload);
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'לא ניתן לשמור את פרטי הבקשה.');
+        setBookingSaveBusy(false);
+        return;
+      }
+      setBookingSaveBusy(false);
     } else {
-      updateEvent(formData.id, payload);
+      // Do not overwrite a status changed on another desk while this editor was open.
+      const { status, ...unchangedStatusPayload } = payload;
+      updateEvent(formData.id, status === event?.status ? unchangedStatusPayload : payload);
       const customerEmail = (formData.email || getCustomerById(formData.customerId)?.email || '').trim();
-      if (customerEmail && confirm(`האירוע נשמר.\nהאם לשלוח מייל עדכון ללקוח?\n\nיישלח אל: ${customerEmail}`)) {
+      if (customerEmail && !isBookingApprovalWork(formData.status) && confirm(`האירוע נשמר.\nהאם לשלוח מייל עדכון ללקוח?\n\nיישלח אל: ${customerEmail}`)) {
         try {
           await sendEventUpdateEmail(payload);
         } catch (e) {
@@ -402,12 +416,17 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
             <select
               className="w-full p-2 border rounded-lg font-bold"
               value={formData.status}
+              disabled={isApprovalSending(event?.status)}
               onChange={e => setFormData({ ...formData, status: e.target.value as EventStatus })}
             >
-              {Object.values(EventStatus).map(s => (
+              {isBookingApprovalWork(event?.status) ? <>
+                <option value={event?.status}>{bookingStatusLabel(event?.status)}</option>
+                <option value={EventStatus.Cancelled}>{EventStatus.Cancelled}</option>
+              </> : Object.values(EventStatus).filter(s => s !== EventStatus.PendingApproval && s !== EventStatus.ApprovalEmailPending).map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
+            {isBookingApprovalWork(event?.status) && <p className="text-xs text-amber-700">{isApprovalSending(event?.status) ? 'אי אפשר לערוך את הבקשה בזמן שליחת האישור.' : 'אישור הבקשה ושליחת ההודעה מתבצעים בשולחן המזכירה.'}</p>}
           </div>
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-400">תאריך</label>
@@ -642,8 +661,8 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ event, onClose, isNew, 
             <button type="button" onClick={onClose} className="px-4 py-2 font-bold text-slate-400">
               ביטול
             </button>
-            <button type="button" onClick={handleSave} className="bg-purple-600 text-white px-8 py-2 rounded-xl font-bold shadow-lg">
-              שמור
+            <button type="button" onClick={handleSave} disabled={bookingSaveBusy || isApprovalSending(event?.status)} className="bg-purple-600 text-white px-8 py-2 rounded-xl font-bold shadow-lg disabled:opacity-50">
+              {bookingSaveBusy ? 'שומר…' : 'שמור'}
             </button>
           </div>
         </div>

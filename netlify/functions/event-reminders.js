@@ -142,7 +142,10 @@ export default async () => {
     return new Response(JSON.stringify({ ok: false, error: error.message }), { status: 500 });
   }
 
-  const candidates = (events || []).filter((e) => sanitizeAddress(e.email));
+  const candidates = (events || []).filter((e) => sanitizeAddress(e.email)
+    && e.status !== 'בקשת הזמנה ממתינה לאישור'
+    && e.status !== 'אושר - ממתין לשליחת הודעה'
+    && !String(e.status || '').startsWith('אושר - שליחת הודעה בתהליך: '));
   if (!candidates.length) {
     console.log(`[event-reminders] no events with email on ${target}`);
     return new Response(JSON.stringify({ ok: true, target, sent: 0 }), { status: 200 });

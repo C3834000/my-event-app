@@ -88,7 +88,7 @@ export function eventHasOpenBalance(ev: AppEvent): boolean {
 
 /** Open debt: event date before today (local calendar), not cancelled, not fully-paid status, positive balance */
 export function eventContributesToOpenDebt(ev: AppEvent, todayKey: string): boolean {
-  if (excludeEventFromKpis(ev)) return false;
+  if (excludeEventFromKpis(ev) || ev.status === EventStatus.PendingApproval) return false;
   const key = parseEventDateKey(ev.date);
   if (!key || key >= todayKey) return false;
   return eventHasOpenBalance(ev);

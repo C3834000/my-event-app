@@ -369,7 +369,7 @@ const AvailabilityChecker: React.FC = () => {
                     <Sparkles className="mx-auto text-yellow-300 mb-3" size={40} />
                     <h2 className="text-2xl font-black text-white mb-2">מוכנים להזמין?</h2>
                     <p className="text-blue-100 mb-6 text-sm">
-                      עברו לטופס ההזמנה כדי לשריין את הערכה ולאשר את הפרטים.
+                      עברו לטופס ההזמנה כדי לשלוח בקשה. ההזמנה תאושר לאחר בדיקת המזכירות.
                     </p>
                     <Link
                       to={buildBookHref(dateStr, time, participants)}
@@ -388,7 +388,7 @@ const AvailabilityChecker: React.FC = () => {
                         : `התאריך והשעה שבחרת פנויים ל-${participants} משתתפים.`}
                     </p>
                     <p className="text-white/90 text-sm mb-6 font-bold">
-                      כנסו לטופס הזמנת אירוע לפני שמישהו אחר יתפוס — רק מה שתמלאו בטופס ייקבע רשמית.
+                      מלאו את טופס ההזמנה. לאחר בדיקת הבקשה נשלח אליכם הודעה אם האירוע אושר.
                     </p>
                     <Link
                       to={buildBookHref(dateStr, time, participants)}
@@ -432,7 +432,7 @@ const AvailabilityChecker: React.FC = () => {
             )}
 
             <p className="text-center text-xs text-purple-300/60 mt-10">
-              שריון אירוע יתבצע רק אחרי שליחת טופס ההזמנה.
+              שליחת הטופס היא בקשת הזמנה; השריון מתבצע לאחר אישור המזכירות.
             </p>
           </>
         )}

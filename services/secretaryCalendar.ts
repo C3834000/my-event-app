@@ -1,5 +1,6 @@
 import { AppEvent, EventStatus, EventType } from '../types';
 import { excludeEventFromKpis, parseEventDateKey } from './eventKpi';
+import { isConfirmedBookingStatus } from './bookingApproval';
 
 export interface SecretaryCalendarDay {
   booked: AppEvent[];
@@ -8,7 +9,6 @@ export interface SecretaryCalendarDay {
   clickaorim: number;
 }
 
-const confirmed = new Set<string>([EventStatus.Booked, EventStatus.DoneUnpaid, EventStatus.Paid]);
 const clickerTypes = new Set<string>([EventType.ClickersProgram, EventType.ClickForYouClickers]);
 const clickaorimTypes = new Set<string>([EventType.ClickAurimProgram, EventType.ClickForYouAurim]);
 
@@ -23,7 +23,7 @@ export function summarizeCalendarDays(events: AppEvent[]): Map<string, Secretary
       summary = { booked: [], pending: [], clickers: 0, clickaorim: 0 };
       days.set(day, summary);
     }
-    if (!confirmed.has(String(event.status || '').trim())) {
+    if (!isConfirmedBookingStatus(String(event.status || '').trim())) {
       summary.pending.push(event);
       continue;
     }

@@ -227,7 +227,7 @@ app.post('/api/db', async (req, res) => {
     return res.status(503).json({ error: 'Database not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in server/.env' });
   }
 
-  const { table, action, data, id, orderBy, orderAsc } = req.body || {};
+  const { table, action, data, id, orderBy, orderAsc, expectedStatus, nextStatus } = req.body || {};
 
   if (!table || !action) {
     return res.status(400).json({ error: 'Missing required fields: table, action' });
@@ -244,6 +244,16 @@ app.post('/api/db', async (req, res) => {
         const { data: rows, error } = await q;
         if (error) throw error;
         result = (rows || []).map(toCamel);
+        break;
+      }
+      case 'transitionEventStatus': {
+        if (table !== 'events' || !id || typeof expectedStatus !== 'string' || !expectedStatus || typeof nextStatus !== 'string' || !nextStatus) throw new Error('Event ID and statuses are required');
+        const payload = { ...(data || {}) };
+        delete payload.id;
+        delete payload.status;
+        const { data: row, error } = await supabase.from('events').update({ ...toSnake(payload), status: nextStatus }).eq('id', id).eq('status', expectedStatus).select().maybeSingle();
+        if (error) throw error;
+        result = row ? toCamel(row) : null;
         break;
       }
       case 'create': {

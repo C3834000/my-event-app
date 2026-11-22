@@ -98,7 +98,7 @@ export const handler = async (event) => {
   } catch {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
-  const { table, action, data, id, orderBy, orderAsc, select } = body;
+  const { table, action, data, id, orderBy, orderAsc, select, expectedStatus, nextStatus } = body;
 
   if (!table || !action) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing table or action' }) };
@@ -125,6 +125,16 @@ export const handler = async (event) => {
       case 'getById': {
         if (table !== 'tasks' || !id) throw new Error('A task ID is required');
         const { data: row, error } = await supabase.from('tasks').select('*').eq('id', id).maybeSingle();
+        if (error) throw error;
+        result = row ? toCamel(row) : null;
+        break;
+      }
+      case 'transitionEventStatus': {
+        if (table !== 'events' || !id || typeof expectedStatus !== 'string' || !expectedStatus || typeof nextStatus !== 'string' || !nextStatus) throw new Error('Event ID and statuses are required');
+        const payload = filterEventsPayload(data || {});
+        delete payload.id;
+        delete payload.status;
+        const { data: row, error } = await supabase.from('events').update({ ...toSnake(payload), status: nextStatus }).eq('id', id).eq('status', expectedStatus).select().maybeSingle();
         if (error) throw error;
         result = row ? toCamel(row) : null;
         break;
